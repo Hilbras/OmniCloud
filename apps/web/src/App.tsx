@@ -12,6 +12,7 @@ import LoginPage from "./pages/LoginPage";
 import RecentPage from "./pages/RecentPage";
 import StarredPage from "./pages/StarredPage";
 import StoragePage from "./pages/StoragePage";
+import { TokensPage } from "./pages/TokensPage";
 import TrashPage from "./pages/TrashPage";
 import StorageInit from "./pages/StorageInit";
 
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/starred" element={<StarredPage />} />
         <Route path="/trash" element={<TrashPage />} />
         <Route path="/storage" element={<StoragePage />} />
+        <Route path="/settings/tokens" element={<TokensPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

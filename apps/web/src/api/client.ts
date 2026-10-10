@@ -223,6 +223,22 @@ export type QrPollResponse =
   | { status: "expired" };
 
 /** Typed wrappers around every endpoint of the OmniCloud v0.2 API. */
+export interface ApiTokenDTO {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** Returned once, when a token is created. The secret is never shown again. */
+export interface ApiTokenCreatedDTO {
+  id: string;
+  name: string;
+  createdAt: string;
+  token: string;
+}
+
 export const api = {
   auth: {
     me(): Promise<SessionInfo> {
@@ -254,6 +270,17 @@ export const api = {
     },
   },
 
+  tokens: {
+    list(): Promise<{ tokens: ApiTokenDTO[] }> {
+      return requestJson("GET", "/api/tokens");
+    },
+    create(name: string): Promise<ApiTokenCreatedDTO> {
+      return requestJson("POST", "/api/tokens", { name });
+    },
+    revoke(id: string): Promise<void> {
+      return requestEmpty("DELETE", `/api/tokens/${encodeURIComponent(id)}`);
+    },
+  },
   storage: {
     ensure(): Promise<{ storage: StorageDTO }> {
       return requestJson("POST", "/api/storage/ensure");

@@ -1,10 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
   FileStack,
   HardDrive,
+  KeyRound,
   Loader2,
   ShieldCheck,
   Star,
@@ -68,7 +70,14 @@ export default function StoragePage() {
   if (stats.isError || data === undefined) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 md:px-8">
-        <PageHeader title={<PageTitle>Storage</PageTitle>} />
+        <PageHeader
+          title={<PageTitle>Storage</PageTitle>}
+          actions={
+            <Link to="/settings/tokens" className="btn-ghost">
+              <KeyRound className="h-4 w-4" /> API tokens
+            </Link>
+          }
+        />
         <div className="card mt-6 p-6 text-center">
           <p className="text-sm font-medium">Could not load storage statistics.</p>
           <p className="muted mt-1 text-sm">
