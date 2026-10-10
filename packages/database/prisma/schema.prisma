@@ -31,6 +31,7 @@ model User {
   fileVersions     FileVersion[]
   activityEvents   ActivityEvent[]
   browserSessions  BrowserSession[]
+  apiTokens        ApiToken[]
   uploadOperations UploadOperation[]
 }
 
@@ -72,6 +73,21 @@ model UploadOperation {
 
   @@unique([userId, operationId])
   @@index([status, updatedAt])
+}
+
+/// Personal API token for scripts and the SDK. Only a SHA-256 hash of the secret
+/// is stored; the secret itself is shown once, when the token is created.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([userId, revokedAt])
 }
 
 /// MTProto session string for the user's connected Telegram account.

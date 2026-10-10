@@ -49,6 +49,26 @@ export interface BrowserSessionRecord {
   ip: string | null;
 }
 
+export interface ApiTokenRecord {
+  id: string;
+  userId: string;
+  name: string;
+  tokenHash: string;
+  createdAt: Date;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+}
+
+/** Personal API tokens. Holds only token hashes, never raw tokens. */
+export interface ApiTokenRepository {
+  create(input: { userId: string; name: string; tokenHash: string }): Promise<ApiTokenRecord>;
+  findByTokenHash(tokenHash: string): Promise<ApiTokenRecord | null>;
+  findByIdForUser(userId: string, id: string): Promise<ApiTokenRecord | null>;
+  listForUser(userId: string): Promise<ApiTokenRecord[]>;
+  touch(id: string, at: Date): Promise<void>;
+  revoke(id: string, at: Date): Promise<void>;
+}
+
 /** Server-side browser sessions. Holds only token hashes, never raw tokens. */
 export interface BrowserSessionRepository {
   create(input: {
@@ -283,6 +303,7 @@ export interface Repos {
   users: UserRepository;
   sessions: SessionRepository;
   browserSessions: BrowserSessionRepository;
+  apiTokens: ApiTokenRepository;
   uploadOperations: UploadOperationRepository;
   storages: StorageRepository;
   folders: FolderRepository;

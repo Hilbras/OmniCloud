@@ -5,6 +5,7 @@ export * from "./storage/provider";
 export * from "./storage/engine";
 export * from "./services/query-resolver";
 export * from "./services/auth-session-service";
+export * from "./services/api-token-service";
 export * from "./services/version-retention";
 export * from "./services/upload-operation";
 export * from "./services/reconciliation";

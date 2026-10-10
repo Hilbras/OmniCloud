@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
+  ApiTokenService,
   AuthInvalidError,
   DEFAULT_SESSION_TTL_DAYS,
   UnauthorizedError,
@@ -25,10 +26,22 @@ export function registerAuthHook(
   app: FastifyInstance,
   repos: Repos,
   authSessions: AuthSessionService,
+  apiTokens: ApiTokenService,
 ): void {
   app.addHook("preHandler", async (request) => {
     const url = request.routeOptions?.url ?? "";
     if (!url.startsWith("/api/") || url.startsWith("/api/auth/") || url.startsWith("/api/health")) {
+      return;
+    }
+
+    const bearer = bearerToken(request.headers.authorization);
+    if (bearer !== undefined) {
+      const token = await apiTokens.resolve(bearer);
+      if (!token) throw new UnauthorizedError();
+      const owner = await repos.users.findById(token.userId);
+      if (!owner) throw new AuthInvalidError("Account no longer exists");
+      request.user = { id: owner.id };
+      request.authSessionId = undefined;
       return;
     }
 
@@ -40,6 +53,12 @@ export function registerAuthHook(
     request.user = { id: user.id };
     request.authSessionId = session.id;
   });
+}
+
+function bearerToken(header: string | undefined): string | undefined {
+  if (!header) return undefined;
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+  return match ? match[1] : undefined;
 }
 
 /** Starts a browser session for a user and sets its HttpOnly cookie. */

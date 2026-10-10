@@ -18,6 +18,7 @@ import { registerFileRoutes } from "./routes/files";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerCollectionRoutes } from "./routes/collections";
 import { registerStorageRoutes } from "./routes/storage";
+import { registerTokenRoutes } from "./routes/tokens";
 
 interface ErrorReply {
   status(code: number): { send(body: unknown): unknown };
@@ -70,7 +71,7 @@ export async function createApp(container: Container): Promise<FastifyInstance> 
     }
   });
 
-  registerAuthHook(app, container.repos, container.authSessions);
+  registerAuthHook(app, container.repos, container.authSessions, container.apiTokens);
 
   // ── Structured error responses ────────────────────────────────────────────
   app.setErrorHandler((error: FastifyError, request, reply) => {
@@ -104,6 +105,7 @@ export async function createApp(container: Container): Promise<FastifyInstance> 
   registerFolderRoutes(app, container);
   registerCollectionRoutes(app, container);
   registerStorageRoutes(app, container);
+  registerTokenRoutes(app, container);
 
   // ── Serve the built web application (single-port deployments) ─────────────
   const webDistDir = container.config.webDistDir;

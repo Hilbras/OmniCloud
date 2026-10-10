@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { TelegramConnectionError } from "../src/errors";
 import type {
+  ApiTokenRecord,
+  ApiTokenRepository,
   ActivityEventRecord,
   ActivityRepository,
   BrowserSessionRecord,
@@ -176,6 +178,7 @@ export interface InMemoryRepos extends Repos {
   _activity: ActivityEventRecord[];
   _browserSessions: BrowserSessionRecord[];
   _uploadOperations: UploadOperationRecord[];
+  _apiTokens: ApiTokenRecord[];
 }
 
 export function createInMemoryRepos(): InMemoryRepos {
@@ -183,6 +186,39 @@ export function createInMemoryRepos(): InMemoryRepos {
   const sessions: TelegramSessionRecord[] = [];
   const browserSessions: BrowserSessionRecord[] = [];
   const uploadOps: UploadOperationRecord[] = [];
+  const apiTokens: ApiTokenRecord[] = [];
+  const apiTokensRepo: ApiTokenRepository = {
+    async create(input) {
+      const record: ApiTokenRecord = {
+        id: `token-${apiTokens.length + 1}`,
+        userId: input.userId,
+        name: input.name,
+        tokenHash: input.tokenHash,
+        createdAt: new Date(),
+        revokedAt: null,
+        lastUsedAt: null,
+      };
+      apiTokens.push(record);
+      return record;
+    },
+    async findByTokenHash(tokenHash) {
+      return apiTokens.find((t) => t.tokenHash === tokenHash) ?? null;
+    },
+    async findByIdForUser(userId, id) {
+      return apiTokens.find((t) => t.id === id && t.userId === userId) ?? null;
+    },
+    async listForUser(userId) {
+      return apiTokens.filter((t) => t.userId === userId);
+    },
+    async touch(id, at) {
+      const t = apiTokens.find((x) => x.id === id);
+      if (t) t.lastUsedAt = at;
+    },
+    async revoke(id, at) {
+      const t = apiTokens.find((x) => x.id === id);
+      if (t && t.revokedAt === null) t.revokedAt = at;
+    },
+  };
   const storages: StorageRecord[] = [];
   const folders: FolderRecord[] = [];
   const files: FileRecord[] = [];
@@ -621,6 +657,7 @@ export function createInMemoryRepos(): InMemoryRepos {
   return {
     users: usersRepo,
     uploadOperations: uploadOperationsRepo,
+    apiTokens: apiTokensRepo,
     sessions: sessionsRepo,
     browserSessions: browserSessionsRepo,
     storages: storagesRepo,
@@ -635,6 +672,7 @@ export function createInMemoryRepos(): InMemoryRepos {
     _activity: activity,
     _browserSessions: browserSessions,
     _uploadOperations: uploadOps,
+    _apiTokens: apiTokens,
   };
 }
 
