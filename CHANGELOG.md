@@ -5,6 +5,26 @@ All notable changes to OmniCloud are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.34] — 2026-10-10
+
+**Personal API tokens let scripts and the SDK use an account without a browser session.**
+
+### Added
+
+- `POST /api/tokens` creates a token and returns its secret once. `GET /api/tokens` lists tokens without their secrets. `DELETE /api/tokens/:id` revokes one.
+- Any `/api` request may send `Authorization: Bearer <token>` instead of the session cookie.
+
+### Security
+
+- Only a SHA-256 hash of each token is stored. A database read does not reveal usable tokens.
+- A revoked token is refused on its next request.
+- Tokens carry full account access, the same as a signed-in browser session. Revoke any token you no longer use.
+
+### Known limitations
+
+- There is no web screen for managing tokens yet. Use the API.
+- Tokens do not expire on their own. They stay valid until revoked.
+
 ## [0.2.33] — 2026-10-10
 
 **SDK uploads from a file path in Node stream from disk instead of loading the file into memory.**
