@@ -5,6 +5,19 @@ All notable changes to OmniCloud are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.32] — 2026-10-10
+
+**New OmniCloud logo: an orbit mark with a simplified favicon.**
+
+### Changed
+
+- The app's favicon and apple touch icon use the new orbit mark. A four-node version is used at favicon sizes so it stays readable.
+- The Telegram channel logo for newly created storage channels is the new mark.
+
+### Known limitations
+
+- Existing `OmniCloud Storage` channels keep their previous photo. Only channels created after this release get the new logo.
+
 ## [0.2.31] — 2026-10-10
 
 **New storage channels get the OmniCloud logo and are moved to the archive.**
