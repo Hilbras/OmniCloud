@@ -383,9 +383,25 @@ export class FileService {
       });
     } catch (error) {
       // The object is in Telegram but no record will point at it. Remove it so
-      // a failed commit does not leave an unreferenced object behind. If that
-      // removal also fails, the original error is still the one reported.
-      await engine.remove({ messageId: String(stored.messageId) }).catch(() => undefined);
+      // a failed commit does not leave an unreferenced object behind. If the
+      // removal also fails, the object is recorded in the activity log so it can
+      // be found and removed later. The original commit error is still reported.
+      const messageId = String(stored.messageId);
+      await engine.remove({ messageId }).catch((cleanupError: unknown) =>
+        this.activity.record({
+          userId,
+          action: "upload",
+          resourceType: "file",
+          resourceId: messageId,
+          resourceName: name,
+          metadata: {
+            orphanedObject: true,
+            messageId,
+            cleanupError:
+              cleanupError instanceof Error ? cleanupError.message.slice(0, 200) : "unknown",
+          },
+        }),
+      );
       throw error;
     }
   }
