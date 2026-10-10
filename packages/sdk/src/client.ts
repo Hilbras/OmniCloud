@@ -113,6 +113,55 @@ type Query = Record<string, string | number | boolean | undefined | null>;
 
 const DEFAULT_RETRY: Required<RetryOptions> = { attempts: 3, baseDelayMs: 300 };
 
+type UploadSource = { kind: "path"; path: string } | { kind: "blob"; blob: Blob };
+
+function randomId(): string {
+  return globalThis.crypto.randomUUID().replace(/-/g, "");
+}
+
+/** The header part of an RFC 7578 multipart body: fields, then the file part's header. */
+function multipartHead(boundary: string, fields: [string, string][], fileName: string): string {
+  const parts = fields.map(
+    ([name, value]) =>
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+  );
+  const safeName = fileName.replace(/["\\\r\n]/g, "_");
+  parts.push(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+  );
+  return parts.join("");
+}
+
+/** Writes head, then the file's bytes read in chunks, then tail, as one stream. */
+function nodeMultipartStream(
+  head: string,
+  file: AsyncIterable<Uint8Array | string>,
+  tail: string,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const iterator = file[Symbol.asyncIterator]();
+  let sentHead = false;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!sentHead) {
+        sentHead = true;
+        controller.enqueue(encoder.encode(head));
+        return;
+      }
+      const { done, value } = await iterator.next();
+      if (done) {
+        controller.enqueue(encoder.encode(tail));
+        controller.close();
+        return;
+      }
+      controller.enqueue(typeof value === "string" ? encoder.encode(value) : new Uint8Array(value));
+    },
+    async cancel(reason) {
+      await iterator.return?.(reason);
+    },
+  });
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
@@ -476,13 +525,20 @@ class FilesApi {
   async upload(input: UploadInput, options: UploadOptions = {}): Promise<FileDTO> {
     const attempts = Math.max(1, (options.retry ?? 2) + 1);
     let lastError: unknown;
-    // Convert the source once. A stream can be read only once, so every attempt
-    // must send these same bytes rather than re-reading an exhausted source.
-    const blob = await toBlob(input);
+    // A file path is re-read on every attempt, so its body streams from disk. A
+    // stream can be read only once, so it is converted once and every attempt sends
+    // those same bytes.
+    const source: UploadSource =
+      input.path !== undefined && this.canStreamFromDisk()
+        ? { kind: "path", path: input.path }
+        : { kind: "blob", blob: await toBlob(input) };
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        return await this.uploadOnce(blob, input.name, options);
+        if (source.kind === "path") {
+          return await this.uploadPathOnce(source.path, input.name, options);
+        }
+        return await this.uploadOnce(source.blob, input.name, options);
       } catch (error) {
         lastError = error;
         if (options.signal?.aborted) throw error;
@@ -491,6 +547,53 @@ class FilesApi {
       }
     }
     throw lastError;
+  }
+
+  private canStreamFromDisk(): boolean {
+    return typeof XMLHttpRequest !== "function" && typeof ReadableStream === "function";
+  }
+
+  /**
+   * Node: streams a file from disk as a multipart body. The file is re-opened on
+   * every attempt, so a retry sends the same bytes without holding them in memory.
+   */
+  private async uploadPathOnce(
+    path: string,
+    name: string,
+    options: UploadOptions,
+  ): Promise<FileDTO> {
+    const { createReadStream, statSync } = await import("node:fs");
+    const size = statSync(path).size;
+    const boundary = `omnicloud-${randomId()}`;
+    const fields: [string, string][] = [];
+    if (options.folderId) fields.push(["folderId", options.folderId]);
+    const head = multipartHead(boundary, fields, name);
+    const tail = `\r\n--${boundary}--\r\n`;
+
+    const body = nodeMultipartStream(head, createReadStream(path), tail);
+    const response = await this.client.fetchImpl(`${this.client.baseUrl}/api/files`, {
+      method: "POST",
+      headers: {
+        ...this.client.defaultHeaders,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": String(Buffer.byteLength(head) + size + Buffer.byteLength(tail)),
+      },
+      body,
+      credentials: "include",
+      duplex: "half",
+    } as RequestInit);
+
+    const text = await response.text();
+    if (!response.ok) {
+      const error = (safeJsonParse(text) as { error?: { code: string; message: string } } | null)
+        ?.error;
+      throw new OmniCloudError(
+        response.status,
+        error?.code ?? "UPLOAD_FAILED",
+        error?.message ?? `Upload failed (${response.status})`,
+      );
+    }
+    return (JSON.parse(text) as { file: FileDTO }).file;
   }
 
   private async uploadOnce(blob: Blob, name: string, options: UploadOptions): Promise<FileDTO> {

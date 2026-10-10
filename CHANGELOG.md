@@ -5,6 +5,26 @@ All notable changes to OmniCloud are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.33] — 2026-10-10
+
+**SDK uploads from a file path in Node stream from disk instead of loading the file into memory.**
+
+### Changed
+
+- `files.upload({ path })` in Node sends the file as a streamed multipart body, read from disk in chunks. Memory no longer grows with file size for this input.
+- A retried path upload re-opens the file, so every attempt sends the same bytes.
+
+### Unchanged
+
+- Browsers keep the existing XHR upload path with progress and cancellation.
+- Stream and in-memory inputs are still converted once before sending, so a one-shot stream is still retried with the same bytes.
+- `files.replace()` still buffers its input.
+
+### Known limitations
+
+- Streamed uploads in Node are verified with a fake fetch: the body is complete, in order, and retried correctly. They have not been measured against a real server for peak memory.
+- Stream and in-memory inputs still buffer. Streaming them without buffering needs a spool design and is not in this release.
+
 ## [0.2.32] — 2026-10-10
 
 **New OmniCloud logo: an orbit mark with a simplified favicon.**
