@@ -419,7 +419,9 @@ export class FileService {
       await this.assertFolder(userId, folderId);
     }
 
-    const record = await this.files.create({
+    // The file and its first version are written together, so a failure cannot
+    // leave a file row without a version or pointing at a deleted object.
+    const withVersion = await this.files.createWithFirstVersion({
       userId,
       folderId,
       name,
@@ -427,21 +429,7 @@ export class FileService {
       mimeType,
       sha256,
       telegramMessageId,
-    });
-
-    // Establish version 1 immediately so the version history is complete from
-    // the first upload (the foundation for v0.3's version UI).
-    const version = await this.files.createVersion({
-      fileId: record.id,
-      userId,
-      size,
-      mimeType,
-      sha256,
-      telegramMessageId,
-    });
-    const withVersion = await this.files.update(record.id, {
-      currentVersionId: version.id,
-      versionCount: 1,
+      version: { userId, size, mimeType, sha256, telegramMessageId },
     });
 
     await this.activity.record({
@@ -470,24 +458,20 @@ export class FileService {
   ): Promise<FileRecord> {
     const existing = await this.get(userId, fileId);
 
-    const version = await this.files.createVersion({
-      fileId,
-      userId,
-      size: next.size,
-      mimeType: next.mimeType,
-      sha256: next.sha256,
-      telegramMessageId: next.telegramMessageId,
-    });
-    const count = await this.files.countVersions(fileId);
-
-    const updated = await this.files.update(fileId, {
+    // The new version and the file's pointer to it change together.
+    const updated = await this.files.replaceWithVersion(fileId, {
       name: next.name,
       size: next.size,
       mimeType: next.mimeType,
       sha256: next.sha256,
       telegramMessageId: next.telegramMessageId,
-      currentVersionId: version.id,
-      versionCount: count,
+      version: {
+        userId,
+        size: next.size,
+        mimeType: next.mimeType,
+        sha256: next.sha256,
+        telegramMessageId: next.telegramMessageId,
+      },
     });
 
     await this.activity.record({
