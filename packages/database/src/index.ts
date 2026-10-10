@@ -10,6 +10,8 @@ import { ConflictError, NotFoundError, OperationAlreadyExistsError } from "@omni
 import type {
   ActivityEventRecord,
   ActivityRepository,
+  ApiTokenRecord,
+  ApiTokenRepository,
   BrowserSessionRecord,
   BrowserSessionRepository,
   UploadOperationRecord,
@@ -420,6 +422,59 @@ function createUploadOperationRepo(prisma: PrismaClient): UploadOperationReposit
       });
       return mapUploadOperation(row);
     },
+  };
+}
+
+function createApiTokenRepo(prisma: PrismaClient): ApiTokenRepository {
+  return {
+    async create(input) {
+      const row = await prisma.apiToken.create({ data: input });
+      return mapApiToken(row);
+    },
+    async findByTokenHash(tokenHash) {
+      const row = await prisma.apiToken.findUnique({ where: { tokenHash } });
+      return row ? mapApiToken(row) : null;
+    },
+    async findByIdForUser(userId, id) {
+      const row = await prisma.apiToken.findFirst({ where: { id, userId } });
+      return row ? mapApiToken(row) : null;
+    },
+    async listForUser(userId) {
+      const rows = await prisma.apiToken.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+      });
+      return rows.map(mapApiToken);
+    },
+    async touch(id, at) {
+      await prisma.apiToken.update({ where: { id }, data: { lastUsedAt: at } });
+    },
+    async revoke(id, at) {
+      await prisma.apiToken.updateMany({
+        where: { id, revokedAt: null },
+        data: { revokedAt: at },
+      });
+    },
+  };
+}
+
+function mapApiToken(row: {
+  id: string;
+  userId: string;
+  name: string;
+  tokenHash: string;
+  createdAt: Date;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+}): ApiTokenRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    tokenHash: row.tokenHash,
+    createdAt: row.createdAt,
+    revokedAt: row.revokedAt,
+    lastUsedAt: row.lastUsedAt,
   };
 }
 
@@ -885,6 +940,7 @@ export function createPrismaRepos(prisma: PrismaClient, box: SecretBox | null = 
     users: createUserRepo(prisma),
     sessions: createSessionRepo(prisma, box),
     browserSessions: createBrowserSessionRepo(prisma),
+    apiTokens: createApiTokenRepo(prisma),
     uploadOperations: createUploadOperationRepo(prisma),
     storages: createStorageRepo(prisma),
     folders: createFolderRepo(prisma),

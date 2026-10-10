@@ -26,6 +26,7 @@ import {
 } from "@omnicloud/telegram";
 import { createPrismaClient, createPrismaRepos } from "@omnicloud/database";
 import {
+  ApiTokenService,
   AuthSessionService,
   ReconciliationFlow,
   ReconciliationService,
@@ -91,6 +92,7 @@ export interface Container {
   reconciliationFlow: ReconciliationFlow;
   /** Browser sign-in sessions: issue, resolve and revoke. */
   authSessions: AuthSessionService;
+  apiTokens: ApiTokenService;
   /** Resolves the StorageEngine for a user (their own Telegram channel). */
   engineFor: EngineResolver;
   shutdown(): Promise<void>;
@@ -216,6 +218,7 @@ export function buildContainerFromRepos(
     reconciliation: new ReconciliationService(repos, engineFor),
     reconciliationFlow: new ReconciliationFlow(repos, engineFor),
     authSessions: new AuthSessionService(repos.browserSessions),
+    apiTokens: new ApiTokenService(repos.apiTokens),
     engineFor,
     shutdown: async () => {
       await clientManager.disconnectAll();
