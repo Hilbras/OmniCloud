@@ -150,7 +150,7 @@ export class FileService {
       );
     }
 
-    if (op?.status === "COMPLETED" && op.fileId) {
+    if ((op?.status === "COMPLETED" || op?.status === "COMMITTING") && op.fileId) {
       return this.get(userId, op.fileId);
     }
     if (op?.status === "UPLOADING" && op.telegramMessageId !== null) {
@@ -196,7 +196,10 @@ export class FileService {
           await operations.claim(op!.id, "UPLOADING", "COMMITTING");
         },
       });
-      await operations.update(op.id, { status: "COMPLETED", fileId: record.id });
+      // Record the committed file before the final status change. If that change
+      // fails, a retry still finds the file instead of committing a second copy.
+      await operations.update(op.id, { fileId: record.id });
+      await operations.update(op.id, { status: "COMPLETED" }).catch(() => undefined);
       return record;
     } catch (error) {
       // A connection failure may come after Telegram stored the object, so the outcome is
