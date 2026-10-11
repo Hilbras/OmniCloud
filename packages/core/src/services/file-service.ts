@@ -243,8 +243,17 @@ export class FileService {
     }
     if (matches.length === 1) {
       const stored = matches[0]!;
+      // Only the request that wins this claim commits. A request that loses it
+      // follows the winner's result rather than writing a second file record.
+      const claimed = await operations.claim(op.id, "UNKNOWN", "COMMITTING");
+      if (!claimed) {
+        const outcome = await this.followWinner(userId, input, op.operationId, operations);
+        if (outcome) return outcome;
+        throw new ConflictError(
+          "This upload is being committed by another request. Retry shortly.",
+        );
+      }
       await operations.update(op.id, { telegramMessageId: Number(stored.messageId) });
-      await operations.claim(op.id, "UNKNOWN", "COMMITTING");
       const record = await this.commitRecord(userId, input, {
         name: sanitizeFileName(input.name),
         mimeType: mimeFromFilename(sanitizeFileName(input.name)),
@@ -255,7 +264,12 @@ export class FileService {
       await operations.update(op.id, { status: "COMPLETED", fileId: record.id });
       return record;
     }
-    await operations.claim(op.id, "UNKNOWN", "FAILED");
+    const released = await operations.claim(op.id, "UNKNOWN", "FAILED");
+    if (!released) {
+      const outcome = await this.followWinner(userId, input, op.operationId, operations);
+      if (outcome) return outcome;
+      throw new ConflictError("This upload is being committed by another request. Retry shortly.");
+    }
     return this.uploadOnce(userId, input, op.operationId, operations);
   }
 
