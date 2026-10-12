@@ -64,9 +64,7 @@ The first time, OmniCloud asks for three values in the terminal and saves them t
 
 It generates the encryption key for you, applies the database schema, starts the server and opens the web app. Later runs skip the questions. To write the file yourself instead, create `.env` with the same four keys; `OMNICLOUD_ENCRYPTION_KEY` can be any 64 hex characters from `openssl rand -hex 32`. Use `npx omnicloud start --no-open` on servers without a desktop.
 
-**3. Sign in.** On the web page, enter your phone number, and confirm the code Telegram sends you. OmniCloud creates a private channel named **OmniCloud Storage** in your account on first sign-in.
-
-**4. Sign in.** Open <http://localhost:4000>, enter your phone number, and confirm the code Telegram sends you. OmniCloud creates a private channel named **OmniCloud Storage** in your account on first sign-in.
+**3. Sign in.** The web app opens at <http://localhost:4000> (open it yourself if you started with `--no-open`). Enter your phone number and confirm the code Telegram sends you. OmniCloud creates a private channel named **OmniCloud Storage** in your account on first sign-in.
 
 ---
 

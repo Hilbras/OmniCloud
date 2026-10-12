@@ -5,6 +5,58 @@ All notable changes to OmniCloud are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+**Post-audit remediation: data integrity, duplicate prevention, and hardening.**
+
+### Fixed
+
+- **Partial file metadata.** A new file and its first version, and a replacement
+  version and the file's pointer to it, are each written in one database
+  transaction. A failure between the writes can no longer leave a file row
+  pointing at a Telegram object that was removed.
+- **Invisible leftovers.** When a failed commit's Telegram object cannot be
+  removed, the leftover is recorded in the activity log with its message id
+  instead of being discarded.
+- **Duplicate uploads from concurrent recovery.** Recovering an `UNKNOWN` upload
+  now checks the database claim, so only one request commits. Two concurrent
+  recoveries previously wrote two file rows for one stored object.
+- **Duplicate uploads after a failed completion.** If the final status write fails
+  after the file is committed, the upload is no longer re-classified as failed,
+  and a retry returns the committed file instead of writing a second one.
+- **Duplicate Telegram objects from a lost response.** A write whose outcome is
+  ambiguous is no longer retried by the storage engine. Previously one lost
+  response could store three copies of the same file.
+- **Missing SDK idempotency.** `files.upload` and `files.replace` now send an
+  idempotency key, so a retry cannot create a duplicate server-side. The SDK also
+  sent form fields after the file, which the server did not read.
+- **Untruthful repair results.** A reconciliation action that changes nothing is
+  no longer reported as applied.
+- **Large-object adoption.** Adopting an unknown object hashes it by streaming
+  instead of loading it into memory.
+
+### Security
+
+- The development `docker-compose.yml` binds PostgreSQL to `127.0.0.1` and reads
+  its password from `POSTGRES_PASSWORD`, instead of publishing the port on every
+  interface with a hardcoded password. README, `.env.example` and the deployment
+  guide match.
+- Dependency advisories: `vitest` upgraded to 4.1.11, clearing two critical and
+  two moderate advisories. One low advisory remains in `esbuild`, a build-only
+  dependency.
+
+### Changed
+
+- CI fails when an integration test is skipped instead of run.
+- Removed two tracked `.env.template-copy.*.bak` files; `.gitignore` excludes that
+  pattern.
+
+### Known limitations
+
+- A stream or async-iterable input to the SDK still buffers into one Blob, because
+  the source can be read only once. Spool-to-disk is not implemented.
+- No live Telegram verification was run for this work.
+
 ## [0.2.35] — 2026-10-10
 
 **The web app has an API tokens page for creating and revoking personal tokens.**
