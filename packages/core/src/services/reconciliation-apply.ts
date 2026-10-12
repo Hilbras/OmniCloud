@@ -70,7 +70,9 @@ export class ReconciliationApplier {
     if (size !== object.size) {
       throw new Error("The stored bytes do not match the object's reported size");
     }
-    const record = await this.repos.files.create({
+    // Create the record and its first version together, so the adopted file has a
+    // current version and a count that match a normal upload.
+    await this.repos.files.createWithFirstVersion({
       userId: this.userId,
       folderId: null,
       name: `recovered-${action.messageId}-${object.name}`,
@@ -78,14 +80,13 @@ export class ReconciliationApplier {
       mimeType: object.mimeType,
       sha256,
       telegramMessageId: action.messageId,
-    });
-    await this.repos.files.createVersion({
-      fileId: record.id,
-      userId: this.userId,
-      size: object.size,
-      mimeType: object.mimeType,
-      sha256: record.sha256,
-      telegramMessageId: action.messageId,
+      version: {
+        userId: this.userId,
+        size: object.size,
+        mimeType: object.mimeType,
+        sha256,
+        telegramMessageId: action.messageId,
+      },
     });
   }
 }

@@ -42,6 +42,32 @@ search performed earlier at 0.2.29, which is recorded in
 
 `docs/audits/test-evidence.md` records the exact commands and counts.
 
+## Deep scan (later pass)
+
+A second, multi-angle scan reviewed eight areas of the codebase: upload and commit
+pipeline, storage engine and Telegram provider, API and security, web app,
+database and migrations, SDK contract, reconciliation and integrity, and tests,
+CI, deployment and docs. Each reported finding below was verified against the
+source before any change.
+
+| ID   | Severity           | Finding                                                                                                                                            | Status                                                                                                               |
+| ---- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| S-1  | High               | An adopted object was created without a current version or version count, so it reported zero versions and its only version was treated as history | Fixed. Adoption uses the atomic create. Test: `packages/core/test/adopt-version.test.ts`                             |
+| S-2  | High               | Emptying the trash removed only the current version's message, then deleted the version rows, stranding older versions' Telegram objects           | Fixed. Every version's message is removed first. Test: `packages/core/test/empty-trash-versions.test.ts`             |
+| S-3  | High               | An object held by a `COMMITTING` upload was not protected from reconciliation, so it could be adopted as a duplicate                               | Fixed. `COMMITTING` is protected. Test: `packages/core/test/reconciliation-committing.test.ts`                       |
+| S-4  | High               | `files.list({ folderId: null })` dropped the field, and the server reads an absent field as "any folder", so it returned files from every folder   | Fixed. The field is sent explicitly, matching `FoldersApi.list`. Test: `packages/sdk/test/files-list-folder.test.ts` |
+| S-5  | High (unconfirmed) | The primary upload path ignores the result of its `COMMITTING` claim, which could let a follower commit a second file                              | Not confirmed. An injected claim failure still produced one file. No change made                                     |
+| S-6  | Medium             | A failed activity write after the row is committed runs the orphan cleanup and deletes a live object                                               | Confirmed in source; not yet fixed                                                                                   |
+| S-7  | Medium             | Search with file-only filters (`ext`, MIME, size) returns every folder, because the folder query ignores those filters                             | Confirmed in source; not yet fixed                                                                                   |
+| S-8  | Medium             | `dangling` is decided by absence from a truncated listing, never verified with `stat`, and the report has no partial-scan flag                     | Confirmed in source; not yet fixed                                                                                   |
+| S-9  | Medium             | A stalled `COMMITTING` operation is a dead end: no retry path can settle it and reconciliation does not surface it                                 | Confirmed in source; not yet fixed                                                                                   |
+| S-10 | Low                | Missing FK-leading indexes (`Folder.parentId`, `File.folderId`) cause scans on folder and file deletion                                            | Confirmed in source; not yet fixed                                                                                   |
+| S-11 | Low                | A QR status GET can issue a session cookie and is exempt from the Origin check, which is a login-CSRF shape                                        | Confirmed in source; not yet fixed                                                                                   |
+| S-12 | Low                | The QR status poll shares a 10-per-minute limiter but polls every 2 seconds, so sign-in can time out                                               | Confirmed in source; not yet fixed                                                                                   |
+
+Only S-1 to S-4 were fixed in this pass. The remaining items are recorded with
+their evidence so they can be scheduled deliberately rather than fixed blind.
+
 ## Remaining risks and limitations
 
 - The streamed upload path in the SDK (a stream or async-iterable input) still

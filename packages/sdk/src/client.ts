@@ -518,7 +518,15 @@ class FilesApi {
 
   /** `folderId: null` = root; omit it to list every active file. */
   async list(query: ListQuery = {}): Promise<FilesPageDTO> {
-    return this.client.request<FilesPageDTO>("GET", `/api/files${buildQuery(query)}`);
+    const { folderId, ...rest } = query;
+    const base = buildQuery(rest);
+    if (folderId === undefined)
+      return this.client.request<FilesPageDTO>("GET", `/api/files${base}`);
+    // The server treats an absent folderId as "any folder" and an empty one as the
+    // root, so `folderId: null` must be sent explicitly to list root files only.
+    const separator = base === "" ? "?" : "&";
+    const path = `/api/files${base}${separator}folderId=${encodeURIComponent(folderId ?? "")}`;
+    return this.client.request<FilesPageDTO>("GET", path);
   }
 
   async get(id: string): Promise<FileDTO> {

@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Large-object adoption.** Adopting an unknown object hashes it by streaming
   instead of loading it into memory.
 
+### Fixed (deep scan)
+
+- **Adopted files had no current version.** Reconciliation adoption created a
+  record with zero versions, so its only version was treated as history. It now
+  uses the same atomic create as a normal upload.
+- **Emptying the trash stranded old versions.** Only the current version's
+  Telegram message was removed before its rows were deleted. Every version's
+  message is now removed first.
+- **Objects held by a committing upload could be adopted.** Reconciliation
+  protected `UPLOADING`, `PENDING` and `UNKNOWN` but not `COMMITTING`.
+- **`files.list({ folderId: null })` returned files from every folder.** The
+  field was dropped, and the server reads an absent field as "any folder". It is
+  now sent explicitly, matching `folders.list`.
+
 ### Security
 
 - The development `docker-compose.yml` binds PostgreSQL to `127.0.0.1` and reads
