@@ -43,8 +43,8 @@ You need Node.js 20 or newer, a PostgreSQL database, and a Telegram API applicat
 **1. Start PostgreSQL.** If you do not have one, this runs a local instance:
 
 ```bash
-docker run -d --name omnicloud-postgres -p 5432:5432 \
-  -e POSTGRES_USER=omnicloud -e POSTGRES_PASSWORD=omnicloud -e POSTGRES_DB=omnicloud \
+docker run -d --name omnicloud-postgres -p 127.0.0.1:5432:5432 \
+  -e POSTGRES_USER=omnicloud -e POSTGRES_PASSWORD=omnicloud-dev-only -e POSTGRES_DB=omnicloud \
   postgres:16-alpine
 ```
 
@@ -59,7 +59,7 @@ npx omnicloud
 
 The first time, OmniCloud asks for three values in the terminal and saves them to `.env`:
 
-- `DATABASE_URL`, for example `postgresql://omnicloud:omnicloud@127.0.0.1:5432/omnicloud` for the database above.
+- `DATABASE_URL`, for example `postgresql://omnicloud:omnicloud-dev-only@127.0.0.1:5432/omnicloud` for the database above.
 - `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`, from <https://my.telegram.org> → **API development tools**.
 
 It generates the encryption key for you, applies the database schema, starts the server and opens the web app. Later runs skip the questions. To write the file yourself instead, create `.env` with the same four keys; `OMNICLOUD_ENCRYPTION_KEY` can be any 64 hex characters from `openssl rand -hex 32`. Use `npx omnicloud start --no-open` on servers without a desktop.
