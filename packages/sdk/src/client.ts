@@ -72,6 +72,12 @@ export interface UploadOptions {
   signal?: AbortSignal;
   /** Number of retry attempts for failed uploads. Default 2. */
   retry?: number;
+  /**
+   * Idempotency key for this logical upload. Sent on every attempt, so a retry
+   * after a lost response returns the original file instead of duplicating it.
+   * Generated automatically when omitted.
+   */
+  operationId?: string;
 }
 
 export interface UploadInput {
@@ -253,24 +259,35 @@ export class OmniCloudClient {
   }
 
   /** Low-level request helper (retries transient failures). */
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
     // Only methods that are safe to repeat are retried automatically. A POST or PATCH
     // may already have changed state when the server fails, so it is not repeated
     // unless the caller opts in with an idempotency key.
     if (!RETRY_SAFE_METHODS.has(method.toUpperCase())) {
-      return this.rawRequest<T>(method, path, body);
+      return this.rawRequest<T>(method, path, body, extraHeaders);
     }
-    return this.withRetry(async () => this.rawRequest<T>(method, path, body));
+    return this.withRetry(async () => this.rawRequest<T>(method, path, body, extraHeaders));
   }
 
   /** @internal */
-  async rawRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async rawRequest<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers: {
         ...this.defaultHeaders,
         ...(body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}),
+        ...(extraHeaders ?? {}),
       },
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       credentials: "include",
@@ -533,12 +550,16 @@ class FilesApi {
         ? { kind: "path", path: input.path }
         : { kind: "blob", blob: await toBlob(input) };
 
+    // One key for the whole operation, so every attempt is the same logical upload.
+    const operationId = options.operationId ?? randomId();
+    const sendOptions: UploadOptions = { ...options, operationId };
+
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
         if (source.kind === "path") {
-          return await this.uploadPathOnce(source.path, input.name, options);
+          return await this.uploadPathOnce(source.path, input.name, sendOptions);
         }
-        return await this.uploadOnce(source.blob, input.name, options);
+        return await this.uploadOnce(source.blob, input.name, sendOptions);
       } catch (error) {
         lastError = error;
         if (options.signal?.aborted) throw error;
@@ -577,6 +598,7 @@ class FilesApi {
         ...this.client.defaultHeaders,
         "Content-Type": `multipart/form-data; boundary=${boundary}`,
         "Content-Length": String(Buffer.byteLength(head) + size + Buffer.byteLength(tail)),
+        ...(options.operationId ? { "Idempotency-Key": options.operationId } : {}),
       },
       body,
       credentials: "include",
@@ -598,14 +620,21 @@ class FilesApi {
 
   private async uploadOnce(blob: Blob, name: string, options: UploadOptions): Promise<FileDTO> {
     const form = new FormData();
-    form.append("file", blob, name);
+    // Fields must precede the file part: the server reads them as they arrive, so a
+    // field sent after the file is not visible to it.
     if (options.folderId) form.append("folderId", options.folderId);
+    form.append("file", blob, name);
 
     if (typeof XMLHttpRequest === "function") {
       return this.uploadViaXhr(form, options);
     }
     return this.client
-      .request<{ file: FileDTO }>("POST", "/api/files", form)
+      .request<{ file: FileDTO }>(
+        "POST",
+        "/api/files",
+        form,
+        options.operationId ? { "Idempotency-Key": options.operationId } : undefined,
+      )
       .then((response) => response.file);
   }
 
@@ -615,6 +644,7 @@ class FilesApi {
       xhr.open("POST", `${this.client.baseUrl}/api/files`);
       xhr.responseType = "json";
       xhr.withCredentials = true;
+      if (options.operationId) xhr.setRequestHeader("Idempotency-Key", options.operationId);
 
       const onAbort = () => xhr.abort();
       options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -654,7 +684,11 @@ class FilesApi {
   }
 
   /** Uploads a new version of an existing file. */
-  async replace(id: string, input: UploadInput): Promise<FileDTO> {
+  async replace(
+    id: string,
+    input: UploadInput,
+    options: { operationId?: string } = {},
+  ): Promise<FileDTO> {
     const form = new FormData();
     const blob = await toBlob(input);
     form.append("file", blob, input.name);
@@ -662,6 +696,7 @@ class FilesApi {
       "POST",
       `/api/files/${id}/replace`,
       form,
+      options.operationId ? { "Idempotency-Key": options.operationId } : undefined,
     );
     return file;
   }
