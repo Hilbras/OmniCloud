@@ -159,6 +159,21 @@ export class FileService {
     if (op?.status === "UNKNOWN") {
       return this.resolveUnknown(userId, input, operations, op);
     }
+    if (op?.status === "COMMITTING" && op.fileId === null && op.telegramMessageId !== null) {
+      // A crash left the commit unfinished. The object is stored, so return the
+      // operation to UPLOADING and let the normal commit path finish it. Without
+      // this, the key would conflict forever with no way to resolve it.
+      const reclaimed = await operations.claim(op.id, "COMMITTING", "UPLOADING");
+      if (!reclaimed) {
+        const outcome = await this.followWinner(userId, input, operationId, operations);
+        if (outcome) return outcome;
+        throw new ConflictError("A concurrent upload with this operation id is still in progress");
+      }
+      return this.commitStoredObject(userId, input, operations, {
+        ...op,
+        status: "UPLOADING",
+      });
+    }
     if (!op) {
       try {
         op = await operations.create({ userId, operationId, requestFingerprint: fingerprint });

@@ -48,6 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`files.list({ folderId: null })` returned files from every folder.** The
   field was dropped, and the server reads an absent field as "any folder". It is
   now sent explicitly, matching `folders.list`.
+- **Search returned folders for file-only filters.** A query for an extension or a
+  size no longer lists every folder.
+- **A partial reconciliation scan looked complete.** The report now carries the
+  scan cap and a truncation flag, and the route accepts a bounded limit.
+- **A crash-left `COMMITTING` upload was a dead end.** Its key conflicted forever;
+  a retry can now reclaim and finish it.
+- **The QR status poll could rate-limit its own sign-in.** It now has its own
+  budget, and it requires an allowed origin because it can issue a session.
+- **Missing foreign-key indexes** on `Folder.parentId` and `File.folderId` caused
+  table scans on recursive deletes (migration 7).
 
 ### Security
 

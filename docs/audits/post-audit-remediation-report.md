@@ -65,8 +65,29 @@ source before any change.
 | S-11 | Low                | A QR status GET can issue a session cookie and is exempt from the Origin check, which is a login-CSRF shape                                        | Confirmed in source; not yet fixed                                                                                   |
 | S-12 | Low                | The QR status poll shares a 10-per-minute limiter but polls every 2 seconds, so sign-in can time out                                               | Confirmed in source; not yet fixed                                                                                   |
 
-Only S-1 to S-4 were fixed in this pass. The remaining items are recorded with
-their evidence so they can be scheduled deliberately rather than fixed blind.
+S-1 to S-4 and S-7 to S-12 are fixed. S-5 and S-6 were not fixed, because
+neither could be reproduced as described:
+
+- **S-5** (primary upload path ignores its claim result): injecting a claim failure
+  still produced exactly one file, so no duplicate was demonstrated and the hot
+  path was left unchanged.
+- **S-6** (a failed activity write deletes a live object): production passes
+  `ActivityService`, whose `record` absorbs store failures by design, so the
+  cleanup never runs after a successful commit. A guard test now pins that
+  behaviour. The failure is only reachable if a caller injects a recorder that
+  throws, which the application never does.
+
+Later fixes:
+
+| ID   | Fix                                                                           | Test                                                                                        |
+| ---- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| S-7  | Search skips the folder query when the filters can only match files           | `packages/core/test/search-service.test.ts`                                                 |
+| S-8  | The report carries `limit` and `truncated`; the route accepts a bounded limit | `packages/core/test/reconciliation-partial.test.ts`, `apps/api/test/reconciliation.test.ts` |
+| S-9  | A crash-left `COMMITTING` operation can be reclaimed by a retry               | `packages/core/test/stuck-committing.test.ts`                                               |
+| S-10 | Leading indexes on `Folder.parentId` and `File.folderId` (migration 7)        | Verified with `EXPLAIN`: both queries now use an index scan                                 |
+| S-11 | The QR status route requires an allowed origin, since it can issue a session  | `apps/api/test/qr-login.test.ts`                                                            |
+| S-12 | The QR status poll has its own 120-per-minute budget                          | `apps/api/test/qr-login.test.ts`                                                            |
+| S-6  | Not reproducible; guard test only                                             | `packages/core/test/activity-failure.test.ts`                                               |
 
 ## Remaining risks and limitations
 
