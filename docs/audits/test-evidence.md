@@ -79,3 +79,25 @@ record is the caption search performed at 0.2.29, recorded in
   of `download`), not by measuring peak memory.
 - Restart recovery across a real process restart. The crash cases were simulated
   by injecting failures at the relevant points.
+
+## Phase 9 verification sweep (branch `post-audit-remediation`, HEAD `3b4177f`)
+
+Run on a disposable `postgres:16-alpine` container. The user's own database was
+not touched.
+
+| Check                                      | Command                                         | Result                                       |
+| ------------------------------------------ | ----------------------------------------------- | -------------------------------------------- |
+| Migrations apply on a fresh database       | `prisma migrate deploy`                         | All applied, including migration 7           |
+| Schema matches the migrations              | `prisma migrate diff --exit-code`               | Exit 0                                       |
+| PostgreSQL integration suite               | `vitest run` with `OMNICLOUD_TEST_DATABASE_URL` | 8 files, 13 tests passed                     |
+| New FK indexes exist and are used          | `pg_indexes` and `EXPLAIN`                      | Both present; both queries use an index scan |
+| Parent/child folder query                  | repository round trip                           | Passes                                       |
+| SDK built package, ESM import              | `node --input-type=module`                      | OK                                           |
+| SDK built package, CJS import              | `node -e require`                               | OK                                           |
+| Packed tarball installs in a clean project | `npm pack` + `npm install <tgz>`                | ESM and CJS imports OK                       |
+
+Workspace suites on the same commit: shared 14, core 271 (1 skipped), database 5
+with 8 skipped without a database URL, telegram 35 (1 skipped), sdk 66, api 131.
+Format, lint, typecheck and build all pass.
+
+Still not covered: live Telegram behaviour. The release gate remains unsatisfied.
