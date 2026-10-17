@@ -98,12 +98,12 @@ export function apiErrorFromText(status: number, responseText: string): ApiError
 
 type QueryValue = string | number | boolean | null | undefined;
 
-/** Serializes defined (non-empty) query parameters into a `?a=b` suffix. */
+/** Serializes defined query parameters into a `?a=b` suffix. */
 function buildQuery(params: Record<string, QueryValue>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === "") continue;
-    search.set(key, String(value));
+    if (value === undefined) continue;
+    search.set(key, value === null ? "" : String(value));
   }
   const encoded = search.toString();
   return encoded === "" ? "" : `?${encoded}`;

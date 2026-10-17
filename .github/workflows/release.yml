@@ -29,7 +29,7 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Verify the SDK version matches the tag
+      - name: Verify every version matches the tag
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           SDK_VERSION="$(node -p "require('./packages/sdk/package.json').version")"
@@ -37,7 +37,23 @@ jobs:
             echo "::error::Tag v$TAG does not match @lacrous/omnicloud version $SDK_VERSION"
             exit 1
           fi
-          echo "Releasing @lacrous/omnicloud@$SDK_VERSION"
+          # The API embeds its version in server/index.js, and the other manifests
+          # ship inside the package, so all of them must carry the released version.
+          API_VERSION="$(sed -n 's/^const VERSION = "\(.*\)";$/\1/p' apps/api/src/routes/storage.ts)"
+          if [ "$API_VERSION" != "$SDK_VERSION" ]; then
+            echo "::error::API VERSION is $API_VERSION but the tag is v$TAG"
+            exit 1
+          fi
+          for manifest in package.json apps/api/package.json apps/web/package.json \
+                          packages/core/package.json packages/database/package.json \
+                          packages/shared/package.json packages/telegram/package.json; do
+            V="$(node -p "require('./$manifest').version")"
+            if [ "$V" != "$SDK_VERSION" ]; then
+              echo "::error::$manifest is $V but the tag is v$TAG"
+              exit 1
+            fi
+          done
+          echo "Releasing @lacrous/omnicloud@$SDK_VERSION";
 
       - name: Format check
         run: pnpm format:check

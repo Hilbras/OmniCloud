@@ -11,6 +11,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@omnicloud/crypto": "workspace:*",
     "@omnicloud/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "lucide-react": "^1.47.0",

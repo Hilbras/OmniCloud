@@ -38,11 +38,13 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
-
+      # Build before test: several checks (the SDK declarations test, the web app's
+      # bundle) need build output, and a skipped check is not a passing one.
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test
 
   migrations:
     name: Migrations apply cleanly
@@ -97,4 +99,6 @@ jobs:
           OMNICLOUD_TEST_DATABASE_URL: postgresql://omnicloud:omnicloud@localhost:5432/omnicloud
         run: |
           pnpm exec vitest run --reporter=json --outputFile=integration-report.json
-          node -e "const r=require('./integration-report.json'); if (r.numPendingTests > 0) { console.error('Skipped integration tests: ' + r.numPendingTests); process.exit(1); } console.log('Integration tests run: ' + r.numPassedTests);"
+          # Fail on any skip, and fail if the suite ran too few tests, so a renamed
+          # or no-longer-matching test file cannot pass the job with no coverage.
+          node -e "const r=require('./integration-report.json'); const MIN=13; if (r.numPendingTests > 0) { console.error('Skipped integration tests: ' + r.numPendingTests); process.exit(1); } if (r.numPassedTests < MIN) { console.error('Only ' + r.numPassedTests + ' integration tests ran; expected at least ' + MIN); process.exit(1); } console.log('Integration tests run: ' + r.numPassedTests);"

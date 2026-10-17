@@ -201,8 +201,8 @@ client.sendFile(peer, {
   gone; `get`/`requireMessage` throw `TELEGRAM_FILE_NOT_FOUND` in that case.
 - `delete` removes the message with `revoke: true`. Deleting an already-missing
   message is tolerated by the abstraction contract.
-- `getStream` currently buffers and re-exposes the result as a one-chunk
-  stream; true chunked streaming is a v0.3 concern.
+- `getStream` streams Telegram download chunks through a `Readable`; the storage
+  engine verifies the final SHA-256 before releasing the last chunk.
 - `healthCheck` verifies the client is connected and probes the channel with
   `channels.GetFullChannel`, returning the channel title and latency.
 
@@ -241,9 +241,9 @@ credentials or session material.
 ## Operational notes
 
 - **Rate limits are Telegram's, not ours.** Telegram answers with `FLOOD_WAIT_n`
-  seconds; OmniCloud maps it to `429 RATE_LIMITED` and the client must wait. The
-  `StorageEngine` deliberately does not retry `FLOOD_WAIT` (it will not resolve
-  itself quickly), but it does retry transient transport failures.
+  seconds; OmniCloud maps it to `429 RATE_LIMITED` and the storage engine retries
+  after the server-provided delay. Upload transport failures are not blindly
+  retried because Telegram may have stored the object before the response was lost.
 - **One connection per user per process.** There is no cross-process session
   sharing; running multiple API replicas against the same account is out of
   scope and can trigger Telegram-side session duplication.

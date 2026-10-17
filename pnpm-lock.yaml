@@ -236,6 +236,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@omnicloud/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@omnicloud/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -305,6 +308,25 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@22.20.5)(vite@7.3.6(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
 
+  packages/crypto:
+    dependencies:
+      '@noble/ciphers':
+        specifier: 1.3.0
+        version: 1.3.0
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.20.5)(vite@7.3.6(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+
   packages/database:
     dependencies:
       '@omnicloud/core':
@@ -357,6 +379,9 @@ importers:
       '@omnicloud/core':
         specifier: workspace:*
         version: link:../core
+      '@omnicloud/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@omnicloud/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1089,6 +1114,14 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@noble/ciphers@1.3.0':
+    resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -3466,6 +3499,10 @@ snapshots:
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
+
+  '@noble/ciphers@1.3.0': {}
+
+  '@noble/hashes@1.8.0': {}
 
   '@pinojs/redact@0.4.0': {}
 

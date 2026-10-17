@@ -73,9 +73,10 @@ row at once, so a copied cookie stops working. `POST /api/auth/logout-all` signs
 out every session for the account.
 
 The Telegram MTProto session is **never** sent to clients; it is stored
-server-side only. Bearer tokens are not implemented server-side — the SDK's
-`token` option is only useful against deployments that put token auth in front
-of the API.
+server-side only. Personal API tokens are supported through `POST /api/tokens`,
+`GET /api/tokens`, and `DELETE /api/tokens/:id`. Send the returned token as
+`Authorization: Bearer <token>`; the secret is shown only once. Tokens are
+account-wide and remain valid until revoked.
 
 ### Pagination
 
@@ -201,7 +202,7 @@ probes.
   "database": "healthy",
   "storage": "unknown",
   "uptimeSeconds": 3600,
-  "version": "0.2.3"
+  "version": "0.2.35"
 }
 ```
 

@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { BatchOperation } from "../api/client";
 import { api, errorMessage } from "../api/client";
+import { downloadFile } from "../api/download";
 import { invalidateDriveQueries } from "../lib/queries";
 import type { DriveItem } from "../lib/drive";
 import { useToast } from "../components/Toasts";
@@ -176,7 +177,11 @@ export function useItemActions({
           onOpenItem(item);
           return;
         case "download":
-          if (item.kind === "file") api.files.download(item.id);
+          if (item.kind === "file") {
+            void downloadFile(item.id, item.file).catch((error) =>
+              toast.error(errorMessage(error, "Could not download the file")),
+            );
+          }
           return;
         case "rename":
           setRenaming(item);
@@ -209,7 +214,7 @@ export function useItemActions({
           return;
       }
     },
-    [onOpenItem, onShowDetails, openMove, openReplacePicker, requestDelete, runBatch],
+    [onOpenItem, onShowDetails, openMove, openReplacePicker, requestDelete, runBatch, toast],
   );
 
   const tree = buildFolderTree(treeQuery.data?.folders ?? []);

@@ -101,10 +101,17 @@ export function DriveItems({
               key={itemKeyOf(item)}
               onClick={(event) => handleActivate(event, item)}
               onContextMenu={(event) => openContextMenu(event, item)}
-              className={`group relative flex cursor-pointer flex-col gap-3 rounded-2xl border bg-surface p-4 transition-colors ${
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleActivate(event, item);
+                }
+              }}
+              className={`drive-item group relative flex cursor-pointer flex-col gap-3 rounded-2xl border bg-surface p-4 outline-none focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/35 ${
                 selected
                   ? "border-gold bg-gold-soft"
-                  : "border-line hover:border-gold/40 hover:bg-bg-soft"
+                  : "border-line hover:border-gold/45 hover:bg-bg-soft hover:shadow-[var(--shadow)]"
               } ${item.trashed ? "opacity-70" : ""}`}
             >
               <div className="absolute top-3 left-3" onClick={(event) => event.stopPropagation()}>
@@ -124,14 +131,16 @@ export function DriveItems({
                 />
               </div>
               <div className="mt-6 flex flex-1 items-center justify-center">
-                {item.kind === "folder" ? (
-                  <Folder className="h-10 w-10 text-gold" aria-hidden="true" />
-                ) : (
-                  (() => {
-                    const { Icon, color } = fileVisual(item.mimeType);
-                    return <Icon className={`h-10 w-10 ${color}`} aria-hidden="true" />;
-                  })()
-                )}
+                <span className="grid h-16 w-16 place-items-center rounded-2xl bg-bg-soft/85">
+                  {item.kind === "folder" ? (
+                    <Folder className="h-9 w-9 text-gold" aria-hidden="true" />
+                  ) : (
+                    (() => {
+                      const { Icon, color } = fileVisual(item.mimeType);
+                      return <Icon className={`h-9 w-9 ${color}`} aria-hidden="true" />;
+                    })()
+                  )}
+                </span>
               </div>
               <div className="min-w-0">
                 <p className="line-clamp-2 text-[13px] leading-snug font-medium" title={item.name}>
@@ -147,6 +156,11 @@ export function DriveItems({
                   {item.kind === "folder"
                     ? "Folder"
                     : `${formatBytes(item.size)} · ${fileVisual(item.mimeType).label}`}
+                  {item.file?.encryptionFormat === "OCE1" ? (
+                    <span className="ml-1.5 rounded-full border border-line bg-bg-soft px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted uppercase">
+                      Encrypted
+                    </span>
+                  ) : null}
                 </p>
                 {item.deletedAt !== null ? (
                   <p className="muted mt-0.5 text-[11px]">
@@ -170,10 +184,17 @@ export function DriveItems({
             key={itemKeyOf(item)}
             onClick={(event) => handleActivate(event, item)}
             onContextMenu={(event) => openContextMenu(event, item)}
-            className={`group flex cursor-pointer items-center gap-3 rounded-xl border bg-surface px-3 py-2.5 transition-colors ${
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleActivate(event, item);
+              }
+            }}
+            className={`drive-item group flex cursor-pointer items-center gap-3 rounded-xl border bg-surface px-3 py-3 outline-none focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/35 sm:px-4 ${
               selected
                 ? "border-gold bg-gold-soft"
-                : "border-line hover:border-gold/40 hover:bg-bg-soft"
+                : "border-line hover:border-gold/45 hover:bg-bg-soft hover:shadow-[var(--shadow)]"
             } ${item.trashed ? "opacity-70" : ""}`}
           >
             <div onClick={(event) => event.stopPropagation()}>
@@ -196,6 +217,11 @@ export function DriveItems({
               ) : null}
               {item.name}
             </span>
+            {item.file?.encryptionFormat === "OCE1" ? (
+              <span className="shrink-0 rounded-full border border-line bg-bg-soft px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted uppercase">
+                Encrypted
+              </span>
+            ) : null}
             {item.deletedAt !== null ? (
               <span className="muted hidden shrink-0 text-[12px] sm:block">
                 Deleted {formatRelative(item.deletedAt)}

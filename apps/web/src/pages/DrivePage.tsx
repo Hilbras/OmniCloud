@@ -5,6 +5,7 @@ import type { DragEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { SortField, SortOrder } from "@omnicloud/shared";
 import { api, ERROR_CODES, errorMessage, isApiError } from "../api/client";
+import { downloadFile } from "../api/download";
 import { breadcrumbPath, buildFolderTree } from "../lib/tree";
 import { fileToItem, folderToItem, isViewMode, itemKeyOf } from "../lib/drive";
 import type { DriveItem, ViewMode } from "../lib/drive";
@@ -24,6 +25,7 @@ import { ItemCollection } from "../components/ItemCollection";
 import { PageHeader, PageTitle } from "../components/PageHeader";
 import { SelectionBar } from "../components/SelectionBar";
 import { SortMenu } from "../components/SortMenu";
+import { useToast } from "../components/Toasts";
 import { ViewToggle } from "../components/ViewToggle";
 
 const PAGE_LIMIT = 100;
@@ -43,6 +45,7 @@ export default function DrivePage() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [detailsItem, setDetailsItem] = useState<DriveItem | null>(null);
   const selection = useSelection();
+  const toast = useToast();
 
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
@@ -93,8 +96,13 @@ export default function DrivePage() {
 
   const actions = useItemActions({
     onOpenItem: (item) => {
-      if (item.kind === "folder") navigateToFolder(item.id);
-      else api.files.download(item.id);
+      if (item.kind === "folder") {
+        navigateToFolder(item.id);
+      } else {
+        void downloadFile(item.id, item.file).catch((error) =>
+          toast.error(errorMessage(error, "Could not download the file")),
+        );
+      }
     },
     onShowDetails: setDetailsItem,
     onReplaceFile: uploads.replace,
@@ -213,6 +221,7 @@ export default function DrivePage() {
           <ItemCollection
             items={items}
             view={view}
+            transitionKey={`${folderId ?? "root"}:${view}`}
             selection={selection}
             onOpen={(item) =>
               actions.handleAction(item.kind === "folder" ? "open" : "download", item)

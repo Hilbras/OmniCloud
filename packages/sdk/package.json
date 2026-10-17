@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@omnicloud/core": "workspace:*",
+    "@omnicloud/crypto": "workspace:*",
     "@omnicloud/shared": "workspace:*",
     "@omnicloud/telegram": "workspace:*",
     "@types/node": "^22.10.0",

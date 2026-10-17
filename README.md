@@ -140,22 +140,22 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design.
 
 Configuration comes from environment variables. The `omnicloud` command also reads a `.env` file in the current directory; variables already set in your shell always win.
 
-| Variable                   | Required          | Default      | Purpose                                                                                          |
-| -------------------------- | ----------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`             | yes               | —            | PostgreSQL connection string                                                                     |
-| `TELEGRAM_API_ID`          | yes               | —            | Your Telegram application ID                                                                     |
-| `TELEGRAM_API_HASH`        | yes               | —            | Your Telegram application hash                                                                   |
-| `OMNICLOUD_ENCRYPTION_KEY` | yes in production | —            | 64 hex characters. Seals Telegram sessions at rest. **Back it up separately from the database.** |
-| `HOST`                     | no                | `0.0.0.0`    | Address to listen on                                                                             |
-| `PORT`                     | no                | `4000`       | Port to listen on                                                                                |
-| `NODE_ENV`                 | no                | `production` | Set to `production` for real deployments (the `omnicloud` command defaults to it)                |
-| `LOG_LEVEL`                | no                | `info`       | `fatal`, `error`, `warn`, `info`, `debug` or `trace`                                             |
-| `COOKIE_SECURE`            | no                | `false`      | Set `true` when served over HTTPS                                                                |
-| `ALLOWED_ORIGINS`          | no                | same-origin  | Comma-separated origins allowed to make state-changing requests                                  |
-| `TRUST_PROXY`              | no                | `false`      | Trust `X-Forwarded-*` headers. Enable only behind a reverse proxy you control                    |
-| `MAX_UPLOAD_MB`            | no                | `256`        | Largest accepted upload, in megabytes                                                            |
-| `STORAGE_QUOTA_GB`         | no                | `0` (none)   | Optional quota shown on the Storage dashboard                                                    |
-| `SESSION_SECRET`           | no                | —            | Reserved; browser sessions are server-side tokens and do not use it                              |
+| Variable                   | Required          | Default      | Purpose                                                                                                                                                |
+| -------------------------- | ----------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`             | yes               | —            | PostgreSQL connection string                                                                                                                           |
+| `TELEGRAM_API_ID`          | yes               | —            | Your Telegram application ID                                                                                                                           |
+| `TELEGRAM_API_HASH`        | yes               | —            | Your Telegram application hash                                                                                                                         |
+| `OMNICLOUD_ENCRYPTION_KEY` | yes in production | —            | 64 hex characters. Seals Telegram sessions at rest. **Back it up separately from the database.**                                                       |
+| `HOST`                     | no                | `0.0.0.0`    | Address to listen on                                                                                                                                   |
+| `PORT`                     | no                | `4000`       | Port to listen on                                                                                                                                      |
+| `NODE_ENV`                 | no                | `production` | The `omnicloud` command defaults to `production`; running the API directly defaults to `development`. `production` requires `OMNICLOUD_ENCRYPTION_KEY` |
+| `LOG_LEVEL`                | no                | `info`       | `fatal`, `error`, `warn`, `info`, `debug` or `trace`                                                                                                   |
+| `COOKIE_SECURE`            | no                | `false`      | Set `true` when served over HTTPS                                                                                                                      |
+| `ALLOWED_ORIGINS`          | no                | same-origin  | Comma-separated origins allowed to make state-changing requests                                                                                        |
+| `TRUST_PROXY`              | no                | `false`      | Trust `X-Forwarded-*` headers. Enable only behind a reverse proxy you control                                                                          |
+| `MAX_UPLOAD_MB`            | no                | `256`        | Largest accepted upload, in megabytes                                                                                                                  |
+| `STORAGE_QUOTA_GB`         | no                | `0` (none)   | Optional quota shown on the Storage dashboard                                                                                                          |
+| `SESSION_SECRET`           | no                | —            | Reserved; browser sessions are server-side tokens and do not use it                                                                                    |
 
 The repository includes a fully commented template at [`.env.example`](.env.example).
 
@@ -349,7 +349,7 @@ Without the encryption key, a restored database cannot use its stored Telegram s
 - **No end-to-end encryption.** Telegram can access channel content, so OmniCloud is not a zero-knowledge vault.
 - **Telegram is the storage backend.** Telegram's own rate limits, file-size rules and availability apply to you.
 - **Single user per deployment.** There is no sharing, public links or multi-user collaboration yet.
-- **Version history is a foundation.** You can see and restore versions in the details panel, but a full history UI and retention policies are planned for v0.3.
+- **Version history is a foundation.** The details panel lists a file's versions; there is no restore or delete action yet, and no scheduled retention. Those are planned for v0.3.
 - Live verification of the Telegram path is documented in [`docs/limitations.md`](docs/limitations.md).
 
 ---

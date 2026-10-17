@@ -11,6 +11,7 @@ import {
 import { sanitizeFileName } from "../utils/filename";
 import type { FileRecord, FileVersionRecord, ItemQuery, PageRequest, Paged } from "../types";
 import type {
+  FileEncryptionFields,
   FileRepository,
   FolderRepository,
   UploadOperationRecord,
@@ -42,6 +43,14 @@ export interface FileStreamDownload {
 
 export type EngineResolver = (userId: string) => Promise<StorageEngine>;
 
+/** Opaque OCE1 encryption metadata supplied by an encrypted client upload. */
+export interface FileEncryptionInput {
+  format: "OCE1";
+  wrappedKey: string;
+  metadataBlob: string;
+  keyEpoch: number;
+}
+
 export interface FileUploadInput {
   folderId: string | null;
   name: string;
@@ -53,6 +62,12 @@ export interface FileUploadInput {
   replaceFileId?: string;
   /** Client-supplied id that makes the upload idempotent across retries. */
   operationId?: string;
+  /**
+   * Opaque OCE1 encryption metadata. Absent = plaintext (and a replace of an
+   * encrypted file clears its encryption fields). The server never interprets
+   * the envelope; these describe the CURRENT version only.
+   */
+  encryption?: FileEncryptionInput;
   /** Progress callback forwarded from the transport layer. */
   onProgress?: (progress: TransferProgress) => void;
   signal?: AbortSignal;
@@ -78,6 +93,23 @@ export interface FileListResult {
  */
 function contentSha256(input: FileUploadInput): string {
   return input.spooled?.sha256 ?? sha256Hex(input.data ?? Buffer.alloc(0));
+}
+
+/**
+ * Maps an upload's encryption input onto the persistable record fields.
+ * Absent encryption maps to all-null fields, so a plaintext replace clears
+ * encryption metadata that a previous version set.
+ */
+function encryptionFieldsFrom(input: FileUploadInput): FileEncryptionFields {
+  const encryption = input.encryption;
+  return encryption
+    ? {
+        encryptionFormat: encryption.format,
+        wrappedKey: encryption.wrappedKey,
+        metadataBlob: encryption.metadataBlob,
+        keyEpoch: encryption.keyEpoch,
+      }
+    : { encryptionFormat: null, wrappedKey: null, metadataBlob: null, keyEpoch: null };
 }
 
 /**
@@ -201,14 +233,19 @@ export class FileService {
       throw new ConflictError("A concurrent upload with this operation id is still in progress");
     }
 
+    let claimLost = false;
     try {
       const record = await this.performUpload(userId, input, {
         caption: uploadCaption(contentSha256(input), op.operationId),
         onStored: async (stored) => {
+          // Claim the commit before publishing the message id; followers only
+          // commit stored objects after observing that id on an UPLOADING operation.
+          const claimed = await operations.claim(op!.id, "UPLOADING", "COMMITTING");
+          if (!claimed) {
+            claimLost = true;
+            throw new ConflictError("Upload operation lost its commit claim");
+          }
           await operations.update(op!.id, { telegramMessageId: Number(stored.messageId) });
-          // Take the exclusive commit claim as soon as the object is stored, so a
-          // follower that sees UPLOADING with a message id cannot commit a second record.
-          await operations.claim(op!.id, "UPLOADING", "COMMITTING");
         },
       });
       // Record the committed file before the final status change. If that change
@@ -220,12 +257,14 @@ export class FileService {
       // A connection failure may come after Telegram stored the object, so the outcome is
       // unknown rather than failed. Only a failure known to precede the write is FAILED.
       const status = connectionCausedFailure(error) ? "UNKNOWN" : "FAILED";
-      await operations.update(op.id, {
-        status,
-        sha256: contentSha256(input),
-        size: contentSize(input),
-        error: error instanceof Error ? error.message.slice(0, 200) : "upload failed",
-      });
+      if (!claimLost) {
+        await operations.update(op.id, {
+          status,
+          sha256: contentSha256(input),
+          size: contentSize(input),
+          error: error instanceof Error ? error.message.slice(0, 200) : "upload failed",
+        });
+      }
       throw error;
     }
   }
@@ -403,9 +442,8 @@ export class FileService {
         : { name, mimeType, data: input.data, caption: hooks.caption },
       control,
     );
-    await hooks.onStored?.(stored);
-
     try {
+      await hooks.onStored?.(stored);
       return await this.commitRecord(userId, input, {
         name,
         mimeType,
@@ -451,6 +489,7 @@ export class FileService {
     },
   ): Promise<FileRecord> {
     const { name, mimeType, size, sha256, telegramMessageId } = next;
+    const encryption = encryptionFieldsFrom(input);
 
     if (input.replaceFileId) {
       return this.replaceVersion(userId, input.replaceFileId, {
@@ -459,6 +498,7 @@ export class FileService {
         mimeType,
         sha256,
         telegramMessageId,
+        encryption,
       });
     }
 
@@ -477,7 +517,8 @@ export class FileService {
       mimeType,
       sha256,
       telegramMessageId,
-      version: { userId, size, mimeType, sha256, telegramMessageId },
+      ...encryption,
+      version: { userId, size, mimeType, sha256, telegramMessageId, ...encryption },
     });
 
     await this.activity.record({
@@ -502,23 +543,34 @@ export class FileService {
       mimeType: string;
       sha256: string;
       telegramMessageId: number;
+      encryption: FileEncryptionFields;
     },
   ): Promise<FileRecord> {
     const existing = await this.get(userId, fileId);
 
-    // The new version and the file's pointer to it change together.
+    // The new version and the file's pointer to it change together. The file's
+    // encryption fields always describe the current version: a plaintext
+    // replace (all-null encryption) clears them.
     const updated = await this.files.replaceWithVersion(fileId, {
       name: next.name,
       size: next.size,
       mimeType: next.mimeType,
       sha256: next.sha256,
       telegramMessageId: next.telegramMessageId,
+      encryptionFormat: next.encryption.encryptionFormat,
+      wrappedKey: next.encryption.wrappedKey,
+      metadataBlob: next.encryption.metadataBlob,
+      keyEpoch: next.encryption.keyEpoch,
       version: {
         userId,
         size: next.size,
         mimeType: next.mimeType,
         sha256: next.sha256,
         telegramMessageId: next.telegramMessageId,
+        encryptionFormat: next.encryption.encryptionFormat,
+        wrappedKey: next.encryption.wrappedKey,
+        metadataBlob: next.encryption.metadataBlob,
+        keyEpoch: next.encryption.keyEpoch,
       },
     });
 

@@ -157,6 +157,12 @@ model File {
   mimeType          String
   sha256            String
   telegramMessageId BigInt
+  /// Opaque E2EE metadata (OCE1) for the current version; null = plaintext.
+  /// The server never interprets these fields.
+  encryptionFormat  String?
+  wrappedKey        String?
+  metadataBlob      String?
+  keyEpoch          Int?
   starred           Boolean   @default(false)
   deletedAt         DateTime?
   /// Groups everything one trash operation moved, for exact restore.
@@ -191,6 +197,12 @@ model FileVersion {
   mimeType          String
   sha256            String
   telegramMessageId BigInt
+  /// Opaque E2EE metadata (OCE1) for this version; null = plaintext.
+  /// The server never interprets these fields.
+  encryptionFormat  String?
+  wrappedKey        String?
+  metadataBlob      String?
+  keyEpoch          Int?
   createdAt         DateTime @default(now())
 
   @@unique([fileId, versionNumber])

@@ -10,6 +10,7 @@ import type { Container } from "../container";
 import {
   optionalBoolean,
   optionalString,
+  parseEncryptionFields,
   parseListQuery,
   requireBody,
   requireEnum,
@@ -79,12 +80,14 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
 
     const folderId = folderIdFromFields(part.fields);
     const operationId = operationIdFrom(request.headers, part.fields);
+    const encryption = parseEncryptionFields(part.fields);
     const record = await withSpooledUpload(part, maxUploadBytes, (spooled) =>
       container.files.upload(request.user.id, {
         folderId,
         name: part.filename,
         spooled,
         operationId,
+        ...(encryption ? { encryption } : {}),
       }),
     );
     return reply.status(201).send({ file: toFileDTO(record) });
@@ -160,6 +163,7 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
     if (!part.filename) throw new ValidationError("The uploaded file has no filename");
 
     const operationId = operationIdFrom(request.headers, part.fields);
+    const encryption = parseEncryptionFields(part.fields);
     const record = await withSpooledUpload(part, maxUploadBytes, (spooled) =>
       container.files.upload(request.user.id, {
         folderId: null,
@@ -167,6 +171,7 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
         spooled,
         replaceFileId: id,
         operationId,
+        ...(encryption ? { encryption } : {}),
       }),
     );
     return reply.send({ file: toFileDTO(record) });

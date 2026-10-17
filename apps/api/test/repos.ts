@@ -514,6 +514,10 @@ export function createInMemoryRepos(): InMemoryRepos {
         mimeType: version.mimeType,
         sha256: version.sha256,
         telegramMessageId: version.telegramMessageId,
+        encryptionFormat: version.encryptionFormat ?? null,
+        wrappedKey: version.wrappedKey ?? null,
+        metadataBlob: version.metadataBlob ?? null,
+        keyEpoch: version.keyEpoch ?? null,
       };
       const record: FileRecord = {
         id: fileId,
@@ -525,6 +529,10 @@ export function createInMemoryRepos(): InMemoryRepos {
         createdAt: now(),
         updatedAt: now(),
         ...fileInput,
+        encryptionFormat: fileInput.encryptionFormat ?? null,
+        wrappedKey: fileInput.wrappedKey ?? null,
+        metadataBlob: fileInput.metadataBlob ?? null,
+        keyEpoch: fileInput.keyEpoch ?? null,
       };
       versions.push(versionRecord);
       files.push(record);
@@ -545,6 +553,10 @@ export function createInMemoryRepos(): InMemoryRepos {
         mimeType: input.version.mimeType,
         sha256: input.version.sha256,
         telegramMessageId: input.version.telegramMessageId,
+        encryptionFormat: input.version.encryptionFormat ?? null,
+        wrappedKey: input.version.wrappedKey ?? null,
+        metadataBlob: input.version.metadataBlob ?? null,
+        keyEpoch: input.version.keyEpoch ?? null,
       };
       versions.push(versionRecord);
       file.name = input.name;
@@ -552,6 +564,10 @@ export function createInMemoryRepos(): InMemoryRepos {
       file.mimeType = input.mimeType;
       file.sha256 = input.sha256;
       file.telegramMessageId = input.telegramMessageId;
+      file.encryptionFormat = input.encryptionFormat;
+      file.wrappedKey = input.wrappedKey;
+      file.metadataBlob = input.metadataBlob;
+      file.keyEpoch = input.keyEpoch;
       file.currentVersionId = versionRecord.id;
       file.versionCount = existing.length + 1;
       file.updatedAt = now();

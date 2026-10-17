@@ -22,6 +22,15 @@ import type {
   UserDTO,
 } from "@omnicloud/shared";
 
+import { downloadEncrypted, uploadEncrypted } from "./encryption";
+import type {
+  EncryptedDownloadOptions,
+  EncryptedDownloadResult,
+  EncryptedUploadInput,
+  EncryptedUploadOptions,
+  EncryptedUploadResult,
+} from "./encryption";
+
 /**
  * Errors surfaced by the SDK. `code` mirrors the server's stable error codes
  * and `requestId` correlates with server logs.
@@ -125,8 +134,12 @@ function randomId(): string {
   return globalThis.crypto.randomUUID().replace(/-/g, "");
 }
 
-/** The header part of an RFC 7578 multipart body: fields, then the file part's header. */
-function multipartHead(boundary: string, fields: [string, string][], fileName: string): string {
+/** @internal Header part of an RFC 7578 multipart body: fields, then the file part's header. */
+export function multipartHead(
+  boundary: string,
+  fields: [string, string][],
+  fileName: string,
+): string {
   const parts = fields.map(
     ([name, value]) =>
       `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
@@ -168,7 +181,8 @@ function nodeMultipartStream(
   });
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+/** @internal Waits, rejecting with ABORTED when the signal fires. */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
     signal?.addEventListener(
@@ -185,7 +199,8 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 /** HTTP methods that may be repeated without changing the outcome. */
 const RETRY_SAFE_METHODS = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"]);
 
-function isRetryableStatus(status: number): boolean {
+/** @internal Whether a status is worth retrying (408/429/5xx). */
+export function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
@@ -202,7 +217,8 @@ function buildQuery(query: Query | ListQuery | undefined): string {
   return encoded ? `?${encoded}` : "";
 }
 
-function safeJsonParse(text: string): unknown {
+/** @internal JSON.parse that yields null instead of throwing. */
+export function safeJsonParse(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -691,6 +707,18 @@ class FilesApi {
     });
   }
 
+  /**
+   * Encrypts the content with OCE1, then uploads the envelope with the four
+   * encryption text fields ahead of the file part. Encryption runs exactly once
+   * per logical upload: retries replay the same envelope bytes and operationId.
+   */
+  async uploadEncrypted(
+    input: EncryptedUploadInput,
+    options: EncryptedUploadOptions,
+  ): Promise<EncryptedUploadResult> {
+    return uploadEncrypted(this.client, input, options);
+  }
+
   /** Uploads a new version of an existing file. */
   async replace(
     id: string,
@@ -718,6 +746,18 @@ class FilesApi {
    */
   async download(id: string, onProgress?: (p: DownloadProgress) => void): Promise<DownloadResult> {
     return this.client.requestBinary(`/api/files/${id}/download`, onProgress);
+  }
+
+  /**
+   * Downloads an OCE1-encrypted file and decrypts it with `options.urk`.
+   * Throws when the stored file is plaintext or not OCE1 — there is no
+   * silent plaintext fallback.
+   */
+  async downloadEncrypted(
+    id: string,
+    options: EncryptedDownloadOptions,
+  ): Promise<EncryptedDownloadResult> {
+    return downloadEncrypted(this.client, id, options);
   }
 
   /**

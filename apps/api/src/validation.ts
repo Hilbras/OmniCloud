@@ -1,4 +1,5 @@
 import { ValidationError, type VersionRetentionPolicy } from "@omnicloud/core";
+import type { MultipartFields } from "@fastify/multipart";
 import {
   ITEM_STATUSES,
   normalizeLimit,
@@ -183,4 +184,83 @@ function requireWholeNumber(body: unknown, field: string): number {
     throw new ValidationError(`${field} must be a whole number of zero or more`);
   }
   return value;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OCE1 encryption metadata (multipart text fields)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Reads one multipart text field; empty values count as absent. */
+function multipartTextField(fields: MultipartFields, name: string): string | undefined {
+  const field = fields[name];
+  if (!field || Array.isArray(field) || field.type !== "field") return undefined;
+  return typeof field.value === "string" && field.value !== "" ? field.value : undefined;
+}
+
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+const KEY_EPOCH_PATTERN = /^\d+$/;
+const MAX_UINT32 = 4294967295;
+
+/** Validated, opaque OCE1 encryption metadata from a multipart upload. */
+export interface ParsedEncryption {
+  format: "OCE1";
+  wrappedKey: string;
+  metadataBlob: string;
+  keyEpoch: number;
+}
+
+function requireBase64Field(value: string | undefined, name: string, max: number): string {
+  if (value === undefined) {
+    throw new ValidationError(`"${name}" is required when encryption fields are present`);
+  }
+  if (!BASE64_PATTERN.test(value) || value.length < 56 || value.length > max) {
+    throw new ValidationError(`"${name}" must be a base64 string of 56 to ${max} characters`);
+  }
+  return value;
+}
+
+/**
+ * Parses the OCE1 encryption metadata text fields of a multipart upload. The
+ * values are opaque to the server: only their presence, format identifier,
+ * base64 alphabet/length and epoch range are checked. All fields absent means
+ * a plaintext upload; any present field makes the full set mandatory.
+ */
+export function parseEncryptionFields(fields: MultipartFields): ParsedEncryption | undefined {
+  const encryptionFormat = multipartTextField(fields, "encryptionFormat");
+  const wrappedKey = multipartTextField(fields, "wrappedKey");
+  const metadataBlob = multipartTextField(fields, "metadataBlob");
+  const keyEpochRaw = multipartTextField(fields, "keyEpoch");
+
+  if (
+    encryptionFormat === undefined &&
+    wrappedKey === undefined &&
+    metadataBlob === undefined &&
+    keyEpochRaw === undefined
+  ) {
+    return undefined;
+  }
+
+  if (encryptionFormat !== "OCE1") {
+    throw new ValidationError(
+      'encryptionFormat must be exactly "OCE1" when encryption fields are present',
+    );
+  }
+
+  const checkedWrappedKey = requireBase64Field(wrappedKey, "wrappedKey", 4096);
+  const checkedMetadataBlob = requireBase64Field(metadataBlob, "metadataBlob", 65536);
+
+  if (keyEpochRaw === undefined || !KEY_EPOCH_PATTERN.test(keyEpochRaw)) {
+    throw new ValidationError("keyEpoch must be an integer between 0 and 4294967295");
+  }
+  const keyEpoch = Number(keyEpochRaw);
+  if (!Number.isSafeInteger(keyEpoch) || keyEpoch < 0 || keyEpoch > MAX_UINT32) {
+    throw new ValidationError("keyEpoch must be an integer between 0 and 4294967295");
+  }
+
+  return {
+    format: "OCE1",
+    wrappedKey: checkedWrappedKey,
+    metadataBlob: checkedMetadataBlob,
+    keyEpoch,
+  };
 }

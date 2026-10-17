@@ -111,6 +111,10 @@ function mapFile(file: DbFile): FileRecord {
     mimeType: file.mimeType,
     sha256: file.sha256,
     telegramMessageId: Number(file.telegramMessageId),
+    encryptionFormat: file.encryptionFormat,
+    wrappedKey: file.wrappedKey,
+    metadataBlob: file.metadataBlob,
+    keyEpoch: file.keyEpoch,
     starred: file.starred,
     deletedAt: file.deletedAt,
     trashBatchId: file.trashBatchId,
@@ -131,6 +135,10 @@ function mapVersion(version: DbFileVersion, _currentVersionId: string | null): F
     mimeType: version.mimeType,
     sha256: version.sha256,
     telegramMessageId: Number(version.telegramMessageId),
+    encryptionFormat: version.encryptionFormat,
+    wrappedKey: version.wrappedKey,
+    metadataBlob: version.metadataBlob,
+    keyEpoch: version.keyEpoch,
     createdAt: version.createdAt,
   };
 }
@@ -715,6 +723,10 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
             mimeType: fileInput.mimeType,
             sha256: fileInput.sha256,
             telegramMessageId: BigInt(fileInput.telegramMessageId),
+            encryptionFormat: fileInput.encryptionFormat ?? null,
+            wrappedKey: fileInput.wrappedKey ?? null,
+            metadataBlob: fileInput.metadataBlob ?? null,
+            keyEpoch: fileInput.keyEpoch ?? null,
           },
         });
         const firstVersion = await tx.fileVersion.create({
@@ -726,6 +738,10 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
             mimeType: version.mimeType,
             sha256: version.sha256,
             telegramMessageId: BigInt(version.telegramMessageId),
+            encryptionFormat: version.encryptionFormat ?? null,
+            wrappedKey: version.wrappedKey ?? null,
+            metadataBlob: version.metadataBlob ?? null,
+            keyEpoch: version.keyEpoch ?? null,
           },
         });
         return tx.file.update({
@@ -736,38 +752,56 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
       return mapFile(file);
     },
     async replaceWithVersion(fileId, input) {
-      const file = await prisma.$transaction(async (tx) => {
-        const latest = await tx.fileVersion.findFirst({
-          where: { fileId },
-          orderBy: { versionNumber: "desc" },
-          select: { versionNumber: true },
-        });
-        const count = await tx.fileVersion.count({ where: { fileId } });
-        const version = await tx.fileVersion.create({
-          data: {
-            fileId,
-            userId: input.version.userId,
-            versionNumber: (latest?.versionNumber ?? 0) + 1,
-            size: BigInt(input.version.size),
-            mimeType: input.version.mimeType,
-            sha256: input.version.sha256,
-            telegramMessageId: BigInt(input.version.telegramMessageId),
-          },
-        });
-        return tx.file.update({
-          where: { id: fileId },
-          data: {
-            name: input.name,
-            size: BigInt(input.size),
-            mimeType: input.mimeType,
-            sha256: input.sha256,
-            telegramMessageId: BigInt(input.telegramMessageId),
-            currentVersionId: version.id,
-            versionCount: count + 1,
-          },
-        });
-      });
-      return mapFile(file);
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const file = await prisma.$transaction(
+            async (tx) => {
+              const latest = await tx.fileVersion.findFirst({
+                where: { fileId },
+                orderBy: { versionNumber: "desc" },
+                select: { versionNumber: true },
+              });
+              const count = await tx.fileVersion.count({ where: { fileId } });
+              const version = await tx.fileVersion.create({
+                data: {
+                  fileId,
+                  userId: input.version.userId,
+                  versionNumber: (latest?.versionNumber ?? 0) + 1,
+                  size: BigInt(input.version.size),
+                  mimeType: input.version.mimeType,
+                  sha256: input.version.sha256,
+                  telegramMessageId: BigInt(input.version.telegramMessageId),
+                  encryptionFormat: input.version.encryptionFormat ?? null,
+                  wrappedKey: input.version.wrappedKey ?? null,
+                  metadataBlob: input.version.metadataBlob ?? null,
+                  keyEpoch: input.version.keyEpoch ?? null,
+                },
+              });
+              return tx.file.update({
+                where: { id: fileId },
+                data: {
+                  name: input.name,
+                  size: BigInt(input.size),
+                  mimeType: input.mimeType,
+                  sha256: input.sha256,
+                  telegramMessageId: BigInt(input.telegramMessageId),
+                  encryptionFormat: input.encryptionFormat,
+                  wrappedKey: input.wrappedKey,
+                  metadataBlob: input.metadataBlob,
+                  keyEpoch: input.keyEpoch,
+                  currentVersionId: version.id,
+                  versionCount: count + 1,
+                },
+              });
+            },
+            { isolationLevel: "Serializable" },
+          );
+          return mapFile(file);
+        } catch (error) {
+          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          throw error;
+        }
+      }
     },
     async create(input) {
       const file = await prisma.file.create({
@@ -779,6 +813,10 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
           mimeType: input.mimeType,
           sha256: input.sha256,
           telegramMessageId: BigInt(input.telegramMessageId),
+          encryptionFormat: input.encryptionFormat ?? null,
+          wrappedKey: input.wrappedKey ?? null,
+          metadataBlob: input.metadataBlob ?? null,
+          keyEpoch: input.keyEpoch ?? null,
         },
       });
       return mapFile(file);
@@ -903,6 +941,10 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
             mimeType: input.mimeType,
             sha256: input.sha256,
             telegramMessageId: BigInt(input.telegramMessageId),
+            encryptionFormat: input.encryptionFormat ?? null,
+            wrappedKey: input.wrappedKey ?? null,
+            metadataBlob: input.metadataBlob ?? null,
+            keyEpoch: input.keyEpoch ?? null,
           },
         });
       });

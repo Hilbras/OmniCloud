@@ -44,6 +44,10 @@ interface QrFlow {
   needsPassword: boolean;
   /** Pending error from the background wait, reported on the next poll. */
   failure: string | null;
+  /** Shared export operation, since Telegram DC migration mutates the client connection. */
+  tokenRequest: Promise<QrLoginToken | null> | null;
+  /** Most recent token kept available when a transient refresh fails. */
+  token: QrLoginToken | null;
 }
 
 export interface QrLoginToken {
@@ -61,6 +65,11 @@ export type QrStatus =
 
 const QR_FLOW_TTL_MS = 5 * 60 * 1000;
 const QR_APPROVAL_POLL_MS = 2_000;
+
+function isTransientTelegramError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /timeout|ECONNRESET|ENOTFOUND|socket|network|connect|temporar|disconnected/i.test(message);
+}
 
 export type VerifyCodeResult = { status: "ok"; user: UserRecord } | { status: "password_required" };
 
@@ -146,9 +155,20 @@ export class TelegramConnectionService {
         approved: false,
         needsPassword: false,
         failure: null,
+        tokenRequest: null,
+        token: null,
       };
       const flowId = randomUUID();
-      const token = await this.exportQrToken(client);
+      const token = await this.exportQrToken(client, flow);
+      if (flow.needsPassword) {
+        throw new TelegramConnectionError(
+          "Telegram requires a password before issuing a QR login token",
+        );
+      }
+      if (!token) {
+        throw new TelegramConnectionError("Telegram approved QR login before issuing a token");
+      }
+      flow.token = token;
       this.qrFlows.set(flowId, flow);
       this.watchQrApproval(flowId, flow);
       return { flowId, token };
@@ -171,12 +191,21 @@ export class TelegramConnectionService {
     }
     if (flow.needsPassword) return { status: "password_required" };
     if (!flow.approved) {
-      const token = await this.exportQrToken(flow.client).catch((error: unknown) => {
-        this.qrFlows.delete(flowId);
-        void this.disconnectQuietly(flow.client);
+      try {
+        const token = await this.exportQrToken(flow.client, flow);
+        if (flow.needsPassword) return { status: "password_required" };
+        if (flow.approved) return this.completeQrLogin(flowId, flow);
+        if (token) flow.token = token;
+      } catch (error) {
+        if (isTransientTelegramError(error) && flow.token) {
+          return { status: "waiting", token: flow.token };
+        }
         throw mapTelegramError(error, "Could not refresh the Telegram QR code");
-      });
-      return { status: "waiting", token };
+      }
+      if (!flow.token) {
+        throw new TelegramConnectionError("Telegram did not issue a QR login token");
+      }
+      return { status: "waiting", token: flow.token };
     }
     return this.completeQrLogin(flowId, flow);
   }
@@ -197,14 +226,43 @@ export class TelegramConnectionService {
     return this.completeQrLogin(flowId, flow);
   }
 
-  private async exportQrToken(client: TelegramClient): Promise<QrLoginToken> {
-    const result = await client.invoke(
+  private async exportQrToken(client: TelegramClient, flow?: QrFlow): Promise<QrLoginToken | null> {
+    if (!flow) return this.requestQrToken(client);
+    if (flow.tokenRequest) return flow.tokenRequest;
+
+    const request = this.requestQrToken(client)
+      .then((token) => {
+        if (token) flow.token = token;
+        else if (!flow.needsPassword) flow.approved = true;
+        return token;
+      })
+      .catch((error: unknown) => {
+        if (isPasswordRequiredError(error)) {
+          flow.needsPassword = true;
+          return null;
+        }
+        throw error;
+      })
+      .finally(() => {
+        flow.tokenRequest = null;
+      });
+    flow.tokenRequest = request;
+    return request;
+  }
+
+  private async requestQrToken(client: TelegramClient): Promise<QrLoginToken | null> {
+    let result = await client.invoke(
       new Api.auth.ExportLoginToken({
         apiId: this.credentials.apiId,
         apiHash: this.credentials.apiHash,
         exceptIds: [],
       }),
     );
+    if (result instanceof Api.auth.LoginTokenMigrateTo) {
+      await client._switchDC(result.dcId);
+      result = await client.invoke(new Api.auth.ImportLoginToken({ token: result.token }));
+    }
+    if (result instanceof Api.auth.LoginTokenSuccess) return null;
     if (!(result instanceof Api.auth.LoginToken)) {
       throw new TelegramConnectionError("Telegram did not issue a QR login token");
     }
@@ -239,8 +297,10 @@ export class TelegramConnectionService {
           }
         },
         (error: unknown) => {
-          flow.failure = mapTelegramError(error, "Telegram QR sign-in failed").message;
-          clearInterval(timer);
+          if (!isTransientTelegramError(error)) {
+            flow.failure = mapTelegramError(error, "Telegram QR sign-in failed").message;
+            clearInterval(timer);
+          }
         },
       );
     }, QR_APPROVAL_POLL_MS);
@@ -253,21 +313,9 @@ export class TelegramConnectionService {
    */
   private async probeQrApproval(flow: QrFlow): Promise<"pending" | "approved" | "password"> {
     try {
-      const result = await flow.client.invoke(
-        new Api.auth.ExportLoginToken({
-          apiId: this.credentials.apiId,
-          apiHash: this.credentials.apiHash,
-          exceptIds: [],
-        }),
-      );
-      if (result instanceof Api.auth.LoginTokenSuccess) return "approved";
-      if (result instanceof Api.auth.LoginTokenMigrateTo) {
-        await flow.client._switchDC(result.dcId);
-        const migrated = await flow.client.invoke(
-          new Api.auth.ImportLoginToken({ token: result.token }),
-        );
-        if (migrated instanceof Api.auth.LoginTokenSuccess) return "approved";
-      }
+      await this.exportQrToken(flow.client, flow);
+      if (flow.needsPassword) return "password";
+      if (flow.approved) return "approved";
       return "pending";
     } catch (error) {
       if (isPasswordRequiredError(error)) return "password";

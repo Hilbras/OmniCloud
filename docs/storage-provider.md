@@ -199,7 +199,7 @@ title }`; it builds an explicit `Api.InputPeerChannel` so it never depends on
   `UPLOAD_FAILED` before touching the network.
 - `get` fetches the message by id, downloads the media with a progress
   callback, and rejects non-buffer results with `TELEGRAM_FILE_NOT_FOUND`.
-- `getStream` buffers via `get` and re-exposes a one-chunk `Readable`.
+- `getStream` streams Telegram download chunks through a `Readable`; the storage engine verifies the final SHA-256 before releasing the last chunk.
 - `delete` calls `deleteMessages(..., { revoke: true })`.
 - `exists` delegates to `stat`; `stat` returns `null` when the message or its
   document is missing, otherwise reads the filename attribute, size and MIME

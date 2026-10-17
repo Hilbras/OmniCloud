@@ -8,9 +8,9 @@ checks it, so a release manager can verify it rather than trust it.
 - [ ] `pnpm lint` passes.
 - [ ] `pnpm format:check` passes.
 - [ ] `pnpm typecheck` passes.
-- [ ] `pnpm test` passes. The PostgreSQL race test is skipped unless
-      `OMNICLOUD_TEST_DATABASE_URL` points at a disposable database; run it there
-      before a release that touches folder moves or uploads.
+- [ ] `pnpm test` passes. The seven PostgreSQL integration-test files require
+      `OMNICLOUD_TEST_DATABASE_URL` to point at a disposable database; CI provisions
+      PostgreSQL and fails if those tests are skipped.
 - [ ] `pnpm build` passes with no out-of-memory error. The SDK build sets its
       own heap size; see `deployment.md`.
 

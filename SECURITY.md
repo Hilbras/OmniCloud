@@ -59,8 +59,9 @@ same-origin`, a restrictive `Permissions-Policy`, and `X-Permitted-Cross-Domain-
 
 ## Operator guidance
 
-- Set a long random `SESSION_SECRET` (`openssl rand -hex 32`) and keep it secret;
-  rotating it signs everyone out.
+- Set `OMNICLOUD_ENCRYPTION_KEY` to a randomly generated 32-byte key and back
+  it up separately from PostgreSQL. Losing it makes stored Telegram sessions
+  unreadable. `SESSION_SECRET` is reserved and does not sign browser sessions.
 - Serve over HTTPS and set `COOKIE_SECURE=true`; behind a proxy also set
   `TRUST_PROXY=true` so client IPs are read correctly.
 - Set `ALLOWED_ORIGINS` if the web app is served from a different origin than

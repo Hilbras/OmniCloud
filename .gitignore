@@ -34,3 +34,5 @@ npm-debug.log*
 
 # Misc
 .zcode/
+# Local AI session exports can contain private project context
+kimi-export-session_*.md

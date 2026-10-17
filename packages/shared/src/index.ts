@@ -67,6 +67,11 @@ export interface FileDTO {
   deletedAt: string | null;
   versionCount: number;
   currentVersionId: string | null;
+  /** Opaque OCE1 encryption metadata for the current version; null = plaintext. */
+  encryptionFormat?: string | null;
+  wrappedKey?: string | null;
+  metadataBlob?: string | null;
+  keyEpoch?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +96,11 @@ export interface FileVersionDTO {
   sha256: string;
   telegramMessageId: number;
   isCurrent: boolean;
+  /** Opaque OCE1 encryption metadata for this version; null = plaintext. */
+  encryptionFormat?: string | null;
+  wrappedKey?: string | null;
+  metadataBlob?: string | null;
+  keyEpoch?: number | null;
   createdAt: string;
 }
 

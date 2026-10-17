@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { errorMessage } from "../api/client";
+import { ApiError, errorMessage } from "../api/client";
 import { replaceFile, uploadFile } from "../api/upload";
 import { invalidateDriveQueries, invalidateVersionQueries } from "../lib/queries";
 import { useToast } from "../components/Toasts";
@@ -65,31 +65,44 @@ export function useUploads(): UploadsController {
   const jobs = useRef(new Map<number, UploadJob>());
   const controllers = useRef(new Map<number, AbortController>());
   const queue = useRef<Promise<void>>(Promise.resolve());
-  const timers = useRef(new Set<number>());
+  const timers = useRef(new Map<number, number>());
   const mounted = useRef(true);
   const pickerInputRef = useRef<HTMLInputElement | null>(null);
   const pickerFolder = useRef<string | null>(null);
 
   useEffect(() => {
+    mounted.current = true;
     const registeredTimers = timers.current;
     // Snapshot the Map instance: the ref itself may be reassigned, but the
     // live controllers are the ones created during this mount.
     const registeredControllers = controllers.current;
     return () => {
       mounted.current = false;
-      for (const timer of registeredTimers) window.clearTimeout(timer);
+      for (const timer of registeredTimers.values()) window.clearTimeout(timer);
       for (const controller of registeredControllers.values()) controller.abort();
     };
   }, []);
 
-  const scheduleDismiss = useCallback((id: number) => {
-    const timer = window.setTimeout(() => {
-      timers.current.delete(timer);
-      setUploads((prev) => prev.filter((entry) => entry.id !== id));
-      jobs.current.delete(id);
-    }, 5000);
-    timers.current.add(timer);
+  const clearDismissTimer = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timers.current.delete(id);
+    }
   }, []);
+
+  const scheduleDismiss = useCallback(
+    (id: number) => {
+      clearDismissTimer(id);
+      const timer = window.setTimeout(() => {
+        timers.current.delete(id);
+        setUploads((prev) => prev.filter((entry) => entry.id !== id));
+        jobs.current.delete(id);
+      }, 5000);
+      timers.current.set(id, timer);
+    },
+    [clearDismissTimer],
+  );
 
   const run = useCallback(
     async (job: UploadJob): Promise<void> => {
@@ -131,14 +144,17 @@ export function useUploads(): UploadsController {
         );
         invalidateDriveQueries(queryClient);
         if (job.replaceId !== null) invalidateVersionQueries(queryClient, job.replaceId);
+        const encrypted = result.encryptionFormat === "OCE1";
         toast.success(
-          job.replaceId === null ? `Uploaded "${result.name}"` : `Replaced "${result.name}"`,
+          job.replaceId === null
+            ? `Uploaded "${result.name}"${encrypted ? " (encrypted)" : ""}`
+            : `Replaced "${result.name}"${encrypted ? " (encrypted)" : ""}`,
         );
         scheduleDismiss(job.id);
       } catch (error) {
         if (!mounted.current) return;
         const message = errorMessage(error, "Upload failed");
-        const cancelled = message === "Upload cancelled";
+        const cancelled = error instanceof ApiError && error.code === "ABORTED";
         setUploads((prev) =>
           prev.map((entry) =>
             entry.id === job.id
@@ -211,6 +227,7 @@ export function useUploads(): UploadsController {
     (id: number) => {
       const job = jobs.current.get(id);
       if (job === undefined) return;
+      clearDismissTimer(id);
       setUploads((prev) =>
         prev.map((entry) =>
           entry.id === id
@@ -220,14 +237,18 @@ export function useUploads(): UploadsController {
       );
       queue.current = queue.current.then(() => run(job));
     },
-    [run],
+    [clearDismissTimer, run],
   );
 
-  const dismiss = useCallback((id: number) => {
-    controllers.current.get(id)?.abort();
-    jobs.current.delete(id);
-    setUploads((prev) => prev.filter((entry) => entry.id !== id));
-  }, []);
+  const dismiss = useCallback(
+    (id: number) => {
+      clearDismissTimer(id);
+      controllers.current.get(id)?.abort();
+      jobs.current.delete(id);
+      setUploads((prev) => prev.filter((entry) => entry.id !== id));
+    },
+    [clearDismissTimer],
+  );
 
   const clearFinished = useCallback(() => {
     setUploads((prev) => {

@@ -164,6 +164,11 @@ export interface FileCreateInput {
   mimeType: string;
   sha256: string;
   telegramMessageId: number;
+  /** Opaque OCE1 metadata for the first version; omitted = plaintext. */
+  encryptionFormat?: string | null;
+  wrappedKey?: string | null;
+  metadataBlob?: string | null;
+  keyEpoch?: number | null;
 }
 
 export interface UploadOperationRecord {
@@ -210,6 +215,14 @@ export interface UploadOperationRepository {
   ): Promise<UploadOperationRecord>;
 }
 
+/** Opaque OCE1 encryption metadata. Null fields mean plaintext for that slot. */
+export interface FileEncryptionFields {
+  encryptionFormat: string | null;
+  wrappedKey: string | null;
+  metadataBlob: string | null;
+  keyEpoch: number | null;
+}
+
 /** The content of one file version. The owning file id is supplied by the caller. */
 export interface FileVersionInput {
   userId: string;
@@ -217,6 +230,11 @@ export interface FileVersionInput {
   mimeType: string;
   sha256: string;
   telegramMessageId: number;
+  /** Opaque OCE1 metadata for this version; omitted = plaintext. */
+  encryptionFormat?: string | null;
+  wrappedKey?: string | null;
+  metadataBlob?: string | null;
+  keyEpoch?: number | null;
 }
 
 export interface FileRepository {
@@ -240,6 +258,11 @@ export interface FileRepository {
       mimeType: string;
       sha256: string;
       telegramMessageId: number;
+      /** Always applies: nulls clear encryption so a plaintext replace wins. */
+      encryptionFormat: string | null;
+      wrappedKey: string | null;
+      metadataBlob: string | null;
+      keyEpoch: number | null;
       version: FileVersionInput;
     },
   ): Promise<FileRecord>;

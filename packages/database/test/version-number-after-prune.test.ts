@@ -57,6 +57,35 @@ describe.skipIf(!url)("version numbers after pruning (PostgreSQL)", () => {
     }
   });
 
+  it("serializes concurrent replacements without duplicate version numbers", async () => {
+    const versionInput = (telegramMessageId: number, sha256: string) => ({
+      name: "versions.txt",
+      size: 1,
+      mimeType: "text/plain",
+      sha256,
+      telegramMessageId,
+      version: { userId, size: 1, mimeType: "text/plain", sha256, telegramMessageId },
+    });
+
+    await Promise.all([
+      repos.files.replaceWithVersion(fileId, versionInput(200, "replace-a")),
+      repos.files.replaceWithVersion(fileId, versionInput(201, "replace-b")),
+    ]);
+
+    const versions = await prisma.fileVersion.findMany({
+      where: { fileId },
+      orderBy: { versionNumber: "asc" },
+    });
+    const current = await prisma.file.findUnique({ where: { id: fileId } });
+    expect(versions.map((version) => version.versionNumber)).toEqual([1, 2, 3, 4, 5]);
+    expect(new Set(versions.map((version) => version.versionNumber)).size).toBe(5);
+    expect(current?.versionCount).toBe(5);
+    expect(versions.some((version) => version.id === current?.currentVersionId)).toBe(true);
+    expect(current?.sha256).toBe(
+      versions.find((version) => version.id === current.currentVersionId)?.sha256,
+    );
+  });
+
   it("a new version after a middle version is pruned gets a number that is not already in use", async () => {
     const versions = await prisma.fileVersion.findMany({
       where: { fileId },

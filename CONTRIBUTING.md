@@ -10,13 +10,13 @@ holding the logical filesystem. Contributions of all sizes are welcome.
 git clone https://github.com/Lacrous/OmniCloud.git
 cd OmniCloud
 pnpm install                 # installs deps, generates Prisma client, builds types
-cp .env.example .env         # add TELEGRAM_API_ID / TELEGRAM_API_HASH and SESSION_SECRET
+cp .env.example .env         # add DATABASE_URL, Telegram credentials, and encryption key
 docker compose up -d         # PostgreSQL
 pnpm db:migrate              # apply migrations
 pnpm dev                     # API on :4000, web on :5173
 ```
 
-Node.js 20+ (22 recommended), pnpm 10+, Docker (or your own PostgreSQL 14+),
+Node.js 20+ (22 recommended), pnpm 12.x (the repo pins 12.5.1), Docker (or your own PostgreSQL 14+),
 and a free Telegram application from [my.telegram.org](https://my.telegram.org)
 for anything that touches the storage backend.
 
@@ -68,6 +68,11 @@ run on Vitest.
   repositories and a fake storage provider, including the complete end-to-end
   user journey (create folder → upload → search → rename → move → star →
   download → trash → restore → replace → delete).
+- **PostgreSQL integration tests** in `packages/database/test` run only when
+  `OMNICLOUD_TEST_DATABASE_URL` points to a disposable database; CI provisions
+  PostgreSQL and requires these tests to run. Without it, seven test files skip.
+- **The web app currently has no automated test suite.** Its TypeScript check and
+  production build run as part of the workspace checks.
 - **Telegram tests are isolated.** The normal suite never needs a Telegram
   account; the live provider test is skipped unless you set the documented
   `OMNICLOUD_LIVE_*` environment variables.
