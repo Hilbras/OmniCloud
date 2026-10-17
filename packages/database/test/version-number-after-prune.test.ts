@@ -91,7 +91,10 @@ describe.skipIf(!url)("version numbers after pruning (PostgreSQL)", () => {
       where: { fileId },
       orderBy: { versionNumber: "asc" },
     });
-    await repos.files.deleteVersion(versions[1]!.id);
+    // Remove a middle entry, never the highest, so the test stays valid whatever
+    // earlier tests left behind.
+    const middle = versions[Math.floor(versions.length / 2)]!;
+    await repos.files.deleteVersion(middle.id);
 
     const created = await repos.files.createVersion({
       fileId,
@@ -106,6 +109,10 @@ describe.skipIf(!url)("version numbers after pruning (PostgreSQL)", () => {
       (v) => v.versionNumber,
     );
     expect(new Set(numbers).size).toBe(numbers.length);
-    expect(created.versionNumber).toBe(4);
+    expect(numbers).toContain(created.versionNumber);
+    const survivingHighest = Math.max(
+      ...versions.filter((v) => v.id !== middle.id).map((v) => v.versionNumber),
+    );
+    expect(created.versionNumber).toBeGreaterThan(survivingHighest);
   });
 });
