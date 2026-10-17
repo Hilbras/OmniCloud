@@ -23,7 +23,8 @@ function saveBlob(blob: Blob, name: string): void {
 }
 
 /** Fetches the stored object bytes (the OCE1 envelope) with the session cookie. */
-async function fetchEnvelope(id: string): Promise<Uint8Array> {
+/** Fetches raw stored bytes for a file (OCE1 envelope or legacy plaintext). */
+export async function fetchFileBytes(id: string): Promise<Uint8Array> {
   let response: Response;
   try {
     response = await fetch(downloadPath(id), { method: "GET", credentials: "same-origin" });
@@ -79,7 +80,7 @@ export async function downloadFile(id: string, knownFile?: FileDTO | null): Prom
     );
   }
 
-  const envelope = await fetchEnvelope(file.id);
+  const envelope = await fetchFileBytes(file.id);
 
   let plaintext: Uint8Array;
   let name: string;

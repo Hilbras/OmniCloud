@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 import type { BatchOperation } from "../api/client";
 import { api, errorMessage } from "../api/client";
 import { downloadFile } from "../api/download";
+import { migrateLegacyFile } from "../api/migration";
 import { invalidateDriveQueries } from "../lib/queries";
+import { getUrk } from "../lib/crypto-session";
 import type { DriveItem } from "../lib/drive";
 import { useToast } from "../components/Toasts";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -30,6 +32,8 @@ export interface ItemActionsController {
   openMove: (items: DriveItem[]) => void;
   requestDelete: (items: DriveItem[]) => void;
   runBatch: (operation: BatchOperation, items: DriveItem[], folderId?: string | null) => void;
+  /** Encrypts the legacy (plaintext) files among the given items, sequentially. */
+  migrateBatch: (items: DriveItem[]) => void;
   pendingBatch: boolean;
   dialogs: ReactNode;
 }
@@ -57,6 +61,7 @@ export function useItemActions({
   const [moving, setMoving] = useState<DriveItem[] | null>(null);
   const [deleting, setDeleting] = useState<DriveItem[] | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<DriveItem | null>(null);
+  const [migrating, setMigrating] = useState<DriveItem[] | null>(null);
   const replaceInput = useRef<HTMLInputElement | null>(null);
   const replaceTarget = useRef<DriveItem | null>(null);
 
@@ -143,6 +148,63 @@ export function useItemActions({
     onError: (error) => toast.error(errorMessage(error, "The operation failed")),
   });
 
+  // Sequential legacy migration: each file encrypt → replace → verify → prune
+  // runs to completion before the next starts, so failures stay attributable.
+  const migrateMutation = useMutation({
+    mutationFn: async (items: DriveItem[]) => {
+      const urk = getUrk();
+      if (urk === null) {
+        throw new Error("Generate or unlock an encryption key first");
+      }
+      let migrated = 0;
+      let already = 0;
+      let remaining = 0;
+      let failed = 0;
+      let firstError: unknown = null;
+      for (const item of items) {
+        try {
+          const result = await migrateLegacyFile(item.id, urk);
+          if (result.status === "already_migrated") already += 1;
+          else {
+            migrated += 1;
+            remaining += result.plaintextVersionsRemaining;
+          }
+        } catch (error) {
+          failed += 1;
+          if (firstError === null) firstError = error;
+        }
+      }
+      return { migrated, already, remaining, failed, firstError };
+    },
+    onSuccess: (result, items) => {
+      setMigrating(null);
+      invalidateDriveQueries(queryClient);
+      if (result.migrated === 0 && result.already === 0 && result.failed > 0) {
+        toast.error(errorMessage(result.firstError, "Could not encrypt the file"));
+      } else if (result.failed > 0) {
+        toast.error(
+          `Encrypted ${result.migrated}, ${result.failed} failed — failed files kept their plaintext copy`,
+        );
+      } else if (items.length === 1 && result.already === 1) {
+        toast.success("File is already encrypted");
+      } else if (result.remaining > 0) {
+        toast.success(
+          `Encrypted ${result.migrated} file(s) — ${result.remaining} older plaintext version(s) remain`,
+        );
+      } else {
+        toast.success(
+          result.migrated === 1
+            ? `Encrypted "${items[0]?.name ?? "file"}" — plaintext copy removed after verification`
+            : `Encrypted ${result.migrated} file(s)`,
+        );
+      }
+    },
+    onError: (error) => {
+      setMigrating(null);
+      toast.error(errorMessage(error, "Could not encrypt"));
+    },
+  });
+
   const openMove = useCallback((items: DriveItem[]) => {
     if (items.length > 0) setMoving(items);
   }, []);
@@ -163,6 +225,22 @@ export function useItemActions({
       batchMutation.mutate({ operation, items, ...(folderId !== undefined ? { folderId } : {}) });
     },
     [batchMutation],
+  );
+
+  const migrateBatch = useCallback(
+    (items: DriveItem[]) => {
+      const legacy = items.filter(
+        (item) =>
+          item.kind === "file" && !item.trashed && (item.file?.encryptionFormat ?? null) === null,
+      );
+      if (legacy.length === 0) return;
+      if (getUrk() === null) {
+        toast.error("Generate or unlock an encryption key first");
+        return;
+      }
+      setMigrating(legacy);
+    },
+    [toast],
   );
 
   const openReplacePicker = useCallback((item: DriveItem) => {
@@ -198,6 +276,9 @@ export function useItemActions({
         case "replace":
           openReplacePicker(item);
           return;
+        case "migrate":
+          migrateBatch([item]);
+          return;
         case "details":
           onShowDetails(item);
           return;
@@ -214,7 +295,16 @@ export function useItemActions({
           return;
       }
     },
-    [onOpenItem, onShowDetails, openMove, openReplacePicker, requestDelete, runBatch, toast],
+    [
+      onOpenItem,
+      onShowDetails,
+      migrateBatch,
+      openMove,
+      openReplacePicker,
+      requestDelete,
+      runBatch,
+      toast,
+    ],
   );
 
   const tree = buildFolderTree(treeQuery.data?.folders ?? []);
@@ -271,6 +361,27 @@ export function useItemActions({
           onClose={() => setDeleting(null)}
         />
       ) : null}
+
+      {migrating !== null ? (
+        <ConfirmDialog
+          title={
+            migrating.length === 1
+              ? `Encrypt "${migrating[0]?.name ?? "file"}"?`
+              : `Encrypt ${migrating.length} files?`
+          }
+          message={
+            migrating.length === 1
+              ? "The file is encrypted in your browser before upload. Its plaintext copy is deleted only after the encrypted copy verifies. Older versions, if any, remain as plaintext history."
+              : "Each selected file is encrypted in your browser before upload. For every file, the plaintext copy is deleted only after its encrypted copy verifies; older versions remain as plaintext history."
+          }
+          confirmLabel="Encrypt"
+          busy={migrateMutation.isPending}
+          onConfirm={() => migrateMutation.mutate(migrating)}
+          onClose={() => {
+            if (!migrateMutation.isPending) setMigrating(null);
+          }}
+        />
+      ) : null}
     </>
   );
 
@@ -279,6 +390,7 @@ export function useItemActions({
     openMove,
     requestDelete,
     runBatch,
+    migrateBatch,
     pendingBatch: batchMutation.isPending,
     dialogs,
   };

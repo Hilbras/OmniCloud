@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { CloudUpload, FolderInput, FolderPlus, Star, StarOff, Trash2, Upload } from "lucide-react";
+import {
+  CloudUpload,
+  FolderInput,
+  FolderPlus,
+  LockKeyhole,
+  Star,
+  StarOff,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -308,6 +317,19 @@ export default function DrivePage() {
           <StarOff className="h-4 w-4" aria-hidden="true" />
           Unstar
         </button>
+        {selectedItems.some(
+          (item) =>
+            item.kind === "file" && !item.trashed && (item.file?.encryptionFormat ?? null) === null,
+        ) ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => actions.migrateBatch(selectedItems)}
+          >
+            <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+            Encrypt
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn-danger"

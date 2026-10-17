@@ -41,7 +41,7 @@ export interface UploadOptions {
 }
 
 /** OCE1 text fields sent before the file part of the multipart body. */
-interface UploadEncryption {
+export interface UploadEncryption {
   /** Base64 wrapped DEK. */
   wrappedKey: string;
   /** Base64 encrypted metadata. */
@@ -178,4 +178,24 @@ export async function replaceFile(
 ): Promise<FileDTO> {
   const body = await prepareBody(file);
   return xhrUpload(`/api/files/${encodeURIComponent(fileId)}/replace`, body, null, options);
+}
+
+/**
+ * Sends already-encrypted envelope bytes as a new version. Used by migration
+ * where verification must run against exactly these bytes — nothing is
+ * re-encrypted here.
+ */
+export async function replaceEncryptedFile(
+  fileId: string,
+  envelope: Blob,
+  filename: string,
+  encryption: UploadEncryption,
+  options: UploadOptions = {},
+): Promise<FileDTO> {
+  return xhrUpload(
+    `/api/files/${encodeURIComponent(fileId)}/replace`,
+    { part: envelope, filename, encryption },
+    null,
+    options,
+  );
 }

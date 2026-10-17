@@ -1,6 +1,6 @@
-import { decryptFile, encryptFile, readHeader } from "@omnicloud/crypto";
+import { decryptFile, encryptFile, readHeader, sha256Hex } from "@omnicloud/crypto";
 import type { FileMetadata } from "@omnicloud/crypto";
-import type { FileDTO } from "@omnicloud/shared";
+import type { FileDTO, FileVersionDTO } from "@omnicloud/shared";
 import { OmniCloudError, isRetryableStatus, multipartHead, safeJsonParse, sleep } from "./client";
 import type { OmniCloudClient } from "./client";
 
@@ -109,6 +109,7 @@ interface EncryptionFieldValues {
 
 async function postEncryptedOnce(
   client: OmniCloudClient,
+  path: string,
   envelope: Uint8Array,
   fieldValues: EncryptionFieldValues,
   options: EncryptedUploadOptions,
@@ -117,7 +118,7 @@ async function postEncryptedOnce(
   const boundary = `omnicloud-${randomId()}`;
   const fields: [string, string][] = [];
   // Text fields must precede the file part: the server reads them as they arrive.
-  if (options.folderId) fields.push(["folderId", options.folderId]);
+  if (path === "/api/files" && options.folderId) fields.push(["folderId", options.folderId]);
   fields.push(
     ["encryptionFormat", OCE1],
     ["wrappedKey", fieldValues.wrappedKey],
@@ -126,7 +127,7 @@ async function postEncryptedOnce(
   );
 
   const body = buildEncryptedBody(boundary, fields, options.name, envelope);
-  const response = await client.fetchImpl(`${client.baseUrl}/api/files`, {
+  const response = await client.fetchImpl(`${client.baseUrl}${path}`, {
     method: "POST",
     headers: {
       ...client.defaultHeaders,
@@ -190,6 +191,7 @@ export async function uploadEncrypted(
     try {
       const file = await postEncryptedOnce(
         client,
+        "/api/files",
         encrypted.envelope,
         fieldValues,
         options,
@@ -248,4 +250,189 @@ export async function downloadEncrypted(
     wrappedKey: fromBase64(file.wrappedKey),
     metadataBlob: fromBase64(file.metadataBlob),
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy migration (roadmap Phase 5 client side)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MigrateFileOptions {
+  /** User root key (URK) that wraps the new version's data key. */
+  urk: Uint8Array;
+  /** Retry attempts for the replace upload. Default 2. */
+  retry?: number;
+  /** Aborts the upload phase. */
+  signal?: AbortSignal;
+}
+
+export type MigrateStatus = "migrated" | "migrated_with_plaintext_history" | "already_migrated";
+
+export interface MigrateFileResult {
+  status: MigrateStatus;
+  fileId: string;
+  /** Plaintext versions still present after the run (history kept by policy). */
+  plaintextVersionsRemaining: number;
+}
+
+function isPlaintext(version: FileVersionDTO): boolean {
+  return (version.encryptionFormat ?? null) === null;
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * Decrypts the stored candidate, mapping any failure (corrupt bytes, bad
+ * fields) to MIGRATION_VERIFY_FAILED so callers know nothing was deleted.
+ */
+async function verifyStoredCandidate(
+  client: OmniCloudClient,
+  fileId: string,
+  urk: Uint8Array,
+): Promise<{ plaintext: Uint8Array; metadata: FileMetadata }> {
+  try {
+    return await downloadEncrypted(client, fileId, { urk });
+  } catch (error) {
+    throw new OmniCloudError(
+      0,
+      "MIGRATION_VERIFY_FAILED",
+      `Verification failed for ${fileId}: ${error instanceof Error ? error.message : String(error)}. Nothing was deleted; the plaintext original is untouched.`,
+    );
+  }
+}
+
+/**
+ * Migrates a legacy (plaintext) file to OCE1 by replacing its current version,
+ * or finishes a previously interrupted migration on resume.
+ *
+ * Inspect-first and idempotent: rerunning after any crash resumes from stored
+ * state instead of duplicating work. The plaintext original is deleted only
+ * after the stored ciphertext has been verified against it, and only when it
+ * is the single historical version (no version history is lost). Multi-version
+ * files keep their plaintext history; the result reports how much remains.
+ *
+ * Never falls back to plaintext and never deletes before verification.
+ */
+export async function migrateFile(
+  client: OmniCloudClient,
+  fileId: string,
+  options: MigrateFileOptions,
+): Promise<MigrateFileResult> {
+  const file = await client.files.get(fileId);
+  let versions = await client.files.versions(fileId);
+  const plaintextCount = (list: FileVersionDTO[]) => list.filter(isPlaintext).length;
+
+  if (file.encryptionFormat === OCE1 && plaintextCount(versions) === 0) {
+    return { status: "already_migrated", fileId, plaintextVersionsRemaining: 0 };
+  }
+
+  if (file.encryptionFormat !== OCE1) {
+    // ── LEGACY: encrypt the current plaintext and replace it ────────────────
+    const source = await client.requestBinary(`/api/files/${fileId}/download`);
+    const plaintext = new Uint8Array(
+      source.data.buffer,
+      source.data.byteOffset,
+      source.data.byteLength,
+    );
+    const encrypted = await encryptFile(plaintext, {
+      urk: options.urk,
+      metadata: { name: file.name, mimeType: file.mimeType },
+    });
+    const fieldValues: EncryptionFieldValues = {
+      wrappedKey: toBase64(encrypted.wrappedKey),
+      metadataBlob: toBase64(encrypted.metadataBlob),
+      keyEpoch: String(encrypted.keyEpoch),
+    };
+
+    const replaceOptions: EncryptedUploadOptions = {
+      name: file.name,
+      urk: options.urk,
+      operationId: randomId(),
+      retry: options.retry ?? 2,
+      ...(options.signal ? { signal: options.signal } : {}),
+    };
+    let uploaded: FileDTO | null = null;
+    let lastError: unknown;
+    const attempts = Math.max(1, (replaceOptions.retry ?? 2) + 1);
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        uploaded = await postEncryptedOnce(
+          client,
+          `/api/files/${fileId}/replace`,
+          encrypted.envelope,
+          fieldValues,
+          replaceOptions,
+          replaceOptions.operationId!,
+        );
+        break;
+      } catch (error) {
+        lastError = error;
+        if (options.signal?.aborted) throw error;
+        if (error instanceof OmniCloudError && !isRetryableStatus(error.status)) throw error;
+        if (attempt < attempts) await sleep(300 * 2 ** (attempt - 1), options.signal);
+      }
+    }
+    if (uploaded === null) throw lastError;
+    if (uploaded.encryptionFormat !== OCE1) {
+      throw new OmniCloudError(
+        0,
+        "MIGRATION_UPLOAD_FAILED",
+        `File ${fileId} was not stored as OCE1 after replace; the plaintext original is untouched`,
+      );
+    }
+
+    // Verify the stored ciphertext round-trips to the exact source bytes.
+    const verified = await verifyStoredCandidate(client, fileId, options.urk);
+    if (!bytesEqual(verified.plaintext, plaintext)) {
+      throw new OmniCloudError(
+        0,
+        "MIGRATION_VERIFY_FAILED",
+        `Verification failed for ${fileId}: decrypted content differs from the original. Nothing was deleted; the file still has its plaintext version.`,
+      );
+    }
+  } else {
+    // ── PENDING resume: the current version is OCE1 but plaintext history remains.
+    // Verify against the recorded sha256 of the newest plaintext version.
+    const legacy = versions
+      .filter((v) => isPlaintext(v))
+      .sort((a, b) => b.versionNumber - a.versionNumber)[0];
+    if (legacy === undefined) {
+      throw new OmniCloudError(
+        0,
+        "MIGRATION_STATE_INVALID",
+        `File ${fileId} is OCE1 but no plaintext version remains to verify against`,
+      );
+    }
+    const verified = await verifyStoredCandidate(client, fileId, options.urk);
+    if (sha256Hex(verified.plaintext) !== legacy.sha256.toLowerCase()) {
+      throw new OmniCloudError(
+        0,
+        "MIGRATION_VERIFY_FAILED",
+        `Verification failed for ${fileId}: stored ciphertext does not match the recorded original hash. Nothing was deleted.`,
+      );
+    }
+  }
+
+  // ── Cleanup: drop the plaintext predecessor only when it is the sole
+  // historical version (total 2, exactly 1 plaintext) — no history is lost
+  // because the verified ciphertext is the same content. Multi-version files
+  // keep their history and report the remaining plaintext versions.
+  versions = await client.files.versions(fileId);
+  if (plaintextCount(versions) === 1 && versions.length === 2) {
+    await client.request("POST", `/api/files/${fileId}/versions/prune`, {
+      policy: "KEEP_LATEST_N",
+      count: 0,
+    });
+    versions = await client.files.versions(fileId);
+  }
+
+  const remaining = plaintextCount(versions);
+  return {
+    status: remaining === 0 ? "migrated" : "migrated_with_plaintext_history",
+    fileId,
+    plaintextVersionsRemaining: remaining,
+  };
 }

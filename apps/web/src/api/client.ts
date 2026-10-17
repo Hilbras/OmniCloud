@@ -336,6 +336,16 @@ export const api = {
     batch(payload: BatchPayload): Promise<BatchResultDTO> {
       return requestJson("POST", "/api/files/batch", payload);
     },
+    /** Prunes version history by retention policy; the current version always survives. */
+    pruneVersions(
+      id: string,
+      policy:
+        | { policy: "KEEP_ALL" }
+        | { policy: "KEEP_LATEST_N"; count: number }
+        | { policy: "KEEP_FOR_DAYS"; days: number },
+    ): Promise<{ removed: number }> {
+      return requestJson("POST", filePath(id, "/versions/prune"), policy);
+    },
     /** Triggers a browser download of the file (the API sends an attachment). */
     download(id: string): void {
       const anchor = document.createElement("a");

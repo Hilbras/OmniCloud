@@ -2,6 +2,7 @@ import {
   Download,
   FolderInput,
   Info,
+  LockKeyhole,
   Pencil,
   RefreshCw,
   RotateCcw,
@@ -20,6 +21,7 @@ export type ItemAction =
   | "star"
   | "unstar"
   | "replace"
+  | "migrate"
   | "details"
   | "trash"
   | "restore"
@@ -34,6 +36,8 @@ export interface ItemRefLike {
   name: string;
   starred: boolean;
   trashed: boolean;
+  /** Present on file items; null/undefined encryptionFormat = legacy plaintext. */
+  file?: { encryptionFormat?: string | null } | null;
 }
 
 export interface MenuContext {
@@ -75,6 +79,13 @@ export function buildItemMenu<T extends ItemRefLike>(
         icon: <Info className="h-4 w-4" aria-hidden="true" />,
         onSelect: () => onAction("details", item),
       });
+      if ((item.file?.encryptionFormat ?? null) === null) {
+        items.push({
+          label: "Encrypt file",
+          icon: <LockKeyhole className="h-4 w-4" aria-hidden="true" />,
+          onSelect: () => onAction("migrate", item),
+        });
+      }
     }
 
     items.push({
