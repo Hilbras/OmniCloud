@@ -36,3 +36,8 @@ npm-debug.log*
 .zcode/
 # Local AI session exports can contain private project context
 kimi-export-session_*.md
+
+# Vercel local project link (per-environment)
+.vercel/
+.vercel
+.env*
