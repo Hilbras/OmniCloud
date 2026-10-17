@@ -202,7 +202,7 @@ probes.
   "database": "healthy",
   "storage": "unknown",
   "uptimeSeconds": 3600,
-  "version": "0.2.35"
+  "version": "0.3.0"
 }
 ```
 

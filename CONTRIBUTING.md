@@ -7,7 +7,7 @@ holding the logical filesystem. Contributions of all sizes are welcome.
 ## Getting set up
 
 ```bash
-git clone https://github.com/Lacrous/OmniCloud.git
+git clone https://github.com/Hilbras/OmniCloud.git
 cd OmniCloud
 pnpm install                 # installs deps, generates Prisma client, builds types
 cp .env.example .env         # add DATABASE_URL, Telegram credentials, and encryption key
@@ -31,7 +31,7 @@ packages/
 ├── telegram/     TelegramStorageProvider + MTProto connection management
 ├── database/     Prisma schema, migrations, repository implementations, seed
 ├── shared/       DTOs, error codes, the search query parser, MIME helpers
-└── sdk/          @lacrous/omnicloud — the published developer SDK
+└── sdk/          @hilbras/omnicloud — the published developer SDK
 ```
 
 `packages/core` depends only on `packages/shared`; it never imports Prisma or

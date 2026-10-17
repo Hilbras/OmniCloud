@@ -4,7 +4,7 @@
 
 Please report security issues **privately** — do not open a public issue.
 
-Use GitHub's [private vulnerability reporting](https://github.com/Lacrous/OmniCloud/security/advisories/new)
+Use GitHub's [private vulnerability reporting](https://github.com/Hilbras/OmniCloud/security/advisories/new)
 for the repository. Include a description, reproduction steps, the affected
 version, and any proof-of-concept you have. We will acknowledge the report,
 investigate, and coordinate a fix and disclosure with you.

@@ -2,10 +2,12 @@
 
 **A self-hosted personal cloud drive that stores your files in your own Telegram account.**
 
+> Developed and maintained by **[Hilbras](https://github.com/Hilbras)**.
+
 OmniCloud gives you a Google-Drive-style interface — folders, search, trash, stars, versions, storage statistics — while the actual bytes live in a private Telegram channel that only your account can read. PostgreSQL holds the logical filesystem; Telegram holds the files.
 
 ```bash
-npm install @lacrous/omnicloud
+npm install @hilbras/omnicloud
 npx omnicloud
 ```
 
@@ -53,7 +55,7 @@ docker run -d --name omnicloud-postgres -p 127.0.0.1:5432:5432 \
 ```bash
 mkdir my-omnicloud && cd my-omnicloud
 npm init -y
-npm install @lacrous/omnicloud
+npm install @hilbras/omnicloud
 npx omnicloud
 ```
 
@@ -213,7 +215,7 @@ Run it under a process manager such as `systemd`, `pm2` or Docker so it restarts
 Contributors and people who want to modify OmniCloud use the repository:
 
 ```bash
-git clone https://github.com/Lacrous/OmniCloud.git
+git clone https://github.com/Hilbras/OmniCloud.git
 cd OmniCloud
 pnpm install          # also generates the Prisma client and builds shared types
 cp .env.example .env  # then fill in TELEGRAM_API_ID, TELEGRAM_API_HASH, OMNICLOUD_ENCRYPTION_KEY
@@ -250,7 +252,7 @@ packages/
 ├── telegram/   TelegramStorageProvider and the MTProto connection manager
 ├── database/   Prisma schema, migrations and repositories
 ├── shared/     DTOs, error codes, search parser and MIME helpers
-└── sdk/        @lacrous/omnicloud: the SDK and the omnicloud command
+└── sdk/        @hilbras/omnicloud: the SDK and the omnicloud command
 ```
 
 ---
@@ -286,11 +288,11 @@ List responses include pagination (`page`, `limit`, `total`, `hasMore`). Errors 
 The same package is a TypeScript SDK for applications that talk to an OmniCloud server:
 
 ```bash
-npm install @lacrous/omnicloud
+npm install @hilbras/omnicloud
 ```
 
 ```ts
-import { OmniCloudClient } from "@lacrous/omnicloud";
+import { OmniCloudClient } from "@hilbras/omnicloud";
 
 const cloud = new OmniCloudClient({ baseUrl: "https://my-omnicloud.example" });
 
@@ -388,4 +390,4 @@ Pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md). Before subm
 
 ## License
 
-[MIT](LICENSE) © 2026 Lacrous
+[MIT](LICENSE) © 2026 Hilbras

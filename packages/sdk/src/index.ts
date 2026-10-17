@@ -1,5 +1,5 @@
 /**
- * @lacrous/omnicloud — developer SDK for OmniCloud v0.2.
+ * @hilbras/omnicloud — developer SDK for OmniCloud v0.2.
  *
  * Contains:
  * - `OmniCloudClient`: namespaced HTTP client for an OmniCloud server,

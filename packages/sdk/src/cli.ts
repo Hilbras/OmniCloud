@@ -25,7 +25,7 @@ Usage:
 Migrations run automatically before the server starts. Configuration is read from
 environment variables, then from a .env file in the current directory (or the file
 given with --env). Variables already set in the environment are never overwritten.
-See https://github.com/Lacrous/OmniCloud#configuration.
+See https://github.com/Hilbras/OmniCloud#configuration.
 `;
 
 interface ParsedArgs {
@@ -158,7 +158,7 @@ function localUrl(env: NodeJS.ProcessEnv): string {
 
 async function start(args: ParsedArgs, env: NodeJS.ProcessEnv): Promise<void> {
   if (!existsSync(join(serverDir, "index.js"))) {
-    throw new Error("The server bundle is missing. Reinstall @lacrous/omnicloud.");
+    throw new Error("The server bundle is missing. Reinstall @hilbras/omnicloud.");
   }
   await generate(env);
   await migrate(env);
@@ -220,7 +220,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     const outcome = await firstRunSetup(envPath);
     if (outcome === "not-interactive") {
       process.stderr.write(
-        `omnicloud: no configuration found. Create ${envPath} (see https://github.com/Lacrous/OmniCloud#configuration) or run omnicloud in a terminal.\n`,
+        `omnicloud: no configuration found. Create ${envPath} (see https://github.com/Hilbras/OmniCloud#configuration) or run omnicloud in a terminal.\n`,
       );
       return 1;
     }

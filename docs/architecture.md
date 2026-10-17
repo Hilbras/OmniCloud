@@ -275,7 +275,7 @@ OmniCloud/
 │   ├── core/                Domain types, repos, errors, StorageEngine, services
 │   ├── database/            Prisma schema, migrations, repository implementations
 │   ├── telegram/            MTProto client manager, connection flow, provider
-│   └── sdk/                 @lacrous/omnicloud client + re-exports
+│   └── sdk/                 @hilbras/omnicloud client + re-exports
 ├── docs/                    This documentation
 ├── docker-compose.yml       Development PostgreSQL
 └── pnpm-workspace.yaml      apps/*, packages/*

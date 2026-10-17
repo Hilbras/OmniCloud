@@ -50,13 +50,13 @@ Notes:
 
 ## Install from npm
 
-The published package `@lacrous/omnicloud` includes the full server, the built
+The published package `@hilbras/omnicloud` includes the full server, the built
 web app and the Prisma schema. It installs one command, `omnicloud`:
 
 ```bash
 mkdir omnicloud-app && cd omnicloud-app
 npm init -y
-npm install @lacrous/omnicloud
+npm install @hilbras/omnicloud
 ```
 
 Put your configuration in `.env` in that directory (see the variable table
@@ -82,7 +82,7 @@ Wants=network-online.target
 
 [Service]
 WorkingDirectory=/srv/omnicloud-app
-ExecStart=/usr/bin/node /srv/omnicloud-app/node_modules/@lacrous/omnicloud/dist/cli.js start --no-open
+ExecStart=/usr/bin/node /srv/omnicloud-app/node_modules/@hilbras/omnicloud/dist/cli.js start --no-open
 Restart=on-failure
 User=omnicloud
 EnvironmentFile=/srv/omnicloud-app/.env
@@ -94,7 +94,7 @@ WantedBy=multi-user.target
 Adjust the `node` path to the output of `which node`. The unit runs the
 package's own entry point directly, so it does not depend on npm at startup.
 Keep the `.env` file readable only by the service user, and pin the version
-(`npm install @lacrous/omnicloud@0.2.35`) so upgrades happen deliberately.
+(`npm install @hilbras/omnicloud@0.3.0`) so upgrades happen deliberately.
 
 ## Build
 

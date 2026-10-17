@@ -92,7 +92,7 @@ const en = {
     titleB: "yours to inspect.",
     subtitle:
       "One Docker Compose file, a Telegram account, and you have a private cloud. The npm SDK and CLI come from the same repository — script it, fork it, make it yours.",
-    github: "github.com/Lacrous/OmniCloud",
+    github: "github.com/Hilbras/OmniCloud",
     npm: "npm package",
     note: "Node.js ≥ 20 · Docker · PostgreSQL — or install straight from npm.",
   },
@@ -207,7 +207,7 @@ const ar: Translation = {
     titleB: "وليكون تحت فحصك.",
     subtitle:
       "ملف Docker Compose واحد وحساب تيليغرام، وتملك سحابة خاصة. حزمة npm وسطر الأوامر من المستودع نفسه — برمِجها، أنشئ نسخة منها، واجعلها ملكك.",
-    github: "github.com/Lacrous/OmniCloud",
+    github: "github.com/Hilbras/OmniCloud",
     npm: "حزمة npm",
     note: "Node.js ≥ 20 · Docker · PostgreSQL — أو ثبّت مباشرة من npm.",
   },
@@ -324,7 +324,7 @@ const ru: Translation = {
     titleB: "ваше для проверки.",
     subtitle:
       "Один файл Docker Compose, аккаунт Telegram — и приватное облако у вас. npm SDK и CLI из того же репозитория: автоматизируйте, форкайте, делайте своим.",
-    github: "github.com/Lacrous/OmniCloud",
+    github: "github.com/Hilbras/OmniCloud",
     npm: "npm-пакет",
     note: "Node.js ≥ 20 · Docker · PostgreSQL — или установите напрямую из npm.",
   },

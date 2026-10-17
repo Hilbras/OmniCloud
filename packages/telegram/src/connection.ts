@@ -386,7 +386,7 @@ export class TelegramConnectionService {
         new Api.channels.CreateChannel({
           title: "OmniCloud Storage",
           about:
-            "Private storage channel created by OmniCloud (https://github.com/Lacrous/OmniCloud)",
+            "Private storage channel created by OmniCloud (https://github.com/Hilbras/OmniCloud)",
           megagroup: false,
         }),
       );

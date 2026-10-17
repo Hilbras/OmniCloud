@@ -1,4 +1,4 @@
-# SDK (`@lacrous/omnicloud`) v0.2
+# SDK (`@hilbras/omnicloud`) v0.2
 
 The package ships three things:
 
@@ -12,9 +12,9 @@ The package ships three things:
 ## Install
 
 ```bash
-npm install @lacrous/omnicloud
+npm install @hilbras/omnicloud
 # or
-pnpm add @lacrous/omnicloud
+pnpm add @hilbras/omnicloud
 ```
 
 Requires Node 20+. The package is ESM-first with a CJS build and TypeScript
@@ -26,7 +26,7 @@ To run a server instead of calling one, see the `omnicloud` command in the
 ## `OmniCloudClient`
 
 ```ts
-import { OmniCloudClient } from "@lacrous/omnicloud";
+import { OmniCloudClient } from "@hilbras/omnicloud";
 
 const cloud = new OmniCloudClient({
   baseUrl: "https://cloud.example", // default: same-origin (relative URLs)
@@ -54,7 +54,7 @@ in the browser and in Node fetch.
 Any non-2xx response throws:
 
 ```ts
-import { OmniCloudError } from "@lacrous/omnicloud";
+import { OmniCloudError } from "@hilbras/omnicloud";
 
 try {
   await cloud.files.get("missing-id");

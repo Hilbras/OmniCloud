@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
+**Hilbras rebrand, client-side encryption preview, landing page, and localization.**
+
+### Added
+
+- **Experimental client-side encryption (OCE1).** A provisional, opt-in
+  end-to-end encryption protocol: files are encrypted in the browser or SDK
+  before upload with per-file keys held only on trusted clients. Includes the
+  `@omnicloud/crypto` package with known-answer vectors, opaque encryption
+  metadata on files/versions, SDK `uploadEncrypted`/`downloadEncrypted`, and an
+  in-app key panel. **Requires independent cryptographic review before any
+  production use** — see `docs/security/encryption-protocol-v1.md`.
+- **Public landing page** with a branded intro loader, motion animations, and
+  honest feature/security sections.
+- **Localization (en, ar, ru)** for the landing page with system-language
+  detection, a manual language switcher, and full RTL layout for Arabic.
+- **Security documentation set:** threat model, current security baseline,
+  encryption requirements, protocol proposal/specification, library research,
+  and architecture decision records.
+
+### Changed
+
+- Project attribution, repository links, and the npm package
+  (`@hilbras/omnicloud`, formerly `@lacrous/omnicloud`) now belong to **Hilbras**.
+- Brand assets: new theme-aware logo marks, favicons, and Telegram channel art.
+
+## [0.2.35]
+
 **Post-audit remediation: data integrity, duplicate prevention, and hardening.**
 
 ### Fixed
@@ -872,7 +901,7 @@ opens the web app in your browser.
 ## [0.2.4] — 2026-10-09
 
 **Security: dependency fixes.** Clears the known vulnerabilities reported by
-`npm audit` for `@lacrous/omnicloud@0.2.3`. No API or data changes.
+`npm audit` for `@hilbras/omnicloud@0.2.3`. No API or data changes.
 
 ### Security
 
@@ -893,7 +922,7 @@ opens the web app in your browser.
 
 ## [0.2.3] — 2026-10-09
 
-**Run OmniCloud from npm.** `npm install @lacrous/omnicloud` now installs the full
+**Run OmniCloud from npm.** `npm install @hilbras/omnicloud` now installs the full
 server, the built web app and an `omnicloud` command. The SDK API is unchanged.
 
 ### Added
@@ -1070,7 +1099,7 @@ gains streaming APIs.
 
 ### Fixed
 
-- **SDK type declarations were incomplete.** The published `@lacrous/omnicloud@0.2.0`
+- **SDK type declarations were incomplete.** The published `@hilbras/omnicloud@0.2.0`
   `index.d.ts` imported internal modules (`./query`, `./mime`, `./client`, `./errors`)
   that are not shipped in the package, so TypeScript consumers got missing or `any`
   types. The bundled declarations are now self-contained, and the build no longer
@@ -1180,7 +1209,7 @@ dependable Telegram connection, integrity checking, and a full Drive UI.
 - The published ESM bundle used directory-style GramJS subpath imports
   (`telegram/sessions`, `telegram/client/uploads`), which Node's ESM loader
   cannot resolve — replaced with explicit file paths so
-  `import { OmniCloudClient } from "@lacrous/omnicloud"` works in Node.
+  `import { OmniCloudClient } from "@hilbras/omnicloud"` works in Node.
 - Removed a duplicate `dts` key in the SDK build config.
 
 ## [0.1.0] — 2026-10-06
@@ -1201,7 +1230,7 @@ your own Telegram account as the underlying storage backend.
   progress, rename/move/delete dialogs
 - StorageProvider abstraction with the first Telegram implementation
 - PostgreSQL metadata layer via Prisma
-- `@lacrous/omnicloud` SDK package (HTTP client + storage building blocks)
+- `@hilbras/omnicloud` SDK package (HTTP client + storage building blocks)
 - Docker Compose development environment (PostgreSQL)
 - GitHub Actions CI and release automation
 

@@ -1,6 +1,6 @@
 /**
  * Data transfer objects, constants and error codes shared between the API,
- * the web app, and the @lacrous/omnicloud SDK.
+ * the web app, and the @hilbras/omnicloud SDK.
  *
  * Telegram identifiers that may exceed JavaScript's safe integer range are
  * transported as strings across the API boundary.

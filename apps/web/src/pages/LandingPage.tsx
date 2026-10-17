@@ -451,7 +451,7 @@ export default function LandingPage() {
               <h2 className="text-3xl font-semibold tracking-[-0.045em]">{t.security.title}</h2>
               <p className="muted mt-4 text-sm leading-6">{t.security.subtitle}</p>
               <a
-                href="https://github.com/Lacrous/OmniCloud/blob/main/SECURITY.md"
+                href="https://github.com/Hilbras/OmniCloud/blob/main/SECURITY.md"
                 className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-gold-text hover:underline"
               >
                 {t.security.link}
@@ -490,14 +490,14 @@ export default function LandingPage() {
               <p className="muted mt-4 max-w-lg text-base leading-7">{t.openSource.subtitle}</p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="https://github.com/Lacrous/OmniCloud"
+                  href="https://github.com/Hilbras/OmniCloud"
                   className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-sm font-medium hover:bg-surface"
                 >
                   <Globe className="h-4 w-4" aria-hidden="true" />
                   {t.openSource.github}
                 </a>
                 <a
-                  href="https://www.npmjs.com/package/@lacrous/omnicloud"
+                  href="https://www.npmjs.com/package/@hilbras/omnicloud"
                   className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-sm font-medium hover:bg-surface"
                 >
                   <Braces className="h-4 w-4" aria-hidden="true" />
@@ -519,7 +519,7 @@ export default function LandingPage() {
                 className="overflow-x-auto rounded-xl bg-bg-soft/80 p-4 text-[12.5px] leading-6"
               >
                 <code>
-                  <span className="muted">$</span> git clone github.com/Lacrous/OmniCloud
+                  <span className="muted">$</span> git clone github.com/Hilbras/OmniCloud
                   {"\n"}
                   <span className="muted">$</span> cd OmniCloud && docker compose up
                   {"\n\n"}
@@ -564,13 +564,13 @@ export default function LandingPage() {
               {t.footer.features}
             </a>
             <a
-              href="https://github.com/Lacrous/OmniCloud/blob/main/SECURITY.md"
+              href="https://github.com/Hilbras/OmniCloud/blob/main/SECURITY.md"
               className="transition-colors hover:text-text"
             >
               {t.footer.security}
             </a>
             <a
-              href="https://github.com/Lacrous/OmniCloud"
+              href="https://github.com/Hilbras/OmniCloud"
               className="transition-colors hover:text-text"
             >
               {t.footer.github}

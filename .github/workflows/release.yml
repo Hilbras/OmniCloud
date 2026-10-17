@@ -34,7 +34,7 @@ jobs:
           TAG="${GITHUB_REF_NAME#v}"
           SDK_VERSION="$(node -p "require('./packages/sdk/package.json').version")"
           if [ "$TAG" != "$SDK_VERSION" ]; then
-            echo "::error::Tag v$TAG does not match @lacrous/omnicloud version $SDK_VERSION"
+            echo "::error::Tag v$TAG does not match @hilbras/omnicloud version $SDK_VERSION"
             exit 1
           fi
           # The API embeds its version in server/index.js, and the other manifests
@@ -46,14 +46,15 @@ jobs:
           fi
           for manifest in package.json apps/api/package.json apps/web/package.json \
                           packages/core/package.json packages/database/package.json \
-                          packages/shared/package.json packages/telegram/package.json; do
+                          packages/shared/package.json packages/telegram/package.json \
+                          packages/crypto/package.json; do
             V="$(node -p "require('./$manifest').version")"
             if [ "$V" != "$SDK_VERSION" ]; then
               echo "::error::$manifest is $V but the tag is v$TAG"
               exit 1
             fi
           done
-          echo "Releasing @lacrous/omnicloud@$SDK_VERSION";
+          echo "Releasing @hilbras/omnicloud@$SDK_VERSION";
 
       - name: Format check
         run: pnpm format:check
@@ -94,12 +95,12 @@ jobs:
           npm init -y > /dev/null
           npm install "$TGZ"
           ./node_modules/.bin/omnicloud version
-          node --input-type=module -e "const m = await import('@lacrous/omnicloud'); if (typeof m.OmniCloudClient !== 'function') throw new Error('ESM import failed'); console.log('ESM import OK')"
-          node -e "const m = require('@lacrous/omnicloud'); if (typeof m.OmniCloudClient !== 'function') throw new Error('CJS require failed'); console.log('CJS require OK')"
-          test -f node_modules/@lacrous/omnicloud/server/index.js
+          node --input-type=module -e "const m = await import('@hilbras/omnicloud'); if (typeof m.OmniCloudClient !== 'function') throw new Error('ESM import failed'); console.log('ESM import OK')"
+          node -e "const m = require('@hilbras/omnicloud'); if (typeof m.OmniCloudClient !== 'function') throw new Error('CJS require failed'); console.log('CJS require OK')"
+          test -f node_modules/@hilbras/omnicloud/server/index.js
 
-      - name: Publish @lacrous/omnicloud
-        run: pnpm --filter @lacrous/omnicloud publish --access public --no-git-checks
+      - name: Publish @hilbras/omnicloud
+        run: pnpm --filter @hilbras/omnicloud publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -108,6 +109,6 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            See [CHANGELOG.md](https://github.com/Lacrous/OmniCloud/blob/main/CHANGELOG.md) for details.
+            See [CHANGELOG.md](https://github.com/Hilbras/OmniCloud/blob/main/CHANGELOG.md) for details.
 
-            **Package:** [`@lacrous/omnicloud@${{ github.ref_name }}`](https://www.npmjs.com/package/@lacrous/omnicloud)
+            **Package:** [`@hilbras/omnicloud@${{ github.ref_name }}`](https://www.npmjs.com/package/@hilbras/omnicloud)
