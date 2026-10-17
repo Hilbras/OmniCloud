@@ -22,5 +22,11 @@
     "fileIdHex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
     "versionIdHex": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
     "keyEpoch": 0
+  },
+  "recovery": {
+    "codeHex": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+    "nonceHex": "6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e",
+    "blobHex": "6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6ea28b801ae407f54f0304b25ceb0f14054f33e017f5cbec7101d0066b019166d28172011a60a51b40329de21e417c976d",
+    "urkHex": "1111111111111111111111111111111111111111111111111111111111111111"
   }
 }

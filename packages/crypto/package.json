@@ -13,7 +13,9 @@
     "build": "tsc --noEmit",
     "build:types": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "lint": "eslint src test"
+    "lint": "eslint src test scripts",
+    "verify:vectors": "tsx scripts/verify-vectors-node.ts",
+    "verify:vectors:cross-client": "tsx scripts/verify-cross-client.mjs"
   },
   "dependencies": {
     "@noble/ciphers": "1.3.0",
@@ -21,6 +23,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^4.1.11"
   }

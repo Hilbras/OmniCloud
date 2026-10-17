@@ -76,13 +76,17 @@ export function createRecoveryBlob(
   urk: Uint8Array,
   codeBytes: Uint8Array,
   keyEpoch: number = KEY_EPOCH_V1,
+  nonce?: Uint8Array,
 ): Uint8Array {
   assertKeyMaterial("urk", urk);
   const key = deriveRecoveryKey(codeBytes);
-  const nonce = randomBytes(NONCE_BYTES);
-  const sealed = xchacha20poly1305(key, nonce, recoveryAad(keyEpoch)).encrypt(urk);
+  const actualNonce = nonce ?? randomBytes(NONCE_BYTES);
+  if (actualNonce.length !== NONCE_BYTES) {
+    throw new ValidationError(`recovery nonce must be ${NONCE_BYTES} bytes`);
+  }
+  const sealed = xchacha20poly1305(key, actualNonce, recoveryAad(keyEpoch)).encrypt(urk);
   const out = new Uint8Array(NONCE_BYTES + sealed.length);
-  out.set(nonce, 0);
+  out.set(actualNonce, 0);
   out.set(sealed, NONCE_BYTES);
   if (out.length !== RECOVERY_BLOB_BYTES) {
     throw new ValidationError("recovery blob has unexpected length");

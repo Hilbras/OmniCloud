@@ -2,11 +2,13 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
+  createRecoveryBlob,
   decryptFile,
   deriveKek,
   deriveMek,
   encryptBytes,
   encryptMetadata,
+  openRecoveryBlob,
   wrapDek,
 } from "../src/index";
 
@@ -38,6 +40,8 @@ const URK = fromHex("11".repeat(32));
 const DEK = fromHex("c3".repeat(32));
 const FILE_ID = fromHex("a1".repeat(16));
 const VERSION_ID = fromHex("b2".repeat(16));
+const RECOVERY_CODE = fromHex("d4".repeat(32));
+const RECOVERY_NONCE = fromHex("6e".repeat(24));
 const PLAINTEXT = new TextEncoder().encode(
   "OmniCloud OCE1 known-answer vector. 0123456789abcdefghijklmnopqrstuvwxyz. pack my box with five dozen liquor jugs.",
 );
@@ -80,6 +84,12 @@ async function buildVector() {
       versionIdHex: hex(VERSION_ID),
       keyEpoch: 0,
     },
+    recovery: {
+      codeHex: hex(RECOVERY_CODE),
+      nonceHex: hex(RECOVERY_NONCE),
+      blobHex: hex(createRecoveryBlob(URK, RECOVERY_CODE, 0, RECOVERY_NONCE)),
+      urkHex: hex(URK),
+    },
   };
 }
 
@@ -98,6 +108,7 @@ describe("known-answer vectors", () => {
     expect(vector.expected.envelopeHex).toBe(committed.expected.envelopeHex);
     expect(vector.expected.wrappedKeyHex).toBe(committed.expected.wrappedKeyHex);
     expect(vector.expected.metadataBlobHex).toBe(committed.expected.metadataBlobHex);
+    expect(vector.recovery.blobHex).toBe(committed.recovery.blobHex);
   });
 
   test("committed vector decrypts and matches plaintext and metadata", async () => {
@@ -115,5 +126,18 @@ describe("known-answer vectors", () => {
     });
     expect(hex(out.plaintext)).toBe(committed.inputs.plaintextHex);
     expect(out.metadata).toEqual(committed.inputs.metadata);
+  });
+
+  test("committed recovery blob opens to the committed URK", () => {
+    const committed = JSON.parse(readFileSync(VECTOR_PATH, "utf8")) as Awaited<
+      ReturnType<typeof buildVector>
+    >;
+    const urk = openRecoveryBlob(
+      fromHex(committed.recovery.blobHex),
+      fromHex(committed.recovery.codeHex),
+      0,
+    );
+    expect(hex(urk)).toBe(committed.recovery.urkHex);
+    expect(hex(urk)).toBe(committed.inputs.urkHex);
   });
 });
