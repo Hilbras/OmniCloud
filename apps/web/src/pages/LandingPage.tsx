@@ -17,6 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { LANGS, setLang, useLang, type Lang } from "../i18n";
+import { usePageMeta } from "../lib/seo";
 
 const FEATURE_ICONS = [Send, FolderTree, History, LockKeyhole, Braces, ShieldCheck] as const;
 const TRUST_ICONS = [Sparkles, Database, LockKeyhole] as const;
@@ -40,7 +41,7 @@ function Brand({ href = "/" }: { href?: string }) {
           className="brand-mark-light absolute inset-0 h-9 w-9"
         />
       </span>
-      <span className="text-[15px] font-semibold tracking-tight">
+      <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">
         Omni<span className="muted font-normal">Cloud</span>
       </span>
     </a>
@@ -227,6 +228,7 @@ export default function LandingPage() {
   const reduceMotion = useReducedMotion();
   const [intro, setIntro] = useState(() => !reduceMotion);
   const [scrolled, setScrolled] = useState(false);
+  usePageMeta({ title: t.seo.title, description: t.seo.description });
 
   // Give the intro a bounded lifetime even if animation callbacks misfire.
   useEffect(() => {

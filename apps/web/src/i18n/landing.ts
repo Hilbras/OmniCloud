@@ -1,5 +1,10 @@
 const en = {
   meta: { dir: "ltr" as "ltr" | "rtl", skip: "Skip to content" },
+  seo: {
+    title: "OmniCloud — Self-hosted cloud storage for your Telegram",
+    description:
+      "Self-hosted cloud storage powered by your Telegram account. Organize, search, and encrypt your files with an open-source drive you control.",
+  },
   nav: {
     features: "Features",
     security: "Security",
@@ -115,6 +120,11 @@ export type Translation = typeof en;
 
 const ar: Translation = {
   meta: { dir: "rtl", skip: "تخطَّ إلى المحتوى" },
+  seo: {
+    title: "OmniCloud — تخزين سحابي مستضاف ذاتيًا لحساب تيليغرام",
+    description:
+      "تخزين سحابي مستضاف ذاتيًا مدعوم بحساب تيليغرام. رتّب وابحث وشفّر ملفاتك بقرص مفتوح المصدر تتحكم به.",
+  },
   nav: {
     features: "المزايا",
     security: "الأمان",
@@ -228,6 +238,11 @@ const ar: Translation = {
 
 const ru: Translation = {
   meta: { dir: "ltr", skip: "Перейти к содержимому" },
+  seo: {
+    title: "OmniCloud — Облачное хранилище на самохостинге для вашего Telegram",
+    description:
+      "Облачное хранилище на самохостинге на базе вашего аккаунта Telegram. Организуйте, ищите и шифруйте файлы с открытым исходным кодом.",
+  },
   nav: {
     features: "Возможности",
     security: "Безопасность",

@@ -11,6 +11,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useMe } from "../hooks/useMe";
 import { useUploads } from "../hooks/useUploads";
 import { invalidateDriveQueries, ME_QUERY_KEY, SIGNED_OUT_SESSION } from "../lib/queries";
+import { usePageMeta } from "../lib/seo";
 import type { DriveItem } from "../lib/drive";
 import { NameDialog } from "./NameDialog";
 import { SearchOverlay } from "./SearchOverlay";
@@ -29,6 +30,11 @@ export default function DriveLayout() {
   const toast = useToast();
   const uploads = useUploads();
   const reduceMotion = useReducedMotion();
+  usePageMeta({
+    title: "My Drive — OmniCloud",
+    description: "Your private OmniCloud drive.",
+    noindex: true,
+  });
 
   const storage = me.data?.storage ?? null;
   const health = me.data?.health ?? null;

@@ -10,6 +10,7 @@ const TelegramQrLogin = lazy(() =>
 import { ThemeToggle } from "../components/ThemeToggle";
 import { useMe } from "../hooks/useMe";
 import { ME_QUERY_KEY } from "../lib/queries";
+import { usePageMeta } from "../lib/seo";
 
 type Step = "phone" | "code" | "password";
 type SignInMode = "qr" | "phone";
@@ -22,6 +23,12 @@ export default function LoginPage() {
   const me = useMe();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  usePageMeta({
+    title: "Sign in — OmniCloud",
+    description: "Sign in to OmniCloud with Telegram and open your private drive.",
+    noindex: true,
+    path: "/login",
+  });
 
   const [step, setStep] = useState<Step>("phone");
   const [signInMode, setSignInMode] = useState<SignInMode>("qr");
