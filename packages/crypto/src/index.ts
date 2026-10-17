@@ -49,3 +49,12 @@ export {
   generateId,
   generateUrk,
 } from "./keys";
+export {
+  RECOVERY_BLOB_BYTES,
+  RECOVERY_CODE_BYTES,
+  createRecoveryBlob,
+  formatRecoveryCode,
+  generateRecoveryCode,
+  openRecoveryBlob,
+  parseRecoveryCode,
+} from "./recovery";

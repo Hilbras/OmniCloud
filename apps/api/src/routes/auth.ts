@@ -5,7 +5,7 @@ import type { Container } from "../container";
 import { currentUser, issueSessionCookie } from "../auth";
 import { isAllowedOrigin } from "../http";
 import { createRateLimiter } from "../rate-limit";
-import { requireBody, requireString } from "../validation";
+import { parseRecoveryBlob, requireBody, requireString } from "../validation";
 import { toStorageDTO, toStorageHealthDTO, toUserDTO } from "../mappers";
 import type { TelegramVerifyResponse } from "@omnicloud/shared";
 
@@ -164,6 +164,37 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
         targetTitle: status.targetTitle,
       }),
     };
+  });
+
+  // ── OCE1 recovery blob (opaque ciphertext; the code never reaches the
+  // server, so these endpoints only store/retrieve ciphertext for the owner).
+  const recoveryLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
+
+  app.get("/api/auth/recovery", async (request, reply) => {
+    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    if (!user)
+      return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
+    const recoveryBlob = await container.repos.users.getRecoveryBlob(user.id);
+    return { recoveryBlob };
+  });
+
+  app.put("/api/auth/recovery", async (request, reply) => {
+    recoveryLimiter(request.ip);
+    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    if (!user)
+      return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
+    const recoveryBlob = parseRecoveryBlob(request);
+    await container.repos.users.setRecoveryBlob(user.id, recoveryBlob);
+    return { status: "ok" };
+  });
+
+  app.delete("/api/auth/recovery", async (request, reply) => {
+    recoveryLimiter(request.ip);
+    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    if (!user)
+      return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
+    await container.repos.users.setRecoveryBlob(user.id, null);
+    return { status: "ok" };
   });
 
   // ── Sign out everywhere: revokes every browser session for this account ──

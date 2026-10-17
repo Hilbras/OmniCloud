@@ -21,6 +21,8 @@ model User {
   firstName      String?
   lastName       String?
   phone          String?
+  /// Opaque OCE1 recovery blob (server cannot open it without the user's code).
+  recoveryBlob   String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

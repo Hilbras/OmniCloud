@@ -270,6 +270,18 @@ export const api = {
     },
   },
 
+  recovery: {
+    get(): Promise<{ recoveryBlob: string | null }> {
+      return requestJson("GET", "/api/auth/recovery");
+    },
+    set(recoveryBlob: string): Promise<{ status: "ok" }> {
+      return requestJson("PUT", "/api/auth/recovery", { recoveryBlob });
+    },
+    remove(): Promise<{ status: "ok" }> {
+      return requestJson("DELETE", "/api/auth/recovery");
+    },
+  },
+
   tokens: {
     list(): Promise<{ tokens: ApiTokenDTO[] }> {
       return requestJson("GET", "/api/tokens");

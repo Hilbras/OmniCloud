@@ -200,6 +200,23 @@ function multipartTextField(fields: MultipartFields, name: string): string | und
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 const KEY_EPOCH_PATTERN = /^\d+$/;
 const MAX_UINT32 = 4294967295;
+/** OCE1 recovery blob: 24-byte nonce + 32-byte sealed URK + 16-byte tag. */
+const RECOVERY_BLOB_BYTES = 72;
+
+/**
+ * Validates an opaque OCE1 recovery blob from a JSON body. The server checks
+ * only the base64 alphabet and exact decoded length; it cannot open the blob.
+ */
+export function parseRecoveryBlob(request: { body?: unknown }): string {
+  const body = requireBody(request);
+  const blob = requireString(body, "recoveryBlob");
+  if (!BASE64_PATTERN.test(blob) || Buffer.from(blob, "base64").length !== RECOVERY_BLOB_BYTES) {
+    throw new ValidationError(
+      `"recoveryBlob" must be base64 encoding exactly ${RECOVERY_BLOB_BYTES} bytes`,
+    );
+  }
+  return blob;
+}
 
 /** Validated, opaque OCE1 encryption metadata from a multipart upload. */
 export interface ParsedEncryption {

@@ -183,6 +183,7 @@ export interface InMemoryRepos extends Repos {
 
 export function createInMemoryRepos(): InMemoryRepos {
   const users: UserRecord[] = [];
+  const recoveryBlobs = new Map<string, string>();
   const sessions: TelegramSessionRecord[] = [];
   const browserSessions: BrowserSessionRecord[] = [];
   const uploadOps: UploadOperationRecord[] = [];
@@ -243,6 +244,11 @@ export function createInMemoryRepos(): InMemoryRepos {
       const record: UserRecord = { id: nextId("user"), createdAt: now(), ...input };
       users.push(record);
       return record;
+    },
+    getRecoveryBlob: async (userId) => recoveryBlobs.get(userId) ?? null,
+    setRecoveryBlob: async (userId, blob) => {
+      if (blob === null) recoveryBlobs.delete(userId);
+      else recoveryBlobs.set(userId, blob);
     },
   };
 

@@ -25,6 +25,7 @@ Non-goals (deferred to later reviewed phases): multi-device enrollment protocol,
 - **KEK** (data-key wrapping): `HKDF-SHA256(ikm=URK, salt="omnicloud-e2ee-v1", info="omnicloud/e2ee/v1/dek-wrap", length=32)`.
 - **MEK** (metadata): `HKDF-SHA256(ikm=URK, salt="omnicloud-e2ee-v1", info="omnicloud/e2ee/v1/metadata", length=32)`.
 - **DEK**: 32 random bytes per file version (`generateDek`). Encrypts that version's content records.
+- **Recovery key** (optional record): `HKDF-SHA256(ikm=recoveryCode32, salt="omnicloud-e2ee-v1", info="omnicloud/e2ee/v1/recovery", length=32)`. Wraps the URK into the fixed 72-byte recovery record the server stores but cannot open; format and limits are normative in [`recovery-and-device-revocation.md`](recovery-and-device-revocation.md).
 
 Domain-separation strings are ASCII, part of this specification, and covered by tests/vectors.
 

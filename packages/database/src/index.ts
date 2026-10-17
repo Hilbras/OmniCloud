@@ -288,6 +288,16 @@ function createUserRepo(prisma: PrismaClient): UserRepository {
       });
       return mapUser(user);
     },
+    async getRecoveryBlob(userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { recoveryBlob: true },
+      });
+      return user?.recoveryBlob ?? null;
+    },
+    async setRecoveryBlob(userId, blob) {
+      await prisma.user.update({ where: { id: userId }, data: { recoveryBlob: blob } });
+    },
   };
 }
 

@@ -29,6 +29,12 @@ export interface UserRepository {
     lastName: string | null;
     phone: string | null;
   }): Promise<UserRecord>;
+  /**
+   * Opaque OCE1 recovery blob. Kept off UserRecord so it cannot leak into
+   * DTOs, logs, or activity metadata; only the dedicated endpoints read it.
+   */
+  getRecoveryBlob(userId: string): Promise<string | null>;
+  setRecoveryBlob(userId: string, blob: string | null): Promise<void>;
 }
 
 export interface SessionRepository {
