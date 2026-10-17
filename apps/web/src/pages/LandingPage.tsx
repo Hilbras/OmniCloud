@@ -278,7 +278,7 @@ export default function LandingPage() {
         };
 
   return (
-    <div className="relative min-h-dvh bg-bg" lang={lang} dir={t.meta.dir}>
+    <div className="relative min-h-dvh overflow-x-clip bg-bg" lang={lang} dir={t.meta.dir}>
       <a href="#main" className="skip-link btn-gold">
         {t.meta.skip}
       </a>
@@ -509,7 +509,7 @@ export default function LandingPage() {
             </motion.div>
             <motion.div
               {...reveal(0.1)}
-              className="rounded-2xl border border-line bg-bg/80 p-4 shadow-sm sm:p-5"
+              className="min-w-0 rounded-2xl border border-line bg-bg/80 p-4 shadow-sm sm:p-5"
             >
               <div className="mb-3 flex items-center gap-1.5" aria-hidden="true">
                 <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
