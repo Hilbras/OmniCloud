@@ -25,7 +25,7 @@ const STEP_NUMBERS = ["01", "02", "03"] as const;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-function Brand({ href = "/welcome" }: { href?: string }) {
+function Brand({ href = "/" }: { href?: string }) {
   return (
     <a href={href} className="flex items-center gap-3" aria-label="OmniCloud">
       <span className="relative h-9 w-9 shrink-0">

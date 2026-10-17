@@ -30,7 +30,7 @@ export function Sidebar({ storage, health, username, onCreateFolder, onClose }: 
   return (
     <div className="flex h-full flex-col bg-transparent">
       <div className="flex items-center justify-between px-5 pt-5 pb-4">
-        <a href="/" className="flex items-center gap-2.5 text-sm font-semibold tracking-tight">
+        <a href="/drive" className="flex items-center gap-2.5 text-sm font-semibold tracking-tight">
           <span className="relative h-8 w-8 shrink-0">
             <img
               src="/brand/logo-mark.svg"
@@ -67,7 +67,7 @@ export function Sidebar({ storage, health, username, onCreateFolder, onClose }: 
               <li key={section.id}>
                 <NavLink
                   to={section.path}
-                  end={section.path === "/"}
+                  end={section.path === "/drive"}
                   onClick={() => onClose?.()}
                   className={({ isActive }) =>
                     `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px]  ${

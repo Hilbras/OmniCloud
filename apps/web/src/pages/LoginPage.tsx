@@ -36,7 +36,7 @@ export default function LoginPage() {
     try {
       const session = await api.auth.me();
       queryClient.setQueryData(ME_QUERY_KEY, session);
-      navigate("/", { replace: true });
+      navigate("/drive", { replace: true });
     } catch {
       setError("Signed in, but loading your drive failed. Please reload the page.");
     } finally {
@@ -82,7 +82,7 @@ export default function LoginPage() {
   });
 
   if (me.data !== undefined && me.data.user !== null) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/drive" replace />;
   }
 
   const busy =

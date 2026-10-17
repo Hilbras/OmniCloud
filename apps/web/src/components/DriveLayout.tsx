@@ -114,7 +114,7 @@ export default function DriveLayout() {
 
   const openFolderFromSearch = (folderId: string) => {
     setSearchInput("");
-    navigate(`/?folder=${encodeURIComponent(folderId)}`);
+    navigate(`/drive?folder=${encodeURIComponent(folderId)}`);
   };
 
   const handleSearchFile = (item: DriveItem) => {

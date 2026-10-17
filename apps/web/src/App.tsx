@@ -35,7 +35,7 @@ function FullPageSpinner() {
 function RequireAuth({ children }: { children: ReactNode }) {
   const me = useMe();
   if (me.isPending) return <FullPageSpinner />;
-  if (me.data === undefined || me.data.user === null) return <Navigate to="/welcome" replace />;
+  if (me.data === undefined || me.data.user === null) return <Navigate to="/" replace />;
   if (me.data.storage === null) return <StorageInit />;
   return children;
 }
@@ -56,7 +56,8 @@ export default function App() {
   return (
     <Suspense fallback={<FullPageSpinner />}>
       <Routes>
-        <Route path="/welcome" element={<LandingPage />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/welcome" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           element={
@@ -65,7 +66,7 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route path="/" element={<DrivePage />} />
+          <Route path="/drive" element={<DrivePage />} />
           <Route path="/recent" element={<RecentPage />} />
           <Route path="/starred" element={<StarredPage />} />
           <Route path="/trash" element={<TrashPage />} />

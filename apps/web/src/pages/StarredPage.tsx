@@ -51,7 +51,7 @@ export default function StarredPage() {
   const actions = useItemActions({
     onOpenItem: (item) => {
       if (item.kind === "folder") {
-        navigate(`/?folder=${encodeURIComponent(item.id)}`);
+        navigate(`/drive?folder=${encodeURIComponent(item.id)}`);
       } else {
         void downloadFile(item.id, item.file).catch((error) =>
           toast.error(errorMessage(error, "Could not download the file")),

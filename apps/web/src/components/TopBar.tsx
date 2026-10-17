@@ -72,7 +72,7 @@ export function TopBar({
       </button>
 
       <a
-        href="/"
+        href="/drive"
         className="flex shrink-0 items-center gap-2.5 text-[15px] font-semibold tracking-tight"
       >
         <span className="relative h-8 w-8 shrink-0">
