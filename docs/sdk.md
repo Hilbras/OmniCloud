@@ -7,7 +7,8 @@ The package ships three things:
   Telegram integration), which need a persistent MTProto connection and so run
   on the server only;
 - the `omnicloud` command, which runs a complete OmniCloud server
-  (see [`deployment.md`](deployment.md#install-from-npm)).
+  (see [`deployment.md`](deployment.md#install-from-npm)) and provides the
+  end-to-end-encryption commands documented in [omnicloud CLI](#omnicloud-cli).
 
 ## Install
 
@@ -102,6 +103,11 @@ if (verify.status === "password_required") {
 }
 
 await cloud.auth.logout();
+
+// OCE1 recovery record: opaque ciphertext only — the server never sees the code.
+const { recoveryBlob } = await cloud.auth.getRecoveryBlob(); // string | null
+await cloud.auth.setRecoveryBlob(blobBase64); // exactly 72 bytes, base64
+await cloud.auth.clearRecoveryBlob();
 ```
 
 In the browser, the session cookie is set by the server; the SDK relies on
@@ -293,6 +299,89 @@ async function* allFiles(cloud: OmniCloudClient, query: ListQuery = {}) {
 The upload client automatically uses XHR when `XMLHttpRequest` exists and falls
 back to `fetch` otherwise. `AbortSignal` works in both paths (XHR calls
 `xhr.abort()`; fetch is not used when XHR is available).
+
+## omnicloud CLI
+
+`npx omnicloud` (installed globally as `omnicloud`) runs the server and the
+end-to-end-encryption commands. Encryption commands talk to an **existing**
+OmniCloud server over HTTP; they never start one and never read `.env`.
+
+### Setup
+
+1. In the web app create a personal API token: **Settings → API tokens**.
+2. Store it once:
+
+```bash
+omnicloud login --url https://cloud.example
+# API token (paste from the web app): ····   ← typed with echo off
+```
+
+`login` validates the token against the server before saving it to
+`~/.config/omnicloud/config.json` (override with `--config <path>`), which is
+written at mode `0600`. `omnicloud logout` removes the stored token locally;
+revoke it server-side in the web app.
+
+### Commands
+
+```bash
+omnicloud key generate --keyfile ~/omnicloud.key   # new root key, persisted 0600
+omnicloud key generate --reveal                    # new root key, printed once (TTY)
+omnicloud key status                               # fingerprint only
+omnicloud key status --reveal                      # fingerprint + key (TTY)
+
+omnicloud recovery generate --reveal               # new recovery code, stored on server
+omnicloud recovery restore --keyfile ~/omnicloud.key   # recover key from the code
+omnicloud recovery restore --reveal                # recover key, printed once (TTY)
+
+omnicloud upload report.pdf --encrypt              # client-side OCE1 upload
+omnicloud upload report.pdf --encrypt --folder fld_123
+omnicloud download file_456 --decrypt -o report.pdf  # decrypt locally
+omnicloud download file_456 -o raw.bin             # raw stored bytes (ciphertext for OCE1)
+omnicloud migrate file_789                         # encrypt one legacy file in place
+omnicloud migrate all                              # encrypt every plaintext file
+```
+
+### Secret-handling rules
+
+- **Secrets never appear in argv or environment variables, and are never
+  logged.** The API token and root key enter the CLI through an interactive
+  muted-echo prompt or a file the user explicitly created at mode `0600`.
+- **On-screen secrets require `--reveal` and an interactive terminal.**
+  `key generate`, `key status`, `recovery generate` and `recovery restore`
+  print a key or code only when you pass `--reveal` and stdout is a TTY;
+  redirected output is refused rather than silently written to a file.
+- **No plaintext fallback.** `upload` requires `--encrypt` (there is no
+  plaintext upload path), and `download --decrypt` refuses files that are not
+  OCE1 — it tells you to `omnicloud migrate` them instead of writing anything.
+- **Migration verifies before deleting.** `migrate` re-downloads and decrypts
+  the stored ciphertext, byte-compares it with the original, and only then
+  removes the plaintext predecessor (and only when no other history is lost).
+
+### Keyfile threat note (explicit opt-in)
+
+`--keyfile <path>` stores the root key as plaintext bytes on disk, mode `0600`
+(created inside a `0700` directory). Anything that can read that file —
+malware, a compromised account, a stolen backup of your home directory — can
+decrypt every file the key protects. The CLI prints this warning when the file
+is created and warns again if the file is ever found with loose permissions.
+Prefer interactive entry, or keep the key only as a recovery code in your
+password manager, on machines you do not fully control.
+
+### Config reference
+
+`~/.config/omnicloud/config.json` (or `$XDG_CONFIG_HOME/omnicloud/config.json`,
+or `--config <path>`):
+
+```json
+{
+  "url": "https://cloud.example",
+  "token": "…personal API token…",
+  "keyfile": "/home/you/omnicloud.key"
+}
+```
+
+`url` and `keyfile` are not secrets; `token` is, which is why the file is
+always written at `0600`.
 
 ## Server-side building blocks
 

@@ -1075,4 +1075,19 @@ class AuthApi {
   async logout(): Promise<void> {
     await this.client.request("POST", "/api/auth/logout");
   }
+
+  /** Opaque OCE1 recovery blob (base64), or null when none is stored. */
+  async getRecoveryBlob(): Promise<{ recoveryBlob: string | null }> {
+    return this.client.request<{ recoveryBlob: string | null }>("GET", "/api/auth/recovery");
+  }
+
+  /** Stores the OCE1 recovery blob (exactly RECOVERY_BLOB_BYTES, base64). */
+  async setRecoveryBlob(recoveryBlob: string): Promise<{ status: "ok" }> {
+    return this.client.request<{ status: "ok" }>("PUT", "/api/auth/recovery", { recoveryBlob });
+  }
+
+  /** Removes any stored recovery blob. */
+  async clearRecoveryBlob(): Promise<{ status: "ok" }> {
+    return this.client.request<{ status: "ok" }>("DELETE", "/api/auth/recovery");
+  }
 }

@@ -103,3 +103,71 @@ describe("recovery blob endpoints", () => {
     expect((await deleteRecovery()).statusCode).toBe(401);
   });
 });
+
+describe("recovery blob endpoints with a personal API token", () => {
+  let bearer: string;
+
+  beforeAll(async () => {
+    const me = await h.app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      cookies: { omnicloud_session: cookie },
+    });
+    const userId = me.json().user.id as string;
+    const issued = await h.container.apiTokens.issue(userId, "cli-test");
+    bearer = issued.token;
+  });
+
+  function asBearer(headers: Record<string, string> = {}) {
+    return { authorization: `Bearer ${bearer}`, ...headers };
+  }
+
+  it("reads and writes the blob without a cookie", async () => {
+    const blob = validBlob(11);
+    const put = await h.app.inject({
+      method: "PUT",
+      url: "/api/auth/recovery",
+      headers: asBearer(),
+      payload: { recoveryBlob: blob },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toEqual({ status: "ok" });
+
+    const got = await h.app.inject({
+      method: "GET",
+      url: "/api/auth/recovery",
+      headers: asBearer(),
+    });
+    expect(got.statusCode).toBe(200);
+    expect(got.json()).toEqual({ recoveryBlob: blob });
+
+    const cleared = await h.app.inject({
+      method: "DELETE",
+      url: "/api/auth/recovery",
+      headers: asBearer(),
+    });
+    expect(cleared.statusCode).toBe(200);
+    const after = await h.app.inject({
+      method: "GET",
+      url: "/api/auth/recovery",
+      headers: asBearer(),
+    });
+    expect(after.json()).toEqual({ recoveryBlob: null });
+  });
+
+  it("rejects an invalid bearer token without falling back to a session", async () => {
+    const res = await h.app.inject({
+      method: "GET",
+      url: "/api/auth/recovery",
+      // Valid cookie AND an invalid bearer: the presented token fails loudly.
+      headers: { authorization: "Bearer not-a-real-token" },
+      cookies: { omnicloud_session: cookie },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("still rejects anonymous requests", async () => {
+    const res = await h.app.inject({ method: "GET", url: "/api/auth/recovery" });
+    expect(res.statusCode).toBe(401);
+  });
+});

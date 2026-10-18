@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { isE2eeCommand, runE2eeCommand } from "./cli-e2ee";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const serverDir = join(packageRoot, "server");
@@ -21,6 +22,22 @@ Usage:
   omnicloud migrate [--env <file>]              Apply database migrations
   omnicloud version                             Print the version
   omnicloud help                                Show this message
+
+Encryption commands (talk to an OmniCloud server; config: ~/.config/omnicloud/config.json):
+  omnicloud login [--url <baseUrl>]             Store an API token (prompted, never argv)
+  omnicloud logout                              Remove the stored token from the config
+  omnicloud key generate [--keyfile <path>|--reveal]
+                                                Create a root key (0600 file, or show once)
+  omnicloud key status [--keyfile <path>] [--reveal]
+                                                Show key fingerprint (key only with --reveal)
+  omnicloud recovery generate --reveal          Create + store a recovery record, show code once
+  omnicloud recovery restore [--keyfile <path>|--reveal]
+                                                Recover the root key from a recovery code
+  omnicloud upload <path> --encrypt [--folder <id>]
+                                                Encrypt a file client-side and upload it
+  omnicloud download <id> [--decrypt] [-o <path>]
+                                                Download raw bytes, or decrypt with --decrypt
+  omnicloud migrate <fileId|all>                Encrypt legacy plaintext files in place
 
 Migrations run automatically before the server starts. Configuration is read from
 environment variables, then from a .env file in the current directory (or the file
@@ -198,6 +215,18 @@ async function start(args: ParsedArgs, env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  // Encryption commands talk to a remote server and use their own config
+  // (~/.config/omnicloud/config.json); they never read .env or run setup.
+  const first = argv[0];
+  if (first !== undefined && isE2eeCommand(first)) {
+    try {
+      return await runE2eeCommand(argv);
+    } catch (error) {
+      process.stderr.write(`omnicloud: ${(error as Error).message}\n`);
+      return 1;
+    }
+  }
+
   let args: ParsedArgs;
   try {
     args = parseArgs(argv);

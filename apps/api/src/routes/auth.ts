@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { ForbiddenError, ValidationError } from "@omnicloud/core";
 import { SESSION_COOKIE } from "@omnicloud/shared";
 import type { Container } from "../container";
-import { currentUser, issueSessionCookie } from "../auth";
+import { currentUser, currentUserWithToken, issueSessionCookie } from "../auth";
 import { isAllowedOrigin } from "../http";
 import { createRateLimiter } from "../rate-limit";
 import { parseRecoveryBlob, requireBody, requireString } from "../validation";
@@ -171,7 +171,13 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
   const recoveryLimiter = createRateLimiter({ windowMs: 60_000, max: 20 });
 
   app.get("/api/auth/recovery", async (request, reply) => {
-    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    const user = await currentUserWithToken(
+      container.repos,
+      container.authSessions,
+      container.apiTokens,
+      request.headers,
+      request.cookies,
+    );
     if (!user)
       return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
     const recoveryBlob = await container.repos.users.getRecoveryBlob(user.id);
@@ -180,7 +186,13 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
 
   app.put("/api/auth/recovery", async (request, reply) => {
     recoveryLimiter(request.ip);
-    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    const user = await currentUserWithToken(
+      container.repos,
+      container.authSessions,
+      container.apiTokens,
+      request.headers,
+      request.cookies,
+    );
     if (!user)
       return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
     const recoveryBlob = parseRecoveryBlob(request);
@@ -190,7 +202,13 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
 
   app.delete("/api/auth/recovery", async (request, reply) => {
     recoveryLimiter(request.ip);
-    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    const user = await currentUserWithToken(
+      container.repos,
+      container.authSessions,
+      container.apiTokens,
+      request.headers,
+      request.cookies,
+    );
     if (!user)
       return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
     await container.repos.users.setRecoveryBlob(user.id, null);
