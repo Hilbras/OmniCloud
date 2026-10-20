@@ -22,6 +22,8 @@ import type {
 export interface UserRepository {
   findById(id: string): Promise<UserRecord | null>;
   findByTelegramId(telegramUserId: string): Promise<UserRecord | null>;
+  /** Every user, for scheduled maintenance such as the trash purge. */
+  listAll(): Promise<UserRecord[]>;
   upsertFromTelegram(input: {
     telegramUserId: string;
     username: string | null;

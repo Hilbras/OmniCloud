@@ -20,6 +20,11 @@ export interface AppConfig {
   updatePackageName: string;
   /** Whether the periodic npm update check runs. */
   updateCheckEnabled: boolean;
+  /**
+   * Days a trashed file or folder is kept before it is permanently removed.
+   * Zero or less keeps everything in the trash indefinitely.
+   */
+  trashRetentionDays: number;
 }
 
 function optional(env: NodeJS.ProcessEnv, name: string, fallback: string): string {
@@ -82,5 +87,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: bool(env, "TRUST_PROXY", false),
     updatePackageName: optional(env, "UPDATE_PACKAGE_NAME", "@hilbras/omnicloud"),
     updateCheckEnabled: bool(env, "UPDATE_CHECK_ENABLED", true),
+    trashRetentionDays: int(env, "TRASH_RETENTION_DAYS", 30),
   };
 }

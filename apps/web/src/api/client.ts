@@ -328,8 +328,7 @@ export const api = {
     },
     versions(id: string): Promise<{ versions: FileVersionDTO[] }> {
       return requestJson("GET", filePath(id, "/versions"));
-    },
-    /** Makes an earlier version current again. */
+    } /** Makes an earlier version current again. */,
     restoreVersion(id: string, versionId: string): Promise<{ file: FileDTO }> {
       return requestJson(
         "POST",
@@ -418,6 +417,19 @@ export const api = {
     },
     empty(): Promise<EmptyTrashResultDTO> {
       return requestJson("POST", "/api/trash/empty");
+    },
+    /** How long trashed items are kept; 0 means indefinitely. */
+    retention(): Promise<{ days: number }> {
+      return requestJson("GET", "/api/trash/retention");
+    },
+    /** Removes the caller's expired trash now. */
+    purge(): Promise<{
+      deletedFiles: number;
+      deletedFolders: number;
+      failedFiles: number;
+      skippedFiles: number;
+    }> {
+      return requestJson("POST", "/api/trash/purge");
     },
   },
 

@@ -230,6 +230,7 @@ export function createInMemoryRepos(): InMemoryRepos {
   const usersRepo: UserRepository = {
     findById: async (id) => users.find((u) => u.id === id) ?? null,
     findByTelegramId: async (tid) => users.find((u) => u.telegramUserId === tid) ?? null,
+    listAll: async () => [...users],
     upsertFromTelegram: async (input) => {
       const existing = users.find((u) => u.telegramUserId === input.telegramUserId);
       if (existing) {

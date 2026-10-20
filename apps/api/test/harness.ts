@@ -28,6 +28,7 @@ export function testConfig(maxUploadBytes = 1024 * 1024, webDistDir?: string): A
     trustProxy: false,
     updatePackageName: "@hilbras/omnicloud",
     updateCheckEnabled: false,
+    trashRetentionDays: 30,
   };
 }
 

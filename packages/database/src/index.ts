@@ -274,6 +274,10 @@ function createUserRepo(prisma: PrismaClient): UserRepository {
       });
       return user ? mapUser(user) : null;
     },
+    async listAll() {
+      const users = await prisma.user.findMany();
+      return users.map(mapUser);
+    },
     async upsertFromTelegram(input) {
       const data = {
         username: input.username,

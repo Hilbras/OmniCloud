@@ -990,6 +990,29 @@ class TrashApi {
   async empty(): Promise<EmptyTrashResultDTO> {
     return this.client.request<EmptyTrashResultDTO>("POST", "/api/trash/empty");
   }
+
+  /** How long trashed items are kept before they are removed for good. */
+  async retention(): Promise<{ days: number }> {
+    return this.client.request<{ days: number }>("GET", "/api/trash/retention");
+  }
+
+  /**
+   * Removes the expired trash now, without waiting for the scheduled job.
+   * Items still within their retention period are left alone.
+   */
+  async purge(): Promise<{
+    deletedFiles: number;
+    deletedFolders: number;
+    failedFiles: number;
+    skippedFiles: number;
+  }> {
+    return this.client.request<{
+      deletedFiles: number;
+      deletedFolders: number;
+      failedFiles: number;
+      skippedFiles: number;
+    }>("POST", "/api/trash/purge");
+  }
 }
 
 class StorageApi {

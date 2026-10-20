@@ -73,6 +73,42 @@ try {
   // Run the first update check right away so the sidebar has data now rather
   // than after the first interval. A failure here is never fatal.
   void updateChecker?.check();
+
+  // ── Trash retention ───────────────────────────────────────────────────────
+  // Trashed items are kept for a configured number of days and then removed
+  // for good, so the trash cannot grow without bound. The job is periodic and
+  // tolerant: one user's failure never stops the others.
+  const purgeTrash = async () => {
+    const days = config.trashRetentionDays;
+    if (days <= 0) return;
+    let users: { id: string }[];
+    try {
+      users = await container.repos.users.listAll();
+    } catch (error) {
+      app.log.warn({ err: error }, "Could not list users for the trash purge");
+      return;
+    }
+    for (const user of users) {
+      try {
+        const result = await container.trash.purgeExpired(user.id, days);
+        if (result.deletedFiles > 0 || result.deletedFolders > 0) {
+          app.log.info(
+            {
+              userId: user.id,
+              deletedFiles: result.deletedFiles,
+              deletedFolders: result.deletedFolders,
+              failedFiles: result.failedFiles,
+            },
+            "Purged expired trash",
+          );
+        }
+      } catch (error) {
+        app.log.warn({ err: error, userId: user.id }, "Trash purge failed for a user");
+      }
+    }
+  };
+  void purgeTrash();
+  setInterval(purgeTrash, 6 * 60 * 60 * 1000).unref();
 } catch (error) {
   app.log.error({ err: error }, "Failed to start");
   await container.shutdown();
