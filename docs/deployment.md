@@ -119,6 +119,35 @@ Workspace scripts:
 | `pnpm build`       | Build type declarations and all packages             |
 | `pnpm dev:api`     | Run the API in watch mode (development)              |
 
+### Custom domain
+
+The web build takes its canonical origin from `VITE_SITE_URL`. It is inlined at
+build time and drives the canonical link, Open Graph and Twitter tags, the
+JSON-LD `@id`/`url`/`logo` fields, `robots.txt` and `sitemap.xml`.
+
+```bash
+VITE_SITE_URL=https://cloud.example.com pnpm --filter @omnicloud/web build
+```
+
+Leaving it unset falls back to the default Vercel deployment URL. Changing it
+requires a rebuild, because the value is baked into the static output.
+
+Steps to attach a domain to the Vercel project:
+
+1. Add the domain in the Vercel project settings (**Settings → Domains**).
+2. Point the domain's DNS at Vercel — either a `CNAME` to `cname.vercel-dns.com`
+   or an `A` record to Vercel's anycast addresses, as Vercel shows for the
+   domain.
+3. Set `VITE_SITE_URL=https://your.domain` in the deployment's environment
+   variables and redeploy so the build picks it up.
+4. Confirm the built output: `dist/index.html` must contain zero occurrences of
+   the old domain, and `dist/robots.txt` must list
+   `Sitemap: https://your.domain/sitemap.xml`.
+
+`apps/web/src/lib/site-url.ts` is the single runtime source of truth and falls
+back to the same default, so per-route canonical URLs produced by
+`usePageMeta` always match the static tags.
+
 ## Single-port serving
 
 When `WEB_DIST_DIR` is set to the web app's build output and the directory

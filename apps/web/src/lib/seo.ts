@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { SITE_URL } from "./site-url";
 
-export const SITE_URL = "https://omnicloud-chi.vercel.app";
+export { SITE_URL } from "./site-url";
 
 function setMeta(attr: "name" | "property", key: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
