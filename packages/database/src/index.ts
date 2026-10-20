@@ -878,6 +878,12 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
             ? { currentVersionId: patch.currentVersionId }
             : {}),
           ...(patch.versionCount !== undefined ? { versionCount: patch.versionCount } : {}),
+          ...(patch.encryptionFormat !== undefined
+            ? { encryptionFormat: patch.encryptionFormat }
+            : {}),
+          ...(patch.wrappedKey !== undefined ? { wrappedKey: patch.wrappedKey } : {}),
+          ...(patch.metadataBlob !== undefined ? { metadataBlob: patch.metadataBlob } : {}),
+          ...(patch.keyEpoch !== undefined ? { keyEpoch: patch.keyEpoch } : {}),
         },
       });
       return mapFile(file);

@@ -155,6 +155,20 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
     return reply.send({ removed });
   });
 
+  // ── Restore an earlier version as the current one ────────────────────────
+  app.post("/api/files/:id/versions/:versionId/restore", async (request) => {
+    const { id, versionId } = request.params as { id: string; versionId: string };
+    const record = await container.files.restoreVersion(request.user.id, id, versionId);
+    return { file: toFileDTO(record) };
+  });
+
+  // ── Remove one historical version ─────────────────────────────────────────
+  app.delete("/api/files/:id/versions/:versionId", async (request, reply) => {
+    const { id, versionId } = request.params as { id: string; versionId: string };
+    await container.files.deleteVersion(request.user.id, id, versionId);
+    return reply.status(204).send();
+  });
+
   // ── Replace (upload a new version) ────────────────────────────────────────
   app.post("/api/files/:id/replace", async (request, reply) => {
     const { id } = request.params as { id: string };

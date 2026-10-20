@@ -548,6 +548,113 @@ describe("migrate", () => {
   });
 });
 
+// ── versions ─────────────────────────────────────────────────────────────────
+
+describe("versions", () => {
+  const fileDto = (id: string) => ({
+    id,
+    name: "v.txt",
+    size: 3,
+    mimeType: "text/plain",
+    sha256: "0".repeat(64),
+    folderId: null,
+    starred: false,
+    trashed: false,
+    deletedAt: null,
+    versionCount: 2,
+    currentVersionId: "ver2",
+    encryptionFormat: null,
+    wrappedKey: null,
+    metadataBlob: null,
+    keyEpoch: null,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  });
+
+  const versionDto = (id: string, n: number, isCurrent: boolean) => ({
+    id,
+    fileId: "f1",
+    versionNumber: n,
+    size: 3,
+    mimeType: "text/plain",
+    sha256: "0".repeat(64),
+    telegramMessageId: 1,
+    isCurrent,
+    encryptionFormat: null,
+    wrappedKey: null,
+    metadataBlob: null,
+    keyEpoch: null,
+    createdAt: "2026-10-01T00:00:00.000Z",
+  });
+
+  it("lists the versions with their ids", async () => {
+    const setup = makeSetup((url) => {
+      if (url.endsWith("/api/files/f1/versions")) {
+        return json({
+          versions: [versionDto("ver2", 2, true), versionDto("ver1", 1, false)],
+        });
+      }
+      if (url.endsWith("/api/files/f1")) return json({ file: fileDto("f1") });
+      return json({ error: { code: "NOT_FOUND" } }, 404);
+    });
+    withConfig({});
+    const code = await runE2eeCommand(["versions", "f1", "--config", setup.configPath], setup.ctx);
+    expect(code).toBe(0);
+    expect(out(setup)).toContain("2 version(s)");
+    expect(out(setup)).toContain("v2");
+    expect(out(setup)).toContain("(current)");
+    expect(out(setup)).toContain("id: ver1");
+  });
+
+  it("restores a version", async () => {
+    const setup = makeSetup((url) => {
+      if (url.includes("/versions/ver1/restore")) return json({ file: fileDto("f1") });
+      return json({ error: { code: "NOT_FOUND" } }, 404);
+    });
+    withConfig({});
+    const code = await runE2eeCommand(
+      ["versions", "f1", "--restore", "ver1", "--config", setup.configPath],
+      setup.ctx,
+    );
+    expect(code).toBe(0);
+    expect(out(setup)).toContain("restored version ver1");
+  });
+
+  it("deletes a version", async () => {
+    const setup = makeSetup((url) => {
+      if (url.includes("/versions/ver1") && url.endsWith("/versions/ver1")) {
+        return new Response(null, { status: 204 });
+      }
+      return json({ error: { code: "NOT_FOUND" } }, 404);
+    });
+    withConfig({});
+    const code = await runE2eeCommand(
+      ["versions", "f1", "--delete", "ver1", "--config", setup.configPath],
+      setup.ctx,
+    );
+    expect(code).toBe(0);
+    expect(out(setup)).toContain("deleted version ver1");
+  });
+
+  it("rejects using both --restore and --delete", async () => {
+    const setup = makeSetup(() => json({}));
+    withConfig({});
+    await expect(
+      runE2eeCommand(
+        ["versions", "f1", "--restore", "ver1", "--delete", "ver2", "--config", setup.configPath],
+        setup.ctx,
+      ),
+    ).rejects.toThrow(/not both/);
+  });
+
+  it("rejects unknown subcommand usage", async () => {
+    const setup = makeSetup(() => json({}));
+    await expect(
+      runE2eeCommand(["versions", "--config", setup.configPath], setup.ctx),
+    ).rejects.toThrow(/usage: omnicloud versions/);
+  });
+});
+
 // ── login / logout ───────────────────────────────────────────────────────────
 
 describe("login / logout", () => {

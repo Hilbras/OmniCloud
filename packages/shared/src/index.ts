@@ -184,6 +184,8 @@ export const ACTIVITY_ACTIONS = [
   "delete",
   "create_folder",
   "replace",
+  "restore_version",
+  "delete_version",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
 

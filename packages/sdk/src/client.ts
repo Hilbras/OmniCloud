@@ -559,6 +559,32 @@ class FilesApi {
   }
 
   /**
+   * Makes an earlier version of a file current again.
+   *
+   * The file is pointed back at the version that already exists; nothing is
+   * re-uploaded, so the restored content keeps the version id its ciphertext
+   * is bound to and decrypts exactly as before.
+   */
+  async restoreVersion(id: string, versionId: string): Promise<FileDTO> {
+    const { file } = await this.client.request<{ file: FileDTO }>(
+      "POST",
+      `/api/files/${id}/versions/${encodeURIComponent(versionId)}/restore`,
+    );
+    return file;
+  }
+
+  /**
+   * Removes one historical version of a file. The current version cannot be
+   * removed this way — restore another version first, or delete the file.
+   */
+  async deleteVersion(id: string, versionId: string): Promise<void> {
+    await this.client.request<void>(
+      "DELETE",
+      `/api/files/${id}/versions/${encodeURIComponent(versionId)}`,
+    );
+  }
+
+  /**
    * Uploads a file with progress and retry support. Uses XMLHttpRequest when
    * available (browsers) so progress and cancellation work; falls back to
    * fetch elsewhere.

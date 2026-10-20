@@ -922,6 +922,93 @@ export class FileService {
     return removed;
   }
 
+  /**
+   * Makes an earlier version of a file current again.
+   *
+   * The file is pointed back at the existing version rather than having its
+   * content copied into a new one. That is not an optimisation but a
+   * requirement: the OCE1 record authentication binds the version id, so a
+   * copy of an old version's ciphertext under a new id would fail to
+   * authenticate and could never be decrypted. Pointing at the old version
+   * keeps its bytes, its wrapped key and its version id together, so it
+   * decrypts exactly as it always did.
+   *
+   * The file's own name is left alone: a rename is a property of the file, not
+   * of a version. For an encrypted file the restored version's own metadata
+   * blob comes back with it, so the name embedded in that version's metadata
+   * is the one a download will use.
+   */
+  async restoreVersion(userId: string, fileId: string, versionId: string): Promise<FileRecord> {
+    const record = await this.get(userId, fileId);
+    const version = await this.files.findVersionById(versionId);
+    if (!version || version.fileId !== fileId || version.userId !== userId) {
+      throw new NotFoundError("Version not found", "file");
+    }
+    if (record.currentVersionId === versionId) {
+      throw new ConflictError("That version is already the current one");
+    }
+
+    const updated = await this.files.update(fileId, {
+      currentVersionId: version.id,
+      size: version.size,
+      mimeType: version.mimeType,
+      sha256: version.sha256,
+      telegramMessageId: version.telegramMessageId,
+      encryptionFormat: version.encryptionFormat ?? null,
+      wrappedKey: version.wrappedKey ?? null,
+      metadataBlob: version.metadataBlob ?? null,
+      keyEpoch: version.keyEpoch ?? null,
+    });
+
+    await this.activity.record({
+      userId,
+      action: "restore_version",
+      resourceType: "file",
+      resourceId: fileId,
+      resourceName: updated.name,
+      metadata: { versionId: version.id, versionNumber: version.versionNumber },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Removes one historical version of a file.
+   *
+   * The current version cannot be deleted: the file would have nothing left to
+   * point at. Restore another version first, or delete the file. The version's
+   * channel message is removed before its row, so a failure leaves the row
+   * behind for reconciliation rather than stranding the object.
+   */
+  async deleteVersion(userId: string, fileId: string, versionId: string): Promise<void> {
+    const record = await this.get(userId, fileId);
+    const version = await this.files.findVersionById(versionId);
+    if (!version || version.fileId !== fileId || version.userId !== userId) {
+      throw new NotFoundError("Version not found", "file");
+    }
+    if (record.currentVersionId === versionId) {
+      throw new ConflictError(
+        "The current version cannot be deleted. Restore another version first, or delete the file.",
+      );
+    }
+
+    const engine = await this.engineFor(userId);
+    await engine.remove({ messageId: String(version.telegramMessageId) });
+    await this.files.deleteVersion(version.id);
+
+    const remaining = Math.max(0, record.versionCount - 1);
+    await this.files.update(fileId, { versionCount: remaining });
+
+    await this.activity.record({
+      userId,
+      action: "delete_version",
+      resourceType: "file",
+      resourceId: fileId,
+      resourceName: `${record.name} (version ${version.versionNumber})`,
+      metadata: { versionId: version.id, versionNumber: version.versionNumber },
+    });
+  }
+
   private async assertFolder(userId: string, folderId: string): Promise<void> {
     const folder = await this.folders.findById(folderId);
     if (!folder || folder.userId !== userId) {

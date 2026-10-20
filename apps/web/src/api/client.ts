@@ -329,6 +329,17 @@ export const api = {
     versions(id: string): Promise<{ versions: FileVersionDTO[] }> {
       return requestJson("GET", filePath(id, "/versions"));
     },
+    /** Makes an earlier version current again. */
+    restoreVersion(id: string, versionId: string): Promise<{ file: FileDTO }> {
+      return requestJson(
+        "POST",
+        filePath(id, `/versions/${encodeURIComponent(versionId)}/restore`),
+      );
+    },
+    /** Removes one historical version. The current version cannot be removed. */
+    deleteVersion(id: string, versionId: string): Promise<void> {
+      return requestEmpty("DELETE", filePath(id, `/versions/${encodeURIComponent(versionId)}`));
+    },
     update(id: string, patch: { name?: string; starred?: boolean }): Promise<{ file: FileDTO }> {
       return requestJson("PATCH", filePath(id), patch);
     },

@@ -441,6 +441,10 @@ export function createInMemoryRepos(): InMemoryRepos {
       if (patch.telegramMessageId !== undefined) file.telegramMessageId = patch.telegramMessageId;
       if (patch.currentVersionId !== undefined) file.currentVersionId = patch.currentVersionId;
       if (patch.versionCount !== undefined) file.versionCount = patch.versionCount;
+      if (patch.encryptionFormat !== undefined) file.encryptionFormat = patch.encryptionFormat;
+      if (patch.wrappedKey !== undefined) file.wrappedKey = patch.wrappedKey;
+      if (patch.metadataBlob !== undefined) file.metadataBlob = patch.metadataBlob;
+      if (patch.keyEpoch !== undefined) file.keyEpoch = patch.keyEpoch;
       file.updatedAt = now();
       return file;
     },

@@ -482,6 +482,59 @@ interface MigrateOutcome {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// versions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lists a file's versions and can restore or delete one.
+ *
+ *   omnicloud versions <fileId>
+ *   omnicloud versions <fileId> --restore <versionId>
+ *   omnicloud versions <fileId> --delete <versionId>
+ */
+export async function runVersions(argv: string[], ctx: CliContext): Promise<number> {
+  const parsed = parseCommandArgs(argv, [...COMMON_VALUES, "--restore", "--delete"], COMMON_FLAGS);
+  if (parsed.positionals.length !== 1) {
+    throw new Error(
+      "usage: omnicloud versions <fileId> [--restore <versionId>|--delete <versionId>]",
+    );
+  }
+  const options = commonOptions(parsed);
+  const token = await resolveToken(options);
+  const client = ctx.createClient({ baseUrl: resolveUrl(options), token });
+  const fileId = parsed.positionals[0]!;
+
+  const restoreId = parsed.values.restore;
+  const deleteId = parsed.values.delete;
+  if (restoreId !== undefined && deleteId !== undefined) {
+    throw new Error("use either --restore or --delete, not both");
+  }
+
+  if (restoreId !== undefined) {
+    const file = await client.files.restoreVersion(fileId, restoreId);
+    ctx.io.out(`restored version ${restoreId} of ${file.name}\n`);
+    return 0;
+  }
+  if (deleteId !== undefined) {
+    await client.files.deleteVersion(fileId, deleteId);
+    ctx.io.out(`deleted version ${deleteId}\n`);
+    return 0;
+  }
+
+  const file = await client.files.get(fileId);
+  const versions = await client.files.versions(fileId);
+  ctx.io.out(`${file.name} — ${versions.length} version(s)\n`);
+  for (const version of versions) {
+    const marker = version.isCurrent ? " (current)" : "";
+    ctx.io.out(
+      `  v${version.versionNumber}  ${version.size} bytes  ${version.createdAt}${marker}\n`,
+    );
+    ctx.io.out(`      id: ${version.id}\n`);
+  }
+  return 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // login / logout
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -546,6 +599,7 @@ const COMMANDS: Record<string, (argv: string[], ctx: CliContext) => Promise<numb
   upload: runUpload,
   download: runDownload,
   migrate: runMigrate,
+  versions: runVersions,
   login: runLogin,
   logout: runLogout,
 };

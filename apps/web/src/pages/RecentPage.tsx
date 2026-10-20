@@ -29,6 +29,8 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   delete: "Deleted",
   create_folder: "Created folder",
   replace: "New version",
+  restore_version: "Version restored",
+  delete_version: "Version deleted",
 };
 
 interface RecentRow {

@@ -292,6 +292,15 @@ export interface FileRepository {
       telegramMessageId?: number;
       currentVersionId?: string | null;
       versionCount?: number;
+      /**
+       * Encryption fields of the current version. Set together when a restore
+       * makes an older version current again, so the file always describes the
+       * version it points at.
+       */
+      encryptionFormat?: string | null;
+      wrappedKey?: string | null;
+      metadataBlob?: string | null;
+      keyEpoch?: number | null;
     },
   ): Promise<FileRecord>;
   updateMany(
