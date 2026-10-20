@@ -43,6 +43,18 @@ A 4× increase in file size raises upload peak RSS by 17% and download peak by
 20%, not by 4×. A client that buffered plaintext or ciphertext would show peak
 RSS tracking file size proportionally.
 
+**The automated assertion uses the JS heap, not RSS.** RSS is dominated by
+V8/Buffer allocator high-water, which varies between processes by more than the
+file-size difference the test is about — asserting on it produced a flaky test
+(ratio and absolute bounds both failed intermittently on identical code). The
+heap is deterministic: measured peak `heapUsed` is **23–27 MB for both the
+32 MiB and the 128 MiB file**, so quadrupling the input does not move it. A
+client that buffered the plaintext or ciphertext would show the heap growing in
+proportion to the file, which is exactly what the assertion checks.
+
+RSS is still recorded in the test output and here, but only as a reported
+metric.
+
 Supporting probe (`encryptChunks` → file, `--expose-gc`, identical harness):
 
 | File size | Peak RSS | After forced GC | `heapUsed` |
@@ -58,9 +70,9 @@ retention, not accumulated data.
 ## Conclusion
 
 The M5 exit criterion — peak memory bounded by chunk size (4 MiB), not file
-size — holds for the SDK/CLI path. Absolute peak RSS is allocator-dependent, so
-the automated assertion is the **ratio between file sizes**, which is durable
-across machines; absolute numbers are recorded above for reference.
+size — holds for the SDK/CLI path. The durable automated assertion is the
+**peak JS heap**, which stays at 23–27 MB across a 4× file-size increase;
+absolute RSS is allocator-dependent and is reported rather than asserted.
 
 ## Not verified
 

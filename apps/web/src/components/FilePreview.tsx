@@ -1,10 +1,8 @@
 import { Download, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
-import { fetchDecryptedPreview, PREVIEW_MAX_BYTES } from "../api/download";
-import { downloadFile } from "../api/download";
+import { downloadFile, fetchDecryptedPreview } from "../api/download";
 import { errorMessage } from "../api/client";
-import { formatBytes } from "../lib/format";
 import type { DriveItem } from "../lib/drive";
 import { LoadingSpinner } from "./LoadingSpinner";
 
@@ -62,8 +60,6 @@ export function FilePreview({ item, onClose }: FilePreviewProps) {
     };
   }, [item.id, file]);
 
-  const tooLarge = file !== null && file.size > PREVIEW_MAX_BYTES;
-
   return (
     <Modal title={item.name} onClose={onClose}>
       <div className="space-y-4">
@@ -77,6 +73,9 @@ export function FilePreview({ item, onClose }: FilePreviewProps) {
             <LoadingSpinner label="Decrypting preview…" />
           </div>
         ) : error !== null ? (
+          // Covers every failure, including a file above the preview ceiling —
+          // fetchDecryptedPreview rejects before downloading in that case, so an
+          // oversized file never reaches the network.
           <div className="glass rounded-xl border border-line p-4 text-[13px]">
             <p className="text-[#d9534f] dark:text-[#e97066]">{error}</p>
             <div className="mt-3 flex justify-end">
@@ -87,23 +86,6 @@ export function FilePreview({ item, onClose }: FilePreviewProps) {
               >
                 <Download className="h-3.5 w-3.5" aria-hidden="true" />
                 Download instead
-              </button>
-            </div>
-          </div>
-        ) : tooLarge ? (
-          <div className="glass rounded-xl border border-line p-4 text-[13px]">
-            <p>
-              This file is {formatBytes(file?.size ?? 0)} — too large to preview in the browser.
-              Download it to disk instead.
-            </p>
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={() => void downloadFile(item.id, file)}
-                className="btn-secondary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px]"
-              >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                Download
               </button>
             </div>
           </div>
