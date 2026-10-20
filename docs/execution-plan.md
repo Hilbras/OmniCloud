@@ -87,12 +87,16 @@ Files: `packages/sdk/src/encryption.ts` + `client.ts`, `apps/web/src/api/upload.
 
 **Status (verified):** shipped in `dd54dc2` + the memory test below.
 
-| Measure                         | Result                                     |
-| ------------------------------- | ------------------------------------------ |
-| 1 GiB stream upload             | 17.4 MiB/s, round-trip `roundTripOk: true` |
-| 1 GiB stream download + decrypt | 14.9 MiB/s                                 |
-| Client peak RSS, 32 MiB file    | upload 231 MB / download 275 MB            |
-| Client peak RSS, 128 MiB file   | upload 271 MB / download 329 MB            |
+| Measure                         | Result                                                     |
+| ------------------------------- | ---------------------------------------------------------- |
+| 1 GiB stream upload             | 4.0–17.4 MiB/s across runs, round-trip `roundTripOk: true` |
+| 1 GiB stream download + decrypt | 7.2–14.9 MiB/s across runs                                 |
+| Client peak RSS, 32 MiB file    | upload 231 MB / download 275 MB                            |
+| Client peak RSS, 128 MiB file   | upload 271 MB / download 329 MB                            |
+
+Throughput varies several-fold between runs on the same machine depending on
+cache state and background load, so only the range is meaningful; the
+`roundTripOk` round-trip result is the durable signal.
 
 The memory figures are measured with the SDK client in a **separate process** from
 the HTTP server (`packages/sdk/test/streaming-memory.test.ts`); an in-process
@@ -101,6 +105,7 @@ benchmark cannot attribute RSS between client and server. Peak RSS is flat withi
 stream is bounded by the 4 MiB chunk size rather than the file size. The residual
 ~200 MB is V8/Buffer high-water retention, so an absolute ceiling is
 allocator-dependent; the ratio between file sizes is the durable assertion.
+`bench-streaming.ts` no longer emits RSS fields for the same reason.
 
 **Not verified:** the Web 500 MB Chromium target was not measured — `encrypt-stream.ts`
 ships with an OPFS spool and a documented 1 GiB buffered fallback ceiling, but no

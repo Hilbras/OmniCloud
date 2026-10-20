@@ -1,15 +1,23 @@
 /**
- * M5 streaming benchmark — measures throughput and peak RSS for the large-file
- * E2EE paths against a local HTTP server (no Telegram; this isolates the
- * client crypto + transfer path, which is what M5 changed).
+ * M5 streaming benchmark — measures throughput for the large-file E2EE paths
+ * against a local HTTP server (no Telegram; this isolates the client crypto +
+ * transfer path, which is what M5 changed).
  *
  * Runs:
  *   1. streaming upload (encrypt → spool → multipart) at BENCH_SIZE (default 1 GiB)
  *   2. streaming download (envelope → chunked decrypt → disk) of the same file
  *   3. in-memory upload (old path) at MEM_SIZE (default 256 MiB) for comparison
  *
+ * This harness deliberately reports NO memory figures. The client, the test
+ * server, and the generated fixtures share one process, so RSS here cannot be
+ * attributed to the SDK — an earlier version of this script emitted
+ * `peakRssMb` fields that looked like client measurements and were not. Client
+ * memory is measured separately, with the client in its own process, by
+ * `packages/sdk/test/streaming-memory.test.ts` (see
+ * `docs/evidence/streaming-memory.md`).
+ *
  * Usage:
- *   node --env-file=.env apps/api/node_modules/tsx/dist/cli.mjs \
+ *   node apps/api/node_modules/tsx/dist/cli.mjs \
  *     packages/sdk/scripts/bench-streaming.ts
  *
  * Prints a JSON summary. Exit 0 = all runs completed and the round-trip
@@ -35,28 +43,6 @@ function patterned(size: number, seed = 7): Uint8Array {
   return out;
 }
 
-function rssMb(): number {
-  return Math.round((process.memoryUsage().rss / (1024 * 1024)) * 10) / 10;
-}
-
-function sampleRss(): { stop: () => { peakMb: number; deltaMb: number } } {
-  const baseline = process.memoryUsage().rss;
-  let peak = baseline;
-  const timer = setInterval(() => {
-    const rss = process.memoryUsage().rss;
-    if (rss > peak) peak = rss;
-  }, 100);
-  return {
-    stop: () => {
-      clearInterval(timer);
-      return {
-        peakMb: Math.round((peak / (1024 * 1024)) * 10) / 10,
-        deltaMb: Math.round(((peak - baseline) / (1024 * 1024)) * 10) / 10,
-      };
-    },
-  };
-}
-
 async function writePatterned(path: string, size: number): Promise<void> {
   const handle = await (await import("node:fs/promises")).open(path, "w");
   try {
@@ -79,13 +65,6 @@ async function sha256File(path: string): Promise<string> {
   const hash = createHash("sha256");
   await pipeline(createReadStream(path), hash);
   return hash.digest("hex");
-}
-
-function _json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
 }
 
 interface ServerState {
@@ -268,42 +247,33 @@ async function main() {
     streamUploadMiB: STREAM_SIZE / (1024 * 1024),
     memUploadMiB: MEM_SIZE / (1024 * 1024),
     node: process.version,
-    baselineRssMb: rssMb(),
+    note: "throughput only; client memory is measured in a separate process by test/streaming-memory.test.ts",
   };
 
   // ── 1. Streaming upload ──────────────────────────────────────────────────
-  let sampler = sampleRss();
   let t0 = performance.now();
   const up = await uploadEncryptedStream(client, plainPath, { name: "bench.bin", urk, spoolDir });
   const uploadMs = performance.now() - t0;
-  const uploadRss = sampler.stop();
   results.streamingUpload = {
     ms: Math.round(uploadMs),
     mibPerSec: Math.round((STREAM_SIZE / (1024 * 1024) / (uploadMs / 1000)) * 10) / 10,
-    peakRssMb: uploadRss.peakMb,
-    peakRssDeltaMb: uploadRss.deltaMb,
     fileId: up.fileId,
   };
 
   // ── 2. Streaming download + decrypt ──────────────────────────────────────
-  sampler = sampleRss();
   t0 = performance.now();
   const down = await downloadDecryptedToFile(client, "bench", { urk, targetPath: outPath });
   const downloadMs = performance.now() - t0;
-  const downloadRss = sampler.stop();
   const roundTripOk = down.sha256 === plainSha;
   results.streamingDownload = {
     ms: Math.round(downloadMs),
     mibPerSec: Math.round((STREAM_SIZE / (1024 * 1024) / (downloadMs / 1000)) * 10) / 10,
-    peakRssMb: downloadRss.peakMb,
-    peakRssDeltaMb: downloadRss.deltaMb,
     roundTripOk,
     bytes: down.bytes,
   };
 
   // ── 3. In-memory upload (previous path) at the smaller size ──────────────
   const { readFile } = await import("node:fs/promises");
-  sampler = sampleRss();
   t0 = performance.now();
   const memPlaintext = new Uint8Array(await readFile(memPlainPath));
   const memMid = performance.now();
@@ -313,14 +283,11 @@ async function main() {
     { name: "bench-mem.bin", urk },
   );
   const memMs = performance.now() - t0;
-  const memRss = sampler.stop();
   results.inMemoryUpload = {
     ms: Math.round(memMs),
     encryptMs: Math.round(memMid - t0),
     uploadMs: Math.round(memMs - (memMid - t0)),
     mibPerSec: Math.round((MEM_SIZE / (1024 * 1024) / (memMs / 1000)) * 10) / 10,
-    peakRssMb: memRss.peakMb,
-    peakRssDeltaMb: memRss.deltaMb,
     fileId: memUp.fileId,
   };
 

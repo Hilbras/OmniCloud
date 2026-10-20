@@ -8,20 +8,26 @@ question it was meant to answer.
 `packages/sdk/scripts/bench-streaming.ts`, Node v24.21.0, single process
 containing the client _and_ the test HTTP server _and_ the generated fixtures.
 
-| Phase                         | 1 GiB   | Result                                     |
-| ----------------------------- | ------- | ------------------------------------------ |
-| Streaming upload              | 58.7 s  | 17.4 MiB/s, round-trip `roundTripOk: true` |
-| Streaming download + decrypt  | 68.7 s  | 14.9 MiB/s                                 |
-| In-memory upload (prior path) | 256 MiB | 0.22 s                                     |
+| Phase                         | 1 GiB   | Result                                    |
+| ----------------------------- | ------- | ----------------------------------------- |
+| Streaming upload              | 258 s   | 4.0 MiB/s                                 |
+| Streaming download + decrypt  | 142 s   | 7.2 MiB/s, round-trip `roundTripOk: true` |
+| In-memory upload (prior path) | 256 MiB | 0.40 s                                    |
 
 Correctness is established here: the 1 GiB file decrypts byte-identically
 (sha256 match), and the stored envelope begins with the `OCE1` magic.
 
-**The `peakRssMb` / `peakRssDeltaMb` fields in that JSON are not a valid client
-memory measurement.** They sample the RSS of one process that holds the client,
-the server, and the fixtures at once, so they cannot be attributed to the SDK.
-The `+1021 MB` upload figure in particular is the server-side write path, not
-client buffering. Do not quote it as a client number.
+Throughput varies several-fold between runs on the same machine depending on
+cache state and background load (earlier runs of this same script measured
+17.4 MiB/s upload and 14.9 MiB/s download). Treat throughput as indicative only;
+the `roundTripOk` result is the durable signal.
+
+**This script reports no memory figures.** An earlier version emitted
+`peakRssMb` / `peakRssDeltaMb` fields that read like client measurements but
+sampled one process holding the client, the server and the fixtures at once, so
+they could not be attributed to the SDK — the `+1021 MB` upload figure was the
+server-side write path, not client buffering. Those fields have been removed and
+client memory is measured below instead.
 
 ## 2. Client memory — `packages/sdk/test/streaming-memory.test.ts`
 
