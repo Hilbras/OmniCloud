@@ -26,19 +26,23 @@ export function FilePreview({ item, onClose }: FilePreviewProps) {
   // Only ever opened for a file item; narrow once so the effect body and the
   // render below can rely on it.
   const file = item.file;
+  // Key the effect on the identity of the *file*, not on the DTO object: a
+  // parent re-render that produces a new object with the same contents must
+  // not re-download and re-decrypt the file.
+  const fileId = file?.id ?? null;
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (file === null) return;
+    if (file === null || fileId === null) return;
     let revoked: string | null = null;
     let cancelled = false;
     setUrl(null);
     setError(null);
     setLoading(true);
 
-    fetchDecryptedPreview(item.id, file)
+    fetchDecryptedPreview(fileId, file)
       .then((preview) => {
         if (cancelled) return;
         const objectUrl = URL.createObjectURL(preview.blob);
@@ -58,7 +62,8 @@ export function FilePreview({ item, onClose }: FilePreviewProps) {
       cancelled = true;
       if (revoked !== null) URL.revokeObjectURL(revoked);
     };
-  }, [item.id, file]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId]);
 
   return (
     <Modal title={item.name} onClose={onClose}>
