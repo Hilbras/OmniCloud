@@ -27,6 +27,7 @@ import type {
   StorageHealthDTO,
   StorageStatsDTO,
   TrashPageDTO,
+  UpdateCheckDTO,
   UserDTO,
 } from "@omnicloud/shared";
 
@@ -305,6 +306,16 @@ export const api = {
     },
     integrityCheck(deep = false): Promise<{ report: IntegrityReportDTO }> {
       return requestJson("POST", "/api/storage/integrity/check", deep ? { deep: true } : {});
+    },
+  },
+
+  /**
+   * Update availability, as last checked by the server against the npm
+   * registry. The server caches the result, so polling this is cheap.
+   */
+  update: {
+    check(): Promise<UpdateCheckDTO> {
+      return requestJson("GET", "/api/update/check");
     },
   },
 

@@ -5,8 +5,7 @@ import { toStatsDTO, toStorageDTO, toStorageHealthDTO } from "../mappers";
 import { optionalBoolean, requireBody, requireStringArray } from "../validation";
 import { ValidationError } from "@omnicloud/core";
 import { encryptionCheck, readiness } from "../health";
-
-const VERSION = "0.3.0";
+import { APP_VERSION } from "../version";
 
 /**
  * Storage endpoints: initialization, health, statistics and integrity
@@ -21,7 +20,7 @@ export function registerStorageRoutes(app: FastifyInstance, container: Container
       database,
       storage: "unknown" as HealthStatus,
       uptimeSeconds: Math.round(process.uptime()),
-      version: VERSION,
+      version: APP_VERSION,
     };
   });
 

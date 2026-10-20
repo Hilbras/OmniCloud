@@ -16,6 +16,10 @@ export interface AppConfig {
   /** Optional storage quota shown on the dashboard (null = unlimited). */
   quotaBytes: number | null;
   trustProxy: boolean;
+  /** npm package checked for newer releases; empty disables the update check. */
+  updatePackageName: string;
+  /** Whether the periodic npm update check runs. */
+  updateCheckEnabled: boolean;
 }
 
 function optional(env: NodeJS.ProcessEnv, name: string, fallback: string): string {
@@ -76,5 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .filter(Boolean),
     quotaBytes: Number.isFinite(quotaGb) && quotaGb > 0 ? Math.round(quotaGb * 1024 ** 3) : null,
     trustProxy: bool(env, "TRUST_PROXY", false),
+    updatePackageName: optional(env, "UPDATE_PACKAGE_NAME", "@hilbras/omnicloud"),
+    updateCheckEnabled: bool(env, "UPDATE_CHECK_ENABLED", true),
   };
 }

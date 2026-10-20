@@ -248,6 +248,26 @@ export interface IntegrityIssueDTO {
   detail: string | null;
 }
 
+/**
+ * Result of the periodic "is a newer release available?" check.
+ *
+ * `status` distinguishes the states the UI must react to differently:
+ * `update_available` is the only one that should prompt the user.
+ */
+export interface UpdateCheckDTO {
+  status: "update_available" | "up_to_date" | "unknown" | "not_published";
+  /** The version currently running on the server. */
+  currentVersion: string;
+  /** The newest version on npm; null when it could not be determined. */
+  latestVersion: string | null;
+  /** npm package the check is performed against. */
+  packageName: string;
+  /** When the check last completed, ISO-8601. */
+  checkedAt: string;
+  /** Human-readable reason, only for `unknown` / `not_published`. */
+  detail: string | null;
+}
+
 export interface IntegrityReportDTO {
   checkedAt: string;
   filesChecked: number;

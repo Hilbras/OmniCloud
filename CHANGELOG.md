@@ -43,6 +43,11 @@ and there is no silent fallback to unencrypted uploads.
   and never written to disk or cached. Legacy plaintext files are deliberately
   not routed through previews, and anything above 64 MiB falls back to the
   normal streaming download.
+- **Update notifications.** The server checks the npm registry once an hour for
+  a newer release and the web app shows a notice under the app title in the
+  sidebar when one exists. The registry is contacted at most once an hour no
+  matter how many browsers are open, and the check can be turned off with
+  `UPDATE_CHECK_ENABLED=false`.
 
 ### Changed
 

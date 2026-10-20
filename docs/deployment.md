@@ -38,6 +38,8 @@ startup.
 | `ALLOWED_ORIGINS`          | no            | unset (empty = same-origin)                               | Comma-separated origin allowlist for state-changing requests                                                                                                                   |
 | `STORAGE_QUOTA_GB`         | no            | `0` (unlimited)                                           | Positive number sets the quota ceiling shown on the dashboard; `0`/unset = `null`                                                                                              |
 | `TRUST_PROXY`              | no            | `false`                                                   | Enables Fastify `trustProxy`; needed for correct client IPs behind a reverse proxy (`true` is the only accepted true value)                                                    |
+| `UPDATE_PACKAGE_NAME`      | no            | `@hilbras/omnicloud`                                      | npm package polled for newer releases; the web sidebar shows a notice when one exists                                                                                          |
+| `UPDATE_CHECK_ENABLED`     | no            | `true`                                                    | Set `false` to disable the periodic npm check entirely (no outbound registry request)                                                                                          |
 
 Notes:
 
@@ -283,6 +285,41 @@ it aggressively — it consumes Telegram rate budget.
 Logs are structured JSON from Fastify/pino; each line carries the request id
 (`x-request-id`), so error reports can be correlated with both the API response
 and the log stream.
+
+## Update check
+
+The server polls the npm registry once an hour for the newest published
+version of `UPDATE_PACKAGE_NAME` and caches the result. The web app reads that
+cached result and shows a notice under the app title in the sidebar when a
+newer version exists.
+
+| Endpoint                | Auth | Purpose                                      |
+| ----------------------- | ---- | -------------------------------------------- |
+| `GET /api/update/check` | none | The cached result of the last registry check |
+
+The endpoint is public because it exposes only the running version and the
+newest published version of an open-source package — no user data. It returns
+one of:
+
+| `status`           | Meaning                                                          |
+| ------------------ | ---------------------------------------------------------------- |
+| `update_available` | A newer version is published; the sidebar shows a notice         |
+| `up_to_date`       | The published version is the same or older                       |
+| `not_published`    | The package does not exist on npm yet                            |
+| `unknown`          | The registry could not be reached; the last error is in `detail` |
+
+Behavior worth knowing:
+
+- The registry is contacted **at most once an hour**, regardless of how many
+  browsers are open, because the result is cached server-side. Polling
+  `/api/update/check` from many clients does not multiply the traffic.
+- A failed check never raises: it is reported as `unknown` and retried on the
+  next interval. It also never blocks startup.
+- The check makes one outbound HTTPS request per hour to `registry.npmjs.org`.
+  Set `UPDATE_CHECK_ENABLED=false` to disable it in environments that must not
+  make outbound requests.
+- Only `update_available` renders a notice. An unpublished package or a failed
+  lookup is deliberately not shown, so the badge stays meaningful.
 
 ## Docker Compose (PostgreSQL)
 

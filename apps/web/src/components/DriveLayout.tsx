@@ -10,6 +10,7 @@ import type { PageShortcuts } from "../hooks/useDriveShell";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useMe } from "../hooks/useMe";
 import { useUploads } from "../hooks/useUploads";
+import { useUpdateCheck } from "../hooks/useUpdateCheck";
 import { invalidateDriveQueries, ME_QUERY_KEY, SIGNED_OUT_SESSION } from "../lib/queries";
 import { usePageMeta } from "../lib/seo";
 import type { DriveItem } from "../lib/drive";
@@ -38,6 +39,8 @@ export default function DriveLayout() {
 
   const storage = me.data?.storage ?? null;
   const health = me.data?.health ?? null;
+  const updateCheck = useUpdateCheck();
+  const update = updateCheck.data;
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -147,6 +150,7 @@ export default function DriveLayout() {
             storage={storage}
             health={health}
             username={username}
+            update={update}
             onCreateFolder={() => setCreateFolderOpen(true)}
           />
         </aside>
@@ -174,6 +178,7 @@ export default function DriveLayout() {
                   storage={storage}
                   health={health}
                   username={username}
+                  update={update}
                   onCreateFolder={() => {
                     setSidebarOpen(false);
                     setCreateFolderOpen(true);
