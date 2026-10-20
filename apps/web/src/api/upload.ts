@@ -3,6 +3,7 @@ import type { FileDTO } from "@omnicloud/shared";
 import { getUrk, isEncryptUploadsEnabled } from "../lib/crypto-session";
 import { bytesToBase64, toArrayBuffer } from "../lib/bytes";
 import { ApiError, apiErrorFromText, errorMessage, notifyUnauthorized } from "./client";
+import { STREAM_MIN_BYTES, encryptFileStreaming } from "./encrypt-stream";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -56,6 +57,8 @@ interface UploadBody {
   filename: string;
   /** Null for plaintext uploads. */
   encryption: UploadEncryption | null;
+  /** Removes any temporary encryption spool once the upload settles. */
+  dispose?: () => Promise<void>;
 }
 
 /**
@@ -69,6 +72,22 @@ async function prepareBody(file: File): Promise<UploadBody> {
     return { part: file, filename: file.name, encryption: null };
   }
   try {
+    // Large files take the chunked path: slice-by-slice encryption with the
+    // ciphertext spooled to OPFS (or Blob parts), so peak memory is bounded
+    // by the slice size instead of the whole file.
+    if (file.size >= STREAM_MIN_BYTES) {
+      const streamed = await encryptFileStreaming(file, urk);
+      return {
+        part: streamed.envelope,
+        filename: file.name,
+        encryption: {
+          wrappedKey: streamed.wrappedKey,
+          metadataBlob: streamed.metadataBlob,
+          keyEpoch: streamed.keyEpoch,
+        },
+        dispose: streamed.dispose,
+      };
+    }
     const plaintext = new Uint8Array(await file.arrayBuffer());
     const encrypted = await encryptFile(plaintext, {
       urk,
@@ -167,7 +186,11 @@ export async function uploadFile(
   options: UploadOptions = {},
 ): Promise<FileDTO> {
   const body = await prepareBody(file);
-  return xhrUpload("/api/files", body, folderId, options);
+  try {
+    return await xhrUpload("/api/files", body, folderId, options);
+  } finally {
+    await body.dispose?.();
+  }
 }
 
 /** Uploads a new version of an existing file via POST /api/files/:id/replace. */
@@ -177,7 +200,11 @@ export async function replaceFile(
   options: UploadOptions = {},
 ): Promise<FileDTO> {
   const body = await prepareBody(file);
-  return xhrUpload(`/api/files/${encodeURIComponent(fileId)}/replace`, body, null, options);
+  try {
+    return await xhrUpload(`/api/files/${encodeURIComponent(fileId)}/replace`, body, null, options);
+  } finally {
+    await body.dispose?.();
+  }
 }
 
 /**

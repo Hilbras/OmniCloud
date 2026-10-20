@@ -152,7 +152,7 @@ export function multipartHead(
 }
 
 /** Writes head, then the file's bytes read in chunks, then tail, as one stream. */
-function nodeMultipartStream(
+export function nodeMultipartStream(
   head: string,
   file: AsyncIterable<Uint8Array | string>,
   tail: string,

@@ -26,16 +26,27 @@ export type {
 } from "./client";
 
 // Client-side end-to-end encryption (OCE1).
-export { downloadEncrypted, migrateFile, uploadEncrypted } from "./encryption";
+export {
+  downloadDecryptedToFile,
+  downloadEncrypted,
+  encryptFileToSpool,
+  migrateFile,
+  uploadEncrypted,
+  uploadEncryptedStream,
+} from "./encryption";
 export type {
+  DownloadDecryptedToFileOptions,
+  DownloadDecryptedToFileResult,
   EncryptedDownloadOptions,
   EncryptedDownloadResult,
   EncryptedUploadInput,
   EncryptedUploadOptions,
   EncryptedUploadResult,
+  EncryptToSpoolOptions,
   MigrateFileOptions,
   MigrateFileResult,
   MigrateStatus,
+  SpoolEncryption,
 } from "./encryption";
 
 // The OCE1 reference implementation the SDK builds on (bundled, workspace-only).

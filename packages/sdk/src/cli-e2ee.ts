@@ -25,7 +25,12 @@ import {
   writeKeyfile,
 } from "./cli-auth";
 import type { ResolutionOptions } from "./cli-auth";
-import { downloadEncrypted, migrateFile, uploadEncrypted } from "./encryption";
+import {
+  downloadDecryptedToFile,
+  migrateFile,
+  uploadEncrypted,
+  uploadEncryptedStream,
+} from "./encryption";
 
 /**
  * `omnicloud` CLI commands for end-to-end encryption (roadmap Phase 6).
@@ -297,6 +302,14 @@ export async function runRecoveryRestore(argv: string[], ctx: CliContext): Promi
 // upload / download / migrate
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Files at or above this size take the streaming path: chunked encryption to
+ * a 0600 spool file and a disk-backed multipart body, so peak memory stays
+ * bounded by the chunk size rather than the file size. Smaller files keep the
+ * simple in-memory path (identical wire format).
+ */
+export const STREAM_UPLOAD_THRESHOLD = 8 * 1024 * 1024;
+
 export async function runUpload(argv: string[], ctx: CliContext): Promise<number> {
   const parsed = parseCommandArgs(argv, [...COMMON_VALUES, "--folder"], ["--encrypt"]);
   if (parsed.positionals.length !== 1) {
@@ -317,14 +330,14 @@ export async function runUpload(argv: string[], ctx: CliContext): Promise<number
   if (!info.isFile()) throw new Error(`${path} is not a regular file`);
   const name = basename(path);
   const folderId = parsed.values.folder ?? null;
+  const uploadOptions = { name, urk, ...(folderId ? { folderId } : {}) };
 
-  const result = await uploadEncrypted(
-    client,
-    { path },
-    { name, urk, ...(folderId ? { folderId } : {}) },
-  );
+  const result =
+    info.size >= STREAM_UPLOAD_THRESHOLD
+      ? await uploadEncryptedStream(client, path, uploadOptions)
+      : await uploadEncrypted(client, { path }, uploadOptions);
   ctx.io.out(
-    `Uploaded ${name} (${info.size} bytes, ${ENCRYPTION_FORMAT} encrypted) → file ${result.fileId}\n`,
+    `Uploaded ${name} (${info.size} bytes, ${ENCRYPTION_FORMAT} encrypted${info.size >= STREAM_UPLOAD_THRESHOLD ? ", streamed" : ""}) → file ${result.fileId}\n`,
   );
   return 0;
 }
@@ -360,17 +373,25 @@ export async function runDownload(argv: string[], ctx: CliContext): Promise<numb
       );
     }
     const urk = await resolveUrk(options);
-    const result = await downloadEncrypted(client, id, { urk });
-    const target = output ?? safeOutputName(result.metadata.name);
-    if (target === "") {
-      throw new Error(
-        "The decrypted filename is empty or unsafe; pass an explicit destination with -o <path>",
-      );
-    }
-    const targetPath = resolvePath(target);
-    await writeFile(targetPath, result.plaintext);
+    const targetPath = output !== null ? resolvePath(output) : null;
+    const result = await downloadDecryptedToFile(client, id, {
+      urk,
+      ...(targetPath !== null
+        ? { targetPath }
+        : {
+            resolveTarget: (metadata) => {
+              const name = safeOutputName(metadata.name);
+              if (name === "") {
+                throw new Error(
+                  "The decrypted filename is empty or unsafe; pass an explicit destination with -o <path>",
+                );
+              }
+              return resolvePath(name);
+            },
+          }),
+    });
     ctx.io.out(
-      `Decrypted ${result.metadata.name} → ${targetPath} (${result.plaintext.byteLength} bytes)\n`,
+      `Decrypted ${result.metadata.name} → ${result.path} (${result.bytes} bytes, sha256 ${result.sha256.slice(0, 16)}…)\n`,
     );
     return 0;
   }

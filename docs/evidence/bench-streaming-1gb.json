@@ -1,0 +1,30 @@
+{
+  "streamUploadMiB": 1024,
+  "memUploadMiB": 0.000244140625,
+  "node": "v24.21.0",
+  "baselineRssMb": 172.6,
+  "streamingUpload": {
+    "ms": 58684,
+    "mibPerSec": 17.4,
+    "peakRssMb": 1193.9,
+    "peakRssDeltaMb": 1021.4,
+    "fileId": "bench"
+  },
+  "streamingDownload": {
+    "ms": 68657,
+    "mibPerSec": 14.9,
+    "peakRssMb": 1216,
+    "peakRssDeltaMb": 22.1,
+    "roundTripOk": true,
+    "bytes": 1073741824
+  },
+  "inMemoryUpload": {
+    "ms": 224,
+    "encryptMs": 4,
+    "uploadMs": 220,
+    "mibPerSec": 0,
+    "peakRssMb": 1195.7,
+    "peakRssDeltaMb": 0,
+    "fileId": "bench"
+  }
+}
