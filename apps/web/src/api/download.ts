@@ -14,6 +14,13 @@ function downloadPath(id: string): string {
   return `/api/files/${encodeURIComponent(id)}/download`;
 }
 
+/**
+ * Largest file that may be decrypted into memory for on-screen preview.
+ * Anything above this uses the normal streaming download to disk instead, so a
+ * preview click can never pull a huge file into the tab.
+ */
+export const PREVIEW_MAX_BYTES = 64 * 1024 * 1024;
+
 /** Saves decrypted bytes via a Blob URL anchor. */
 function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
@@ -120,6 +127,118 @@ async function splitHeader(
  *
  * Pass `knownFile` when the caller already has the DTO to avoid a GET.
  */
+export interface DecryptedPreview {
+  /** Decrypted bytes; the caller must not cache or persist them. */
+  blob: Blob;
+  /** Decrypted MIME type from the encrypted metadata, falling back to the DTO. */
+  mimeType: string;
+  /** Decrypted file name from the encrypted metadata. */
+  name: string;
+  /** Decrypted plaintext byte count. */
+  bytes: number;
+}
+
+/**
+ * Downloads an OCE1 file and decrypts it into memory for on-screen preview.
+ *
+ * Refuses anything above `PREVIEW_MAX_BYTES` so previewing cannot be used to
+ * pull an arbitrarily large file into a tab; callers should fall back to the
+ * normal download (which streams to disk) for bigger files. Never previews
+ * legacy plaintext files — those use the server's own preview/save path.
+ *
+ * The returned Blob lives only in the caller's object URL and must be revoked.
+ */
+export async function fetchDecryptedPreview(
+  id: string,
+  knownFile?: FileDTO | null,
+): Promise<DecryptedPreview> {
+  const file = knownFile ?? (await api.files.get(id)).file;
+  if (file.encryptionFormat !== "OCE1") {
+    throw new ApiError(
+      0,
+      "NOT_ENCRYPTED",
+      `"${file.name}" is not encrypted; previews use the normal path.`,
+    );
+  }
+  if (file.size > PREVIEW_MAX_BYTES) {
+    throw new ApiError(
+      0,
+      "PREVIEW_TOO_LARGE",
+      `"${file.name}" is too large to preview. Download it instead.`,
+    );
+  }
+
+  const urk = getUrk();
+  if (urk === null) {
+    throw new ApiError(
+      0,
+      "ENCRYPTION_KEY_REQUIRED",
+      `"${file.name}" is encrypted. Generate or unlock your encryption key in Settings, then try again.`,
+    );
+  }
+  if (
+    file.wrappedKey === null ||
+    file.wrappedKey === undefined ||
+    file.metadataBlob === null ||
+    file.metadataBlob === undefined
+  ) {
+    throw new ApiError(
+      0,
+      "ENCRYPTION_METADATA_MISSING",
+      `"${file.name}" is missing its encryption metadata and cannot be decrypted.`,
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(downloadPath(file.id), { method: "GET", credentials: "same-origin" });
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK_ERROR",
+      "Could not reach the server. Check your connection and try again.",
+    );
+  }
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const error = apiErrorFromText(response.status, text);
+    if (response.status === 401 && error.code !== "TELEGRAM_AUTH_REQUIRED") notifyUnauthorized();
+    throw error;
+  }
+
+  try {
+    const source = bodySource(response);
+    const { header, envelope } = await splitHeader(source);
+    const ctx = {
+      fileId: header.fileId,
+      versionId: header.versionId,
+      keyEpoch: file.keyEpoch ?? header.keyEpoch,
+    };
+    const metadata = decryptMetadata(deriveMek(urk), base64ToBytes(file.metadataBlob), ctx);
+    const parts: BlobPart[] = [];
+    let bytes = 0;
+    for await (const chunk of decryptChunks({
+      ...ctx,
+      urk,
+      wrappedKey: base64ToBytes(file.wrappedKey),
+      envelope,
+    })) {
+      parts.push(chunk.slice().buffer as ArrayBuffer);
+      bytes += chunk.byteLength;
+    }
+    const name = metadata.name || file.name;
+    const mimeType = metadata.mimeType ?? file.mimeType ?? "application/octet-stream";
+    return { blob: new Blob(parts, { type: mimeType }), mimeType, name, bytes };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      0,
+      "DECRYPT_FAILED",
+      `Could not decrypt "${file.name}": ${errorMessage(error, "wrong key or damaged data")} Nothing was shown.`,
+    );
+  }
+}
+
 export async function downloadFile(id: string, knownFile?: FileDTO | null): Promise<void> {
   const file = knownFile ?? (await api.files.get(id)).file;
   if (file.encryptionFormat !== "OCE1") {

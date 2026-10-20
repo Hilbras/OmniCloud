@@ -11,6 +11,7 @@ import type { DriveItem } from "../lib/drive";
 import { useToast } from "../components/Toasts";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DeleteFolderDialog } from "../components/DeleteFolderDialog";
+import { FilePreview } from "../components/FilePreview";
 import { MoveDialog } from "../components/MoveDialog";
 import { NameDialog } from "../components/NameDialog";
 import { buildFolderTree } from "../lib/tree";
@@ -62,6 +63,7 @@ export function useItemActions({
   const [deleting, setDeleting] = useState<DriveItem[] | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<DriveItem | null>(null);
   const [migrating, setMigrating] = useState<DriveItem[] | null>(null);
+  const [previewing, setPreviewing] = useState<DriveItem | null>(null);
   const replaceInput = useRef<HTMLInputElement | null>(null);
   const replaceTarget = useRef<DriveItem | null>(null);
 
@@ -261,6 +263,9 @@ export function useItemActions({
             );
           }
           return;
+        case "preview":
+          if (item.kind === "file") setPreviewing(item);
+          return;
         case "rename":
           setRenaming(item);
           return;
@@ -327,6 +332,10 @@ export function useItemActions({
           replaceTarget.current = null;
         }}
       />
+
+      {previewing !== null ? (
+        <FilePreview item={previewing} onClose={() => setPreviewing(null)} />
+      ) : null}
 
       {renaming !== null ? (
         <NameDialog

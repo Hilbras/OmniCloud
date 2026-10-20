@@ -1,5 +1,6 @@
 import {
   Download,
+  Eye,
   FolderInput,
   Info,
   LockKeyhole,
@@ -16,6 +17,7 @@ import type { MenuItem } from "./ItemMenu";
 export type ItemAction =
   | "open"
   | "download"
+  | "preview"
   | "rename"
   | "move"
   | "star"
@@ -49,6 +51,22 @@ export interface MenuContext {
   canReplace?: boolean;
 }
 
+const PREVIEWABLE_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|bmp|svg|mp4|webm|ogv|mov|m4v)$/i;
+
+/**
+ * Whether an item can be previewed in the browser.
+ *
+ * Only end-to-end encrypted files qualify: previews decrypt in-tab, and legacy
+ * plaintext files keep the server's own download path so this feature never
+ * becomes a way to render an unverified file. Extension matching uses the
+ * server-side name; the decrypted name is used once the bytes are in hand.
+ */
+export function isPreviewableEncryptedFile(item: ItemRefLike): boolean {
+  if (item.kind !== "file") return false;
+  if ((item.file?.encryptionFormat ?? null) === null) return false;
+  return PREVIEWABLE_EXTENSIONS.test(item.name);
+}
+
 /**
  * Builds the per-item action menu for the given context. Generic over the
  * concrete item type so callers can pass their richer view model (e.g.
@@ -74,6 +92,15 @@ export function buildItemMenu<T extends ItemRefLike>(
     });
 
     if (isFile) {
+      // Preview is offered only for encrypted files whose type can be shown
+      // in-tab. Legacy plaintext files and other types keep Download only.
+      if (isPreviewableEncryptedFile(item)) {
+        items.push({
+          label: "Preview",
+          icon: <Eye className="h-4 w-4" aria-hidden="true" />,
+          onSelect: () => onAction("preview", item),
+        });
+      }
       items.push({
         label: "Details",
         icon: <Info className="h-4 w-4" aria-hidden="true" />,

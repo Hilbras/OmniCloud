@@ -37,6 +37,12 @@ and there is no silent fallback to unencrypted uploads.
 - **`VITE_SITE_URL`** centralizes the canonical origin for the canonical link,
   Open Graph and Twitter tags, JSON-LD, `robots.txt`, and `sitemap.xml`, so
   attaching a custom domain is one variable and a rebuild.
+- **Encrypted image and video previews.** End-to-end encrypted images and videos
+  can be previewed in the browser from the item menu: the file is decrypted in
+  the tab, shown through an object URL that is revoked when the preview closes,
+  and never written to disk or cached. Legacy plaintext files are deliberately
+  not routed through previews, and anything above 64 MiB falls back to the
+  normal streaming download.
 
 ### Changed
 

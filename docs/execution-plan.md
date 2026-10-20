@@ -186,21 +186,21 @@ Android app (roadmap Phase 8), file sharing (Phase 10), encrypted server-side se
 Roadmap §21.16 requires every result to be recorded as verified, assumed, or
 not done. Current state:
 
-| Gate                                | Status       | Evidence                                                                         |
-| ----------------------------------- | ------------ | -------------------------------------------------------------------------------- |
-| M1 live E2EE round trip             | **Verified** | `docs/audits/live-e2ee-smoke.md` (29/29, real Telegram)                          |
-| M2 legacy migration                 | **Verified** | `docs/audits/m2-migration-smoke.md` (14/14)                                      |
-| M3 independent cryptographic review | **Not done** | `docs/audits/encryption-review.md` — package assembled, no reviewer engaged      |
-| M4 CLI encryption commands          | **Verified** | `docs/audits/m4-cli-smoke.md`                                                    |
-| M5 streaming large files (SDK/CLI)  | **Verified** | `docs/evidence/streaming-memory.md`                                              |
-| M5 streaming large files (web)      | **Verified** | `docs/evidence/web-streaming-bench.md` (Firefox; see caveats)                    |
-| M6 trusted-device enrollment        | **Not done** | Design ADR pending; blocked behind M3 by design                                  |
-| 3.1 canonical URLs                  | **Verified** | `VITE_SITE_URL`; both default and custom builds checked                          |
-| 3.2 npm publish                     | **Not done** | Requires npm org scope and `NPM_TOKEN`; awaiting authorization                   |
-| 3.3 docs sync                       | **Verified** | CHANGELOG `[Unreleased]`, README, sdk docs updated in this cycle                 |
-| 3.4 bundle trim                     | **Verified** | `docs/audits/test-evidence.md` — main chunk 142 KB gzip, under the 350 KB target |
-| 3.5 encrypted previews              | **Not done** | Scheduled last in this cycle                                                     |
-| 3.6 ops notes                       | **Not done** | Documentation only; not started                                                  |
+| Gate                                | Status       | Evidence                                                                          |
+| ----------------------------------- | ------------ | --------------------------------------------------------------------------------- |
+| M1 live E2EE round trip             | **Verified** | `docs/audits/live-e2ee-smoke.md` (29/29, real Telegram)                           |
+| M2 legacy migration                 | **Verified** | `docs/audits/m2-migration-smoke.md` (14/14)                                       |
+| M3 independent cryptographic review | **Not done** | `docs/audits/encryption-review.md` — package assembled, no reviewer engaged       |
+| M4 CLI encryption commands          | **Verified** | `docs/audits/m4-cli-smoke.md`                                                     |
+| M5 streaming large files (SDK/CLI)  | **Verified** | `docs/evidence/streaming-memory.md`                                               |
+| M5 streaming large files (web)      | **Verified** | `docs/evidence/web-streaming-bench.md` (Firefox; see caveats)                     |
+| M6 trusted-device enrollment        | **Not done** | Design ADR pending; blocked behind M3 by design                                   |
+| 3.1 canonical URLs                  | **Verified** | `VITE_SITE_URL`; both default and custom builds checked                           |
+| 3.2 npm publish                     | **Not done** | Requires npm org scope and `NPM_TOKEN`; awaiting authorization                    |
+| 3.3 docs sync                       | **Verified** | CHANGELOG `[Unreleased]`, README, sdk docs updated in this cycle                  |
+| 3.4 bundle trim                     | **Verified** | `docs/audits/test-evidence.md` — main chunk 142 KB gzip, under the 350 KB target  |
+| 3.5 encrypted previews              | **Verified** | Encrypted images/video decrypt in-tab; object URL revoked; plaintext never cached |
+| 3.6 ops notes                       | **Not done** | Documentation only; not started                                                   |
 
 **Assumed, not verified:** that the protocol survives independent review. The
 design is documented and internally consistent, but no external party has
