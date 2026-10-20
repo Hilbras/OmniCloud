@@ -48,6 +48,16 @@ and there is no silent fallback to unencrypted uploads.
   sidebar when one exists. The registry is contacted at most once an hour no
   matter how many browsers are open, and the check can be turned off with
   `UPDATE_CHECK_ENABLED=false`.
+- **Richer drive view.** The file grid is now media-first: each card has a
+  4:3 stage that shows a real thumbnail for images and the file-type glyph for
+  everything else, with the name and size beneath it. Cards lift on hover,
+  fade in with a short stagger, and list rows gained an icon tile so both
+  views share one visual language.
+  - Thumbnails are fetched only when a card scrolls into view, are capped at
+    8 MiB, and are held as object URLs in a bounded cache that is revoked on
+    eviction and cleared on sign-out. Encrypted images are decrypted in the
+    tab exactly as the preview does; nothing is written to disk.
+  - A failed or unavailable thumbnail falls back to the file-type icon.
 
 ### Changed
 

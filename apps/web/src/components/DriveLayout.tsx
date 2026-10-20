@@ -12,6 +12,7 @@ import { useMe } from "../hooks/useMe";
 import { useUploads } from "../hooks/useUploads";
 import { useUpdateCheck } from "../hooks/useUpdateCheck";
 import { invalidateDriveQueries, ME_QUERY_KEY, SIGNED_OUT_SESSION } from "../lib/queries";
+import { clearThumbnails } from "../lib/thumbnails";
 import { usePageMeta } from "../lib/seo";
 import type { DriveItem } from "../lib/drive";
 import { NameDialog } from "./NameDialog";
@@ -68,6 +69,8 @@ export default function DriveLayout() {
   const logoutMutation = useMutation({
     mutationFn: api.auth.logout,
     onSuccess: () => {
+      // Decrypted thumbnails must not outlive the session that unlocked them.
+      clearThumbnails();
       queryClient.setQueryData(ME_QUERY_KEY, SIGNED_OUT_SESSION);
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "me" });
     },

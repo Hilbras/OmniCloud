@@ -239,6 +239,24 @@ export async function fetchDecryptedPreview(
   }
 }
 
+/**
+ * Loads the decrypted bytes of a small image for use as a drive thumbnail.
+ *
+ * Encrypted files go through the same chunked decrypt as the preview, so the
+ * authenticated manifest is verified before any bytes are shown. Legacy
+ * plaintext files are fetched as-is. The result is never written to disk or
+ * cached by the browser — the caller holds it as an object URL.
+ */
+export async function fetchThumbnailBlob(id: string, knownFile?: FileDTO | null): Promise<Blob> {
+  const file = knownFile ?? (await api.files.get(id)).file;
+  if (file.encryptionFormat === "OCE1") {
+    const preview = await fetchDecryptedPreview(id, file);
+    return preview.blob;
+  }
+  const bytes = await fetchFileBytes(file.id);
+  return new Blob([bytes as BlobPart], { type: file.mimeType || "application/octet-stream" });
+}
+
 export async function downloadFile(id: string, knownFile?: FileDTO | null): Promise<void> {
   const file = knownFile ?? (await api.files.get(id)).file;
   if (file.encryptionFormat !== "OCE1") {
