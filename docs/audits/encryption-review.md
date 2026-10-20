@@ -19,27 +19,66 @@ Out of scope for this round: Android local storage (no client exists yet), shari
 
 ## Hand-off package
 
-| Item                                                 | Path                                                                                |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Protocol specification (normative)                   | `docs/security/encryption-protocol-v1.md`                                           |
-| Recovery & device-revocation design                  | `docs/security/recovery-and-device-revocation.md`                                   |
-| ADR 0001 — platform & library evaluation             | `docs/security/architecture-decisions/0001-e2ee-platform-and-library-evaluation.md` |
-| ADR 0002 — crypto stack                              | `docs/security/architecture-decisions/0002-e2ee-crypto-stack.md`                    |
-| Crypto implementation (all of it — small on purpose) | `packages/crypto/src/`                                                              |
-| Known-answer vectors + recovery KAT                  | `packages/crypto/test/vectors/v1.json`                                              |
-| Vector & cross-client verification evidence          | `docs/audits/kat-vectors.md`                                                        |
-| Live E2EE smoke evidence (29/29)                     | `docs/audits/live-e2ee-smoke.md`                                                    |
-| Migration design                                     | `docs/security/legacy-migration.md`                                                 |
-| Live migration evidence (14/14)                      | `docs/audits/m2-migration-smoke.md`                                                 |
-| Threat model                                         | `docs/security/threat-model.md`                                                     |
-| Three-tier execution plan                            | `docs/execution-plan.md`                                                            |
+| Item                                                  | Path                                                                                |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Protocol specification (normative)                    | `docs/security/encryption-protocol-v1.md`                                           |
+| Recovery & device-revocation design                   | `docs/security/recovery-and-device-revocation.md`                                   |
+| ADR 0001 — platform & library evaluation              | `docs/security/architecture-decisions/0001-e2ee-platform-and-library-evaluation.md` |
+| ADR 0002 — crypto stack                               | `docs/security/architecture-decisions/0002-e2ee-crypto-stack.md`                    |
+| Crypto implementation (all of it — small on purpose)  | `packages/crypto/src/`                                                              |
+| Known-answer vectors + recovery KAT                   | `packages/crypto/test/vectors/v1.json`                                              |
+| Vector & cross-client verification evidence           | `docs/audits/kat-vectors.md`                                                        |
+| Live E2EE smoke evidence (29/29)                      | `docs/audits/live-e2ee-smoke.md`                                                    |
+| Migration design                                      | `docs/security/legacy-migration.md`                                                 |
+| Live migration evidence (14/14)                       | `docs/audits/m2-migration-smoke.md`                                                 |
+| CLI encryption smoke evidence                         | `docs/audits/m4-cli-smoke.md`                                                       |
+| Streaming large-file evidence (SDK, isolated process) | `docs/evidence/streaming-memory.md`                                                 |
+| Streaming large-file evidence (web, headless Firefox) | `docs/evidence/web-streaming-bench.md`                                              |
+| Threat model                                          | `docs/security/threat-model.md`                                                     |
+| Three-tier execution plan                             | `docs/execution-plan.md`                                                            |
+| Device-enrollment design (review scope item 4)        | `docs/security/architecture-decisions/0003-trusted-device-enrollment.md`            |
 
-Reproduce everything locally:
+All paths above were re-verified to exist on the branch named below.
+
+### What was added since the first assembly
+
+The package was first assembled at `bc87aeb` and has grown since. A reviewer
+picking this up should know the following work landed afterwards and is **in
+scope**:
+
+- **M2 legacy migration** (`migrateFile` in `packages/sdk/src/encryption.ts`):
+  inspect-first, verify-before-delete state machine. Review specifically the
+  ordering guarantee and the PENDING-resume hash check.
+- **M4 CLI** (`packages/sdk/src/cli-e2ee.ts`): secret-handling rules; confirm
+  that no key material can reach argv, environment, or logs.
+- **M5 streaming** (`encryptFileToSpool`, `uploadEncryptedStream`,
+  `downloadDecryptedToFile`): the same OCE1 primitives driven incrementally.
+  Review that the chunked path cannot silently diverge from the whole-file
+  path — in particular `splitHeader` and the multipart envelope extraction in
+  `packages/sdk/src/encryption.ts`, and the OPFS spool in
+  `apps/web/src/api/encrypt-stream.ts`.
+- **3.1 canonical origin**: not security-relevant, listed only so the snapshot
+  matches the current tree.
+
+### Reproducing everything
 
 ```bash
+pnpm install
+pnpm db:generate
+
+# Crypto: unit tests plus the committed known-answer vectors.
 pnpm --filter @omnicloud/crypto test
 pnpm --filter @omnicloud/crypto run verify:vectors
-pnpm --filter @omnicloud/crypto run verify:vectors:cross-client   # needs firefox + geckodriver
+
+# Cross-client agreement: Node and a real browser must match byte-for-byte.
+# Needs firefox + geckodriver on PATH.
+pnpm --filter @omnicloud/crypto run verify:vectors:cross-client
+
+# SDK: includes the streaming E2EE suite and the memory-bound test.
+pnpm --filter @omnicloud/sdk test
+
+# Whole workspace gates, as CI runs them.
+pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm test
 ```
 
 ## Process
