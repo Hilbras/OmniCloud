@@ -101,3 +101,43 @@ with 8 skipped without a database URL, telegram 35 (1 skipped), sdk 66, api 131.
 Format, lint, typecheck and build all pass.
 
 Still not covered: live Telegram behaviour. The release gate remains unsatisfied.
+
+## Web bundle size (plan item 3.4)
+
+Measured on the production build (`pnpm --filter @omnicloud/web build`, Vite),
+Node v24.21.0, Linux. The plan's target was a main chunk under 350 KB on a
+gzip basis; that target is **met**.
+
+| Chunk                    | Raw    | Gzip       |
+| ------------------------ | ------ | ---------- |
+| `index` (main entry)     | 440 KB | **142 KB** |
+| `LandingPage` (lazy)     | 37 KB  | 11 KB      |
+| `ViewToggle` (lazy)      | 32 KB  | 10 KB      |
+| `TelegramQrLogin` (lazy) | 27 KB  | 10 KB      |
+| `TokensPage` (lazy)      | 14 KB  | 4 KB       |
+| `StoragePage` (lazy)     | 9 KB   | 3 KB       |
+| `DrivePage` (lazy)       | 9 KB   | 3 KB       |
+| `LoginPage` (lazy)       | 11 KB  | 3 KB       |
+| `DetailsPanel` (lazy)    | 5 KB   | 2 KB       |
+| `TrashPage` (lazy)       | 3 KB   | 1 KB       |
+
+21 JS chunks in total; ~192 KB gzipped for the whole set.
+
+Route-level code splitting is in place: the landing page, drive, login, tokens,
+storage, trash and recent views each load as their own chunk, so a visitor
+landing on the marketing page does not download the application shell's feature
+code.
+
+**Before/after:** no bundle-size regression was introduced by the M5 streaming
+work. The main chunk measured 450.65 KB / 146.12 KB gz before it and
+450.73 KB / 146.16 KB gz after — a 0.08 KB difference, from the streaming
+imports in `apps/web/src/api`. The 3.4 target did not require optimization work.
+
+Reproduce with:
+
+```bash
+pnpm --filter @omnicloud/web build
+for f in apps/web/dist/assets/*.js; do
+  printf '%s KB gz | %s\n' "$(( $(gzip -c "$f" | wc -c) / 1024 ))" "$(basename "$f")"
+done | sort -rn
+```

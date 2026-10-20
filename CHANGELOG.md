@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Streaming large-file encryption, legacy migration, CLI encryption, and SEO
+hardening.**
+
+Everything below is opt-in or internal; existing plaintext files stay readable
+and there is no silent fallback to unencrypted uploads.
+
+### Added
+
+- **Streaming large-file encryption (OCE1).** Files above 8 MiB (CLI/SDK) or
+  32 MiB (web) are now encrypted chunk-by-chunk instead of whole-file, so peak
+  memory is bounded by the 4 MiB chunk rather than the file size.
+  - SDK: `encryptFileToSpool`, `uploadEncryptedStream`, and
+    `downloadDecryptedToFile`, which streams the decryption to disk and renames
+    a `.part` file into place only after the authenticated manifest verifies.
+  - CLI: large uploads take the streaming path automatically; `download
+--decrypt` resolves the destination from the encrypted file name.
+  - Web: chunked client-side encryption spooling ciphertext to OPFS where
+    available, with a documented 1 GiB buffered fallback ceiling.
+- **Legacy file migration.** A controlled, inspect-first migration from
+  plaintext to OCE1: the stored ciphertext is re-downloaded and byte-compared
+  before any plaintext version is removed, so a failed verification leaves the
+  original untouched. Multi-version files keep their plaintext history and the
+  result reports how much remains.
+- **CLI encryption commands** for key generation and status, encrypted upload
+  and download, migration, and recovery-code export/restore. Secrets are read
+  from muted interactive prompts only and are never written to argv, environment
+  variables, or logs.
+- **`VITE_SITE_URL`** centralizes the canonical origin for the canonical link,
+  Open Graph and Twitter tags, JSON-LD, `robots.txt`, and `sitemap.xml`, so
+  attaching a custom domain is one variable and a rebuild.
+
+### Changed
+
+- The web build now rewrites `index.html` and regenerates `robots.txt` /
+  `sitemap.xml` from the configured origin at build time; the previous Vercel
+  URL remains the default.
+
+### Fixed
+
+- Two streaming edge cases in the new download path: a `for await` loop that
+  dropped the tail of the response after the header peek, and multipart
+  envelope extraction that included the trailing boundary.
+
+### Verification
+
+Recorded evidence, all reproducible:
+
+- Live end-to-end round trip against real Telegram — 29/29 checks
+  (`docs/audits/live-e2ee-smoke.md`)
+- Legacy migration smoke test — 14/14 checks (`docs/audits/m2-migration-smoke.md`)
+- CLI encryption smoke test (`docs/audits/m4-cli-smoke.md`)
+- 1 GiB streaming round trip, `roundTripOk: true`; client peak RSS measured in
+  an isolated process and shown not to track file size
+  (`docs/evidence/streaming-memory.md`)
+- Web streaming benchmark in headless Firefox at 32 MiB and 256 MiB, both
+  producing `OCE1` envelopes via the OPFS spool
+  (`docs/evidence/web-streaming-bench.md`)
+
+**Not independently reviewed.** No external cryptographic review has taken
+place; see `docs/audits/encryption-review.md`. Encryption remains experimental
+and opt-in.
+
 ## [0.3.0] - 2026-10-17
 
 **Hilbras rebrand, client-side encryption preview, landing page, and localization.**

@@ -118,6 +118,21 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design.
 - Reconciliation with a two-step repair: plan first, then apply. Repairs never delete Telegram messages
 - Version history per file (the foundation; the full history UI is planned for v0.3)
 
+**End-to-end encryption (experimental, opt-in)**
+
+- Files are encrypted on your device before upload with a per-file data key; the
+  server and Telegram only ever receive ciphertext
+- Encrypted files are marked in the UI and can be migrated from earlier plaintext
+  uploads with a verify-before-delete flow that keeps the original if anything fails
+- Large files are encrypted chunk by chunk, so peak memory follows the chunk size
+  rather than the file size
+- Recovery codes let you restore your key if you lose it; a password reset cannot
+  decrypt your files
+- Available in the web app, the npm SDK, and the CLI
+
+> Encryption is **opt-in and experimental**. It has not been independently
+> reviewed — see [`docs/audits/encryption-review.md`](docs/audits/encryption-review.md).
+
 **Operations**
 
 - Storage dashboard: usage, per-type breakdown, largest files, trash size, optional quota
@@ -348,7 +363,13 @@ Without the encryption key, a restored database cannot use its stored Telegram s
 
 ## Limitations
 
-- **No end-to-end encryption.** Telegram can access channel content, so OmniCloud is not a zero-knowledge vault.
+- **End-to-end encryption is opt-in and unreviewed.** Encrypted files are
+  protected such that Telegram and the server hold only ciphertext, but the
+  protocol has not been through an independent cryptographic review. Plaintext
+  files uploaded before you enabled it remain plaintext until you migrate them.
+- **Key recovery depends on your recovery code.** Losing your key and your
+  recovery code means losing the file contents; a password reset restores account
+  access only. Multi-device key enrollment is designed but not implemented.
 - **Telegram is the storage backend.** Telegram's own rate limits, file-size rules and availability apply to you.
 - **Single user per deployment.** There is no sharing, public links or multi-user collaboration yet.
 - **Version history is a foundation.** The details panel lists a file's versions; there is no restore or delete action yet, and no scheduled retention. Those are planned for v0.3.

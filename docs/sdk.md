@@ -1,4 +1,4 @@
-# SDK (`@hilbras/omnicloud`) v0.2
+# SDK (`@hilbras/omnicloud`) v0.3
 
 The package ships three things:
 
@@ -300,6 +300,65 @@ The upload client automatically uses XHR when `XMLHttpRequest` exists and falls
 back to `fetch` otherwise. `AbortSignal` works in both paths (XHR calls
 `xhr.abort()`; fetch is not used when XHR is available).
 
+## Streaming encryption (large files)
+
+Files of any size can be encrypted chunk by chunk, so peak memory follows the
+4 MiB chunk rather than the file size. Use these instead of `uploadEncrypted` /
+`downloadEncrypted` when handling large files.
+
+### Upload
+
+```ts
+import { uploadEncryptedStream } from "@hilbras/omnicloud";
+
+const result = await uploadEncryptedStream(client, "/path/to/video.mp4", {
+  name: "video.mp4",
+  urk, // your user root key (never sent to the server)
+  folderId: "fld_123", // optional
+  retry: 2, // optional, default 2
+  signal: controller.signal, // optional
+  spoolDir: "/secure/tmp", // optional, defaults to the OS temp dir
+});
+```
+
+The plaintext is encrypted into a `0600` temporary spool file first, then the
+spool is streamed as a multipart body. The spool is deleted in a `finally`
+block, including when the upload fails or is aborted. Retries replay the exact
+same ciphertext bytes — nothing is re-encrypted and nothing is buffered in
+memory.
+
+### Download and decrypt to disk
+
+```ts
+import { downloadDecryptedToFile } from "@hilbras/omnicloud";
+
+const result = await downloadDecryptedToFile(client, "file_456", {
+  urk,
+  targetPath: "/downloads/video.mp4",
+  // Or derive the path from the encrypted file name:
+  // resolveTarget: (metadata) => `/downloads/${metadata.name}`,
+  signal: controller.signal,
+});
+console.log(result.bytes, result.sha256, result.metadata.name);
+```
+
+The envelope is streamed from the response, decrypted chunk by chunk, and
+written to `<targetPath>.part`, which is renamed into place **only after the
+authenticated manifest verifies**. A truncated, tampered, or corrupt download
+rejects and leaves nothing behind at the target path.
+
+Downloading a file that is not OCE1-encrypted rejects with a clear error; there
+is no fallback to plaintext.
+
+### Larger files in the browser
+
+In the browser, `encryptFileStreaming` (used internally by the web app above
+32 MiB) spools ciphertext to OPFS where available, falling back to in-memory
+Blob parts with a documented 1 GiB ceiling above which it rejects explicitly.
+
+Measured throughput and caveats are in
+[`docs/evidence/web-streaming-bench.md`](evidence/web-streaming-bench.md).
+
 ## omnicloud CLI
 
 `npx omnicloud` (installed globally as `omnicloud`) runs the server and the
@@ -340,6 +399,10 @@ omnicloud download file_456 -o raw.bin             # raw stored bytes (ciphertex
 omnicloud migrate file_789                         # encrypt one legacy file in place
 omnicloud migrate all                              # encrypt every plaintext file
 ```
+
+`upload` and `download` switch to the streaming path automatically for large
+files (8 MiB and above for uploads), so the commands above need no extra flag
+for multi-gigabyte files.
 
 ### Secret-handling rules
 
