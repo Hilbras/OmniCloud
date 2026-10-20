@@ -85,6 +85,27 @@ Files: `packages/sdk/src/encryption.ts` + `client.ts`, `apps/web/src/api/upload.
 2. **Web second:** chunked encrypt from `File.slice` reader; ciphertext spool via OPFS where available, buffered fallback with a documented size ceiling; decrypt accumulates to Blob (browser save constraints) but no longer double-copies; document the honest limits in `known-limitations`-style notes inside the protocol doc.
 3. **Benchmarks:** 1 GiB CLI upload (RSS ceiling, e.g. <300 MB), chunk throughput before/after; Web 500 MB on Chromium as the target.
 
+**Status (verified):** shipped in `dd54dc2` + the memory test below.
+
+| Measure                         | Result                                     |
+| ------------------------------- | ------------------------------------------ |
+| 1 GiB stream upload             | 17.4 MiB/s, round-trip `roundTripOk: true` |
+| 1 GiB stream download + decrypt | 14.9 MiB/s                                 |
+| Client peak RSS, 32 MiB file    | upload 231 MB / download 275 MB            |
+| Client peak RSS, 128 MiB file   | upload 271 MB / download 329 MB            |
+
+The memory figures are measured with the SDK client in a **separate process** from
+the HTTP server (`packages/sdk/test/streaming-memory.test.ts`); an in-process
+benchmark cannot attribute RSS between client and server. Peak RSS is flat within
+~17% across a 4× file-size increase and `heapUsed` stays near 7 MB, so the
+stream is bounded by the 4 MiB chunk size rather than the file size. The residual
+~200 MB is V8/Buffer high-water retention, so an absolute ceiling is
+allocator-dependent; the ratio between file sizes is the durable assertion.
+
+**Not verified:** the Web 500 MB Chromium target was not measured — `encrypt-stream.ts`
+ships with an OPFS spool and a documented 1 GiB buffered fallback ceiling, but no
+recorded browser benchmark exists yet.
+
 **Exit:** large-file path verified with recorded numbers; existing small-file behavior unchanged; resume-after-interrupt test (kill mid-upload, retry does not duplicate).
 
 ### M6 · Trusted-device enrollment
