@@ -128,6 +128,16 @@ Recommended initial boundary for a manageable first protocol review:
 
 **Decision required:** validate which visible fields are acceptable for the product's privacy goals and whether client-side listing of encrypted metadata meets usability/performance requirements.
 
+**Status (2026-10-21):** the first release implemented the content-encryption
+boundary only — see the v1 limitations in
+[`encryption-protocol-v1.md`](encryption-protocol-v1.md). One gap the caption
+rule above does not cover: a Telegram document also carries a **filename
+attribute**, taken from the upload's name, so the real name reaches the
+channel even though the caption does not. The concrete design for opaque
+names, the client-side index and client-side search is
+[`architecture-decisions/0004-client-side-filename-index.md`](architecture-decisions/0004-client-side-filename-index.md);
+it is not implemented.
+
 ## 7. Proposed object format layers (not final wire schema)
 
 Separate the object into three conceptual layers:

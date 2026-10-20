@@ -372,7 +372,10 @@ Without the encryption key, a restored database cannot use its stored Telegram s
   access only. Multi-device key enrollment is designed but not implemented.
 - **Telegram is the storage backend.** Telegram's own rate limits, file-size rules and availability apply to you.
 - **Single user per deployment.** There is no sharing, public links or multi-user collaboration yet.
-- **Version history is a foundation.** The details panel lists a file's versions; there is no restore or delete action yet, and no scheduled retention. Those are planned for v0.3.
+- **Version history is a foundation.** The details panel lists a file's versions
+  and can restore an earlier one or delete a single historical version, but
+  there is no scheduled retention and no per-version restore into a new
+  version, so a restore replaces the current content in place.
 - Live verification of the Telegram path is documented in [`docs/limitations.md`](docs/limitations.md).
 
 ---
@@ -397,9 +400,15 @@ Without the encryption key, a restored database cannot use its stored Telegram s
 
 ## Roadmap
 
-- **v0.3** — version history UI and restore, trash retention, live Telegram verification in CI
+- **v0.3** — ~~version history UI and restore~~, ~~trash retention~~ (both
+  shipped), live Telegram verification in CI
 - **v0.4** — alternative storage providers (S3, WebDAV, local disk), previews
 - **v1.0** — end-to-end encryption, sync clients, collaboration
+
+Open design work is tracked in
+[`docs/execution-plan.md`](docs/execution-plan.md) and the architecture
+decision records in
+[`docs/security/architecture-decisions/`](docs/security/architecture-decisions/).
 
 ---
 

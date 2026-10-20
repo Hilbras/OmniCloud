@@ -125,6 +125,14 @@ const page = await cloud.files.list({ folderId: null, sort: "name", order: "asc"
 await cloud.files.get("file-id");
 await cloud.files.versions("file-id");
 
+// Version history: restore an earlier version, or remove one.
+// Restoring points the file back at the version that already exists — nothing
+// is re-uploaded, so the restored content keeps the version id its ciphertext
+// is bound to and decrypts exactly as before. The current version cannot be
+// removed this way.
+await cloud.files.restoreVersion("file-id", "version-id");
+await cloud.files.deleteVersion("file-id", "version-id");
+
 // Upload with progress and cancellation
 const controller = new AbortController();
 const file = await cloud.files.upload(
@@ -228,6 +236,17 @@ const result = await cloud.trash.empty();
 
 `failedFiles > 0` means some remote objects could not be deleted; the affected
 items remain in the Trash and the call can be retried.
+
+```ts
+// How long trashed items are kept before they are removed for good.
+// 0 means the server keeps the trash indefinitely.
+const { days } = await cloud.trash.retention();
+
+// Remove the expired trash now, without waiting for the server's scheduled
+// job. Items still within their retention period are left alone.
+const purged = await cloud.trash.purge();
+// { deletedFiles, deletedFolders, failedFiles, skippedFiles }
+```
 
 ### `storage`
 
@@ -398,6 +417,10 @@ omnicloud download file_456 --decrypt -o report.pdf  # decrypt locally
 omnicloud download file_456 -o raw.bin             # raw stored bytes (ciphertext for OCE1)
 omnicloud migrate file_789                         # encrypt one legacy file in place
 omnicloud migrate all                              # encrypt every plaintext file
+
+omnicloud versions file_456                        # list a file's version history
+omnicloud versions file_456 --restore ver_1        # make an earlier version current
+omnicloud versions file_456 --delete ver_1         # remove one historical version
 ```
 
 `upload` and `download` switch to the streaming path automatically for large

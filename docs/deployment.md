@@ -40,6 +40,7 @@ startup.
 | `TRUST_PROXY`              | no            | `false`                                                   | Enables Fastify `trustProxy`; needed for correct client IPs behind a reverse proxy (`true` is the only accepted true value)                                                    |
 | `UPDATE_PACKAGE_NAME`      | no            | `@hilbras/omnicloud`                                      | npm package polled for newer releases; the web sidebar shows a notice when one exists                                                                                          |
 | `UPDATE_CHECK_ENABLED`     | no            | `true`                                                    | Set `false` to disable the periodic npm check entirely (no outbound registry request)                                                                                          |
+| `TRASH_RETENTION_DAYS`     | no            | `30`                                                      | Days a trashed file or folder is kept before it is permanently removed; `0` keeps the trash indefinitely                                                                       |
 
 Notes:
 
@@ -285,6 +286,29 @@ it aggressively — it consumes Telegram rate budget.
 Logs are structured JSON from Fastify/pino; each line carries the request id
 (`x-request-id`), so error reports can be correlated with both the API response
 and the log stream.
+
+## Trash retention
+
+Trashed files and folders are kept for `TRASH_RETENTION_DAYS` days (default 30) and then removed for good. The server runs the purge every six hours for
+every user, and also on startup, so expired items disappear without anyone
+having to empty the trash by hand.
+
+- `GET /api/trash/retention` reports the configured period; the web trash page
+  shows it, so users know how long they have.
+- `POST /api/trash/purge` runs the purge for the calling user on demand.
+- Setting `TRASH_RETENTION_DAYS=0` disables the purge entirely and keeps the
+  trash indefinitely.
+
+The purge removes a file's Telegram message before its database record, as
+`POST /api/trash/empty` does. A file whose remote delete fails keeps its
+record, so the object can be found and cleaned up later rather than being
+stranded. A trashed folder is removed only once it holds nothing, so a file
+trashed more recently than its folder keeps the folder alive until it is
+eligible too.
+
+The purge is a **permanent deletion**. There is no undo for it, so a retention
+period shorter than your users expect is a data-loss risk rather than a storage
+saving. Set it to `0` if you would rather keep everything.
 
 ## Update check
 

@@ -14,29 +14,31 @@ Requested review areas (in priority order):
 4. **Device enrollment design draft** — planned cross-device key transfer (design only; not yet implemented — reviewer should flag design flaws before M6 code).
 5. **Implementation quality of `packages/crypto`** — constant-time concerns with the chosen libraries, key-material lifetime in JS, error taxonomy leaking oracle information, test coverage gaps.
 6. **Migration and legacy handling** — verify-before-delete ordering, PENDING-resume hash check, plaintext-history retention rules (`docs/security/legacy-migration.md`).
+7. **Metadata privacy boundary** — what v1 actually hides and what it does not. The protocol document was corrected on 2026-10-21 to state plainly that the plaintext filename is stored in `File.name` and is also carried by the Telegram document's filename attribute. The reviewer's task is to confirm that boundary as described is the correct one, and to review the proposed OCE2 direction (`docs/security/architecture-decisions/0004-client-side-filename-index.md`) before any of it is built.
 
 Out of scope for this round: Android local storage (no client exists yet), sharing/permissions (not implemented), web supply-chain process (documented separately; reviewer comments welcome but not gating).
 
 ## Hand-off package
 
-| Item                                                  | Path                                                                                |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Protocol specification (normative)                    | `docs/security/encryption-protocol-v1.md`                                           |
-| Recovery & device-revocation design                   | `docs/security/recovery-and-device-revocation.md`                                   |
-| ADR 0001 — platform & library evaluation              | `docs/security/architecture-decisions/0001-e2ee-platform-and-library-evaluation.md` |
-| ADR 0002 — crypto stack                               | `docs/security/architecture-decisions/0002-e2ee-crypto-stack.md`                    |
-| Crypto implementation (all of it — small on purpose)  | `packages/crypto/src/`                                                              |
-| Known-answer vectors + recovery KAT                   | `packages/crypto/test/vectors/v1.json`                                              |
-| Vector & cross-client verification evidence           | `docs/audits/kat-vectors.md`                                                        |
-| Live E2EE smoke evidence (29/29)                      | `docs/audits/live-e2ee-smoke.md`                                                    |
-| Migration design                                      | `docs/security/legacy-migration.md`                                                 |
-| Live migration evidence (14/14)                       | `docs/audits/m2-migration-smoke.md`                                                 |
-| CLI encryption smoke evidence                         | `docs/audits/m4-cli-smoke.md`                                                       |
-| Streaming large-file evidence (SDK, isolated process) | `docs/evidence/streaming-memory.md`                                                 |
-| Streaming large-file evidence (web, headless Firefox) | `docs/evidence/web-streaming-bench.md`                                              |
-| Threat model                                          | `docs/security/threat-model.md`                                                     |
-| Three-tier execution plan                             | `docs/execution-plan.md`                                                            |
-| Device-enrollment design (review scope item 4)        | `docs/security/architecture-decisions/0003-trusted-device-enrollment.md`            |
+| Item                                                    | Path                                                                                |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Protocol specification (normative)                      | `docs/security/encryption-protocol-v1.md`                                           |
+| Recovery & device-revocation design                     | `docs/security/recovery-and-device-revocation.md`                                   |
+| ADR 0001 — platform & library evaluation                | `docs/security/architecture-decisions/0001-e2ee-platform-and-library-evaluation.md` |
+| ADR 0002 — crypto stack                                 | `docs/security/architecture-decisions/0002-e2ee-crypto-stack.md`                    |
+| Crypto implementation (all of it — small on purpose)    | `packages/crypto/src/`                                                              |
+| Known-answer vectors + recovery KAT                     | `packages/crypto/test/vectors/v1.json`                                              |
+| Vector & cross-client verification evidence             | `docs/audits/kat-vectors.md`                                                        |
+| Live E2EE smoke evidence (29/29)                        | `docs/audits/live-e2ee-smoke.md`                                                    |
+| Migration design                                        | `docs/security/legacy-migration.md`                                                 |
+| Live migration evidence (14/14)                         | `docs/audits/m2-migration-smoke.md`                                                 |
+| CLI encryption smoke evidence                           | `docs/audits/m4-cli-smoke.md`                                                       |
+| Streaming large-file evidence (SDK, isolated process)   | `docs/evidence/streaming-memory.md`                                                 |
+| Streaming large-file evidence (web, headless Firefox)   | `docs/evidence/web-streaming-bench.md`                                              |
+| Threat model                                            | `docs/security/threat-model.md`                                                     |
+| Three-tier execution plan                               | `docs/execution-plan.md`                                                            |
+| Device-enrollment design (review scope item 4)          | `docs/security/architecture-decisions/0003-trusted-device-enrollment.md`            |
+| Client-side filename index design (review scope item 7) | `docs/security/architecture-decisions/0004-client-side-filename-index.md`           |
 
 All paths above were re-verified to exist on the branch named below.
 

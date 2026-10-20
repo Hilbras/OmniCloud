@@ -771,6 +771,39 @@ Policies: `KEEP_ALL` (removes nothing), `KEEP_LATEST_N` with a whole `count` ≥
 
 Response `200`: `{ "removed": 1 }`.
 
+### `POST /api/files/:id/versions/:versionId/restore`
+
+Makes an earlier version current again.
+
+The file is pointed back at the version that already exists; nothing is
+re-uploaded. That is required, not an optimisation: the OCE1 record
+authentication binds the version id, so a copy of an old version's ciphertext
+under a new id could never be decrypted.
+
+The file's own name is unchanged — a rename belongs to the file, not to a
+version. For an encrypted file the restored version's own metadata blob comes
+back with it, so the name embedded in that version's metadata is the one a
+download will use.
+
+Response `200`: `{ "file": FileDTO }`.
+
+Errors: `404 FILE_NOT_FOUND` (no such file or version, or the version belongs
+to another file or user), `409 CONFLICT` (the version is already current).
+
+### `DELETE /api/files/:id/versions/:versionId`
+
+Removes one historical version: its Telegram message is deleted first, and its
+record only after that, so a failed delete keeps the record for reconciliation.
+Other versions are untouched.
+
+The current version cannot be deleted — the file would have nothing to point
+at. Restore another version first, or delete the file.
+
+Response `204`, no body.
+
+Errors: `404 FILE_NOT_FOUND` (no such file or version, or the version belongs
+to another file or user), `409 CONFLICT` (the version is the current one).
+
 ### `POST /api/files/:id/replace`
 
 Uploads a new version of an existing file and makes it current.
@@ -1030,6 +1063,32 @@ reported in `failedFiles` so the operation can be retried.
 ```json
 { "deletedFiles": 12, "deletedFolders": 5, "failedFiles": 1 }
 ```
+
+Errors: `401 TELEGRAM_AUTH_REQUIRED`, `502` (mapped provider error).
+
+### `GET /api/trash/retention`
+
+How long trashed items are kept before they are removed for good. This is the
+server's `TRASH_RETENTION_DAYS` setting; `0` means the trash is kept
+indefinitely.
+
+```json
+{ "days": 30 }
+```
+
+### `POST /api/trash/purge`
+
+Removes the caller's own expired trash now, without waiting for the scheduled
+job. Items still within their retention period are left alone, and reported as
+`skippedFiles`.
+
+```json
+{ "deletedFiles": 3, "deletedFolders": 1, "failedFiles": 0, "skippedFiles": 5 }
+```
+
+The server also runs this on a schedule (every six hours) for every user, so
+expired items disappear even if nobody calls this endpoint. Remote Telegram
+objects are deleted before their records, as with `POST /api/trash/empty`.
 
 Errors: `401 TELEGRAM_AUTH_REQUIRED`, `502` (mapped provider error).
 

@@ -15,6 +15,24 @@ and there is no silent fallback to unencrypted uploads.
 
 ### Added
 
+- **File version restore and version delete.** A file could accumulate versions
+  but there was no way back. The details panel's version list now has a
+  **Restore** action that makes an earlier version current again, and a
+  **Delete** action that removes one historical version with a confirmation.
+  The same operations are available in the SDK (`files.restoreVersion`,
+  `files.deleteVersion`) and the CLI (`omnicloud versions <fileId> --restore
+<id>` / `--delete <id>`).
+  - A restore points the file back at the version that already exists rather
+    than copying its content. That is a requirement, not an optimisation: the
+    encryption format binds each version's id into the authentication of its
+    records, so a copy of an old version under a new id could never be
+    decrypted.
+  - The current version cannot be deleted — the file would have nothing to
+    point at — and the error says so.
+- **Trash retention.** Trashed files and folders are now removed for good
+  after a configurable period (`TRASH_RETENTION_DAYS`, default 30; `0` keeps
+  them indefinitely). The server purges on a schedule, the trash page says how
+  long items are kept, and `POST /api/trash/purge` runs it on demand.
 - **Streaming large-file encryption (OCE1).** Files above 8 MiB (CLI/SDK) or
   32 MiB (web) are now encrypted chunk-by-chunk instead of whole-file, so peak
   memory is bounded by the 4 MiB chunk rather than the file size.
@@ -70,6 +88,13 @@ and there is no silent fallback to unencrypted uploads.
 - Two streaming edge cases in the new download path: a `for await` loop that
   dropped the tail of the response after the header peek, and multipart
   envelope extraction that included the trailing boundary.
+- **An inaccurate statement in the protocol document.** It said plaintext
+  names never reach server-side plaintext metadata. They do: the real name is
+  stored in `File.name` (the server needs it to list and search) and is also
+  carried by the Telegram document's filename attribute, not just its caption.
+  The protocol document now states the real boundary, and
+  `docs/security/architecture-decisions/0004-client-side-filename-index.md`
+  proposes the design that would close it.
 
 ### Verification
 

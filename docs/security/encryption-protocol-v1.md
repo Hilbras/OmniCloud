@@ -96,7 +96,24 @@ Stored as separate opaque fields (base64 in API JSON):
 { "description": "...", "mimeType": "application/pdf", "name": "report.pdf" }
 ```
 
-`name` is required, `mimeType` and `description` optional. Plaintext names/MIME never go to Telegram captions or server-side plaintext metadata.
+`name` is required, `mimeType` and `description` optional.
+
+**What is still visible in v1.** The plaintext name and MIME type are _not_ put in
+the Telegram caption — the caption carries only `sha256:operationId` — but they
+are still visible in two other places, and this document does not claim
+otherwise:
+
+- The server stores the plaintext name in `File.name` and the MIME type in
+  `File.mimeType`, because the client sends the real name as the multipart
+  filename and the server needs it to list and search.
+- The Telegram document itself carries a filename attribute, taken from the
+  upload's name.
+
+So in v1 the content of a file is protected but its _name_ is not, from either
+the API's database or the Telegram channel. Hiding it requires the opaque-name
+and client-side-index design proposed in
+[`architecture-decisions/0004-client-side-filename-index.md`](architecture-decisions/0004-client-side-filename-index.md);
+it is not implemented.
 
 ## 6. Client algorithm requirements
 
