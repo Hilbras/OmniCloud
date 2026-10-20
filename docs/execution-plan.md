@@ -93,10 +93,18 @@ Files: `packages/sdk/src/encryption.ts` + `client.ts`, `apps/web/src/api/upload.
 | 1 GiB stream download + decrypt | 7.2–14.9 MiB/s across runs                                 |
 | Client peak RSS, 32 MiB file    | upload 231 MB / download 275 MB                            |
 | Client peak RSS, 128 MiB file   | upload 271 MB / download 329 MB                            |
+| Web 32 MiB (headless Firefox)   | 3.80 s, 8.4 MiB/s, envelope `OCE1`, OPFS spool             |
+| Web 256 MiB (headless Firefox)  | 35.31 s, 7.2 MiB/s, envelope `OCE1`, OPFS spool            |
 
 Throughput varies several-fold between runs on the same machine depending on
 cache state and background load, so only the range is meaningful; the
 `roundTripOk` round-trip result is the durable signal.
+
+The web figures come from `apps/web/scripts/bench-web-streaming.mjs` and are
+recorded in `docs/evidence/web-streaming-bench.md`. Both web sizes are at or
+above `STREAM_MIN_BYTES`, so both exercised the chunked path, and throughput
+stays flat across an 8× size increase (8.4 → 7.2 MiB/s). OPFS was available in
+the test browser, so these numbers describe the OPFS spool path.
 
 The memory figures are measured with the SDK client in a **separate process** from
 the HTTP server (`packages/sdk/test/streaming-memory.test.ts`); an in-process
@@ -107,9 +115,12 @@ stream is bounded by the 4 MiB chunk size rather than the file size. The residua
 allocator-dependent; the ratio between file sizes is the durable assertion.
 `bench-streaming.ts` no longer emits RSS fields for the same reason.
 
-**Not verified:** the Web 500 MB Chromium target was not measured — `encrypt-stream.ts`
-ships with an OPFS spool and a documented 1 GiB buffered fallback ceiling, but no
-recorded browser benchmark exists yet.
+**Not verified (web):** browser heap could not be sampled — Firefox does not
+expose `performance.memory`, so the browser memory ceiling is evidenced
+indirectly by flat throughput rather than measured. The buffered-Blob fallback
+(browsers without OPFS) was not exercised. The original plan wording said
+Chromium; no Chromium is installed here, so the measurement was made in Firefox
+and is labelled accordingly.
 
 **Exit:** large-file path verified with recorded numbers; existing small-file behavior unchanged; resume-after-interrupt test (kill mid-upload, retry does not duplicate).
 
