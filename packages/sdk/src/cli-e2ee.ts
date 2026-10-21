@@ -138,6 +138,11 @@ function commonOptions(parsed: ParsedArgs): ResolutionOptions & { reveal: boolea
 const COMMON_VALUES = ["--config", "--url", "--keyfile"];
 const COMMON_FLAGS = ["--reveal"];
 
+// The options that may follow a bare `migrate`. `--env` belongs to the
+// database-migration command, the rest to the encryption commands.
+const MIGRATE_VALUE_OPTIONS = [...COMMON_VALUES, "--env"];
+const MIGRATE_FLAG_OPTIONS = [...COMMON_FLAGS];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // key generate / key status
 // ─────────────────────────────────────────────────────────────────────────────
@@ -604,8 +609,39 @@ const COMMANDS: Record<string, (argv: string[], ctx: CliContext) => Promise<numb
   logout: runLogout,
 };
 
+/** Whether `command` is one of the encryption commands. */
 export function isE2eeCommand(command: string): boolean {
   return Object.hasOwn(COMMANDS, command);
+}
+
+/**
+ * Whether a command line should be handled by the encryption dispatcher.
+ *
+ * `migrate` is ambiguous: bare, it applies the database migrations, and with a
+ * file id (or `all`) it encrypts legacy plaintext files. Only a positional
+ * target makes it the encryption command — otherwise the bare form would be
+ * unreachable, because the encryption dispatcher runs first.
+ */
+export function routesToE2ee(command: string, args: string[] = []): boolean {
+  if (!isE2eeCommand(command)) return false;
+  if (command === "migrate") return hasPositionalTarget(args);
+  return true;
+}
+
+/** True when the arguments contain a bare word, rather than only options. */
+function hasPositionalTarget(args: string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const raw = args[i]!;
+    const eq = raw.indexOf("=");
+    const name = raw.startsWith("--") && eq !== -1 ? raw.slice(0, eq) : raw;
+    if (MIGRATE_VALUE_OPTIONS.includes(name)) {
+      i++;
+      continue;
+    }
+    if (MIGRATE_FLAG_OPTIONS.includes(name)) continue;
+    if (!raw.startsWith("-")) return true;
+  }
+  return false;
 }
 
 export async function runE2eeCommand(

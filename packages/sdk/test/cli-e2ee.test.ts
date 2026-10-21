@@ -10,7 +10,7 @@ import {
   parseRecoveryCode,
 } from "@omnicloud/crypto";
 import { OmniCloudClient, generateUrk } from "../src/index";
-import { runE2eeCommand } from "../src/cli-e2ee";
+import { isE2eeCommand, routesToE2ee, runE2eeCommand } from "../src/cli-e2ee";
 import type { CliContext } from "../src/cli-e2ee";
 import { keyFingerprint, loadConfig, readKeyfile, writeKeyfile } from "../src/cli-auth";
 
@@ -706,6 +706,30 @@ describe("command dispatch", () => {
     await expect(runE2eeCommand(["recovery"], setup.ctx)).rejects.toThrow(
       /recovery <generate\|restore>/,
     );
+  });
+
+  it("leaves a bare migrate to the database-migration command", () => {
+    // `omnicloud migrate` applies the database migrations; `omnicloud migrate
+    // <fileId|all>` encrypts legacy plaintext files. The encryption dispatcher
+    // runs first, so without this distinction the bare form was unreachable.
+    expect(routesToE2ee("migrate")).toBe(false);
+    expect(routesToE2ee("migrate", [])).toBe(false);
+    expect(routesToE2ee("migrate", ["--env", "prod.env"])).toBe(false);
+    expect(routesToE2ee("migrate", ["all"])).toBe(true);
+    expect(routesToE2ee("migrate", ["file-1"])).toBe(true);
+  });
+
+  it("still routes the other encryption commands", () => {
+    expect(isE2eeCommand("key")).toBe(true);
+    expect(isE2eeCommand("recovery")).toBe(true);
+    expect(isE2eeCommand("upload")).toBe(true);
+    expect(isE2eeCommand("download")).toBe(true);
+    expect(isE2eeCommand("versions")).toBe(true);
+    expect(isE2eeCommand("login")).toBe(true);
+    expect(isE2eeCommand("logout")).toBe(true);
+    expect(isE2eeCommand("start")).toBe(false);
+    expect(routesToE2ee("key")).toBe(true);
+    expect(routesToE2ee("start")).toBe(false);
   });
 });
 

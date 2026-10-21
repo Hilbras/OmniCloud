@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { isE2eeCommand, runE2eeCommand } from "./cli-e2ee";
+import { routesToE2ee, runE2eeCommand } from "./cli-e2ee";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const serverDir = join(packageRoot, "server");
@@ -218,7 +218,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
   // Encryption commands talk to a remote server and use their own config
   // (~/.config/omnicloud/config.json); they never read .env or run setup.
   const first = argv[0];
-  if (first !== undefined && isE2eeCommand(first)) {
+  if (first !== undefined && routesToE2ee(first, argv.slice(1))) {
     try {
       return await runE2eeCommand(argv);
     } catch (error) {

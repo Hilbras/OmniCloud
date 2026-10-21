@@ -42,6 +42,16 @@ function int(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
   return value;
 }
 
+function nonNegativeInt(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = env[name];
+  if (!raw || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${name} must be zero or a positive integer`);
+  }
+  return value;
+}
+
 function bool(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
   const raw = env[name];
   if (!raw || raw.trim() === "") return fallback;
@@ -87,6 +97,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: bool(env, "TRUST_PROXY", false),
     updatePackageName: optional(env, "UPDATE_PACKAGE_NAME", "@hilbras/omnicloud"),
     updateCheckEnabled: bool(env, "UPDATE_CHECK_ENABLED", true),
-    trashRetentionDays: int(env, "TRASH_RETENTION_DAYS", 30),
+    // Zero keeps the trash indefinitely, which is what TrashService does with
+    // a retention of zero or less.
+    trashRetentionDays: nonNegativeInt(env, "TRASH_RETENTION_DAYS", 30),
   };
 }
