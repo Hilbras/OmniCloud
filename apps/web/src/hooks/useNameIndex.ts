@@ -4,8 +4,11 @@ import { useMe } from "./useMe";
 import { useCryptoSession } from "../lib/crypto-session";
 import {
   clearNameIndex,
+  forgetLoadedIndex,
   getNameIndex,
+  markIndexLoaded,
   setNameIndex,
+  shouldLoadIndex,
   useNameIndexEntries,
 } from "../lib/name-index-session";
 import {
@@ -50,12 +53,17 @@ export function useNameIndex(): NameIndexController {
     let cancelled = false;
     if (accountId === null || urk === null) {
       clearNameIndex();
+      forgetLoadedIndex();
       setReady(accountId === null);
       loadedFor.current = null;
       return;
     }
-    if (loadedFor.current === accountId) return;
+    // Several components use this hook; only the first one reads the stored
+    // index, so a later component cannot overwrite an entry that was just
+    // added in memory.
+    if (loadedFor.current === accountId || !shouldLoadIndex(accountId)) return;
     loadedFor.current = accountId;
+    markIndexLoaded(accountId);
     setReady(false);
     void (async () => {
       const bytes = await readIndexBytes(accountId);

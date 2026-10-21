@@ -13,6 +13,28 @@ import type { IndexEntry } from "@omnicloud/crypto";
 let entries: Map<string, IndexEntry> = new Map();
 const listeners = new Set<() => void>();
 
+/**
+ * The account whose index has been loaded, so several hook instances share one
+ * load. Without this, a component that mounts later would read the stored
+ * index again and could overwrite an entry that was just added in memory.
+ */
+let loadedAccount: string | null = null;
+
+/** True when this account's index still has to be read. */
+export function shouldLoadIndex(accountId: string): boolean {
+  return loadedAccount !== accountId;
+}
+
+/** Marks an account's index as loaded. */
+export function markIndexLoaded(accountId: string): void {
+  loadedAccount = accountId;
+}
+
+/** Forgets which account was loaded, so the next one is read afresh. */
+export function forgetLoadedIndex(): void {
+  loadedAccount = null;
+}
+
 function notify(): void {
   for (const listener of listeners) listener();
 }
