@@ -8,9 +8,9 @@ import { createTestHarness, multipartBody, type TestHarness } from "./harness";
 /** The version the API reports, read from the manifest it is built from. */
 const apiVersion = (): string => {
   const here = dirname(fileURLToPath(import.meta.url));
-  const manifest = JSON.parse(
-    readFileSync(resolve(join(here, "..", "package.json")), "utf8"),
-  ) as { version: string };
+  const manifest = JSON.parse(readFileSync(resolve(join(here, "..", "package.json")), "utf8")) as {
+    version: string;
+  };
   return manifest.version;
 };
 
