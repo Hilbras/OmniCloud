@@ -95,6 +95,21 @@ and there is no silent fallback to unencrypted uploads.
   The protocol document now states the real boundary, and
   `docs/security/architecture-decisions/0004-client-side-filename-index.md`
   proposes the design that would close it.
+- **A cross-account IDOR in the subtree trash and restore paths.** The writes
+  were keyed only by id, so a caller that knew another account's folder or file
+  ids could trash or restore them. The repository now scopes those writes to
+  the owner, in the database, in the in-memory fake and in the test mock.
+- **Version creation and deletion were not atomic.** A version number was
+  allocated by read-then-write with no retry, the parent file was left
+  describing a different version, and deleting a version could under-count the
+  file's version count. All three now happen in serializable transactions, and
+  the repository refuses to delete the version a file points at.
+- **The known-answer vector test healed itself.** A missing committed vector was
+  written out from the current output and the test passed, so a broken crypto
+  could define its own baseline. The test now fails when the vector is absent,
+  and regenerating it is a separate deliberate command.
+- A deep scan's remaining findings, and what was decided about each of them,
+  are recorded in [`docs/audits/deep-scan-remediation.md`](docs/audits/deep-scan-remediation.md).
 
 ### Verification
 

@@ -260,6 +260,10 @@ export class TelegramConnectionService {
       }),
     );
     if (result instanceof Api.auth.LoginTokenMigrateTo) {
+      // _switchDC is private by convention in the Telegram client library, not
+      // by the type system. There is no public alternative for migrating to a
+      // different data centre, so it is used here and pinned to the installed
+      // version; an upgrade must re-check that it still exists.
       await client._switchDC(result.dcId);
       result = await client.invoke(new Api.auth.ImportLoginToken({ token: result.token }));
     }
