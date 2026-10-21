@@ -71,19 +71,32 @@ object literal, so it is not a duplication at all.
 
 ### M4 — Failed commit leaves the operation stuck in COMMITTING — **false positive**
 
-The report proposes marking the operation `FAILED`. That would be wrong: the
-object **is** stored on this path, and `FAILED` means the Telegram write
-definitively failed. The path that claims a `FAILED` operation re-uploads, which
-would leave the stored object orphaned in the channel beside a second copy.
+The report proposes marking the operation `FAILED`. That would be wrong on the
+path the report cites.
 
-`UPLOADING` with the message id still set is the correct recovery state: the
-next request with the same operation id finds the stored object and commits it
-without uploading again, and the reconciliation sweep protects the object from
-being reported as an orphan. `packages/core/test/stuck-committing.test.ts`
-already covers this recovery.
+There are two commit-failure paths, and they have different correct outcomes:
 
-**Not changed in behaviour.** The reasoning is now written down at the catch, so
-the next scan does not read it as a defect.
+- **The object was stored by the request that failed the commit.** The stored
+  object is removed along with the failed commit, so nothing is left behind and
+  the operation is `FAILED` — a retry may re-upload. This is what `uploadOnce`
+  does, and it is correct.
+- **The object was stored by an earlier request**, and this request is only
+  turning it into a file record. The object is _not_ removed. Marking the
+  operation `FAILED` here would make the next retry re-upload, leaving the
+  stored object orphaned in the channel beside a second copy. `FAILED` means the
+  Telegram write definitively failed, and on this path it did not.
+
+On the second path the correct state is `UPLOADING` with the message id still
+set: the next request with the same operation id finds the stored object and
+commits it without uploading again, and the reconciliation sweep protects the
+object from being reported as an orphan.
+`packages/core/test/stuck-committing.test.ts` already covered that recovery.
+
+**Not changed in behaviour.** The reasoning is now written down at the catch so
+the next scan does not read it as a defect, and
+`packages/core/test/commit-failure-recovery.test.ts` now covers both paths
+explicitly, including that the second path retries without storing a second
+object.
 
 ### M5 — Non-atomic versionCount decrement — **fixed**
 
