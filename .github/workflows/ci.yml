@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:
@@ -62,7 +62,7 @@ jobs:
           sudo -u postgres createdb -O omnicloud omnicloud
           for i in $(seq 1 20); do pg_isready -h localhost -p 5432 && break; sleep 2; done
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:
