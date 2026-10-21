@@ -66,3 +66,14 @@ real account and the release notes must say so.
 - [ ] `CHANGELOG.md` has an entry for every user-visible change, with breaking
       changes stated.
 - [ ] Tag, push, and confirm CI passes on the tagged commit.
+- [ ] Run the release: pushing the tag starts the `Release` workflow. Some
+      organisations disable tag-triggered workflows — in that case dispatch it
+      by hand instead:
+
+      ```sh
+      gh workflow run release.yml --repo Hilbras/OmniCloud --ref main \
+        -f version=0.4.0
+      ```
+
+      The dispatched version must match every manifest, and the tag must
+      already exist. It is the same release, started by hand.
