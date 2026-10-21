@@ -1,6 +1,6 @@
 import type { Readable } from "node:stream";
-import type { ListQuery } from "@omnicloud/shared";
-import { mimeFromFilename } from "@omnicloud/shared";
+import type { EncryptionFormat, ListQuery } from "@omnicloud/shared";
+import { ENCRYPTION_FORMAT_OCE2, isOpaqueName, mimeFromFilename } from "@omnicloud/shared";
 import {
   ConflictError,
   NotFoundError,
@@ -45,7 +45,7 @@ export type EngineResolver = (userId: string) => Promise<StorageEngine>;
 
 /** Opaque OCE1 encryption metadata supplied by an encrypted client upload. */
 export interface FileEncryptionInput {
-  format: "OCE1";
+  format: EncryptionFormat;
   wrappedKey: string;
   metadataBlob: string;
   keyEpoch: number;
@@ -499,6 +499,13 @@ export class FileService {
   ): Promise<FileRecord> {
     const { name, mimeType, size, sha256, telegramMessageId } = next;
     const encryption = encryptionFieldsFrom(input);
+
+    // A file stored as OCE2 must be uploaded under an opaque name. Without this
+    // check a client could claim the format and still hand the server the real
+    // name, which is the one thing OCE2 exists to prevent.
+    if (encryption.encryptionFormat === ENCRYPTION_FORMAT_OCE2 && !isOpaqueName(name)) {
+      throw new ValidationError('A file stored as "OCE2" must be uploaded under an opaque name');
+    }
 
     if (input.replaceFileId) {
       return this.replaceVersion(userId, input.replaceFileId, {

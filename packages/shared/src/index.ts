@@ -365,6 +365,25 @@ export interface ApiErrorBody {
 export const SESSION_COOKIE = "omnicloud_session";
 export const REQUEST_ID_HEADER = "x-request-id";
 
+/**
+ * The encrypted formats a file may be stored in.
+ *
+ * - `OCE1` encrypts the content and the metadata blob. The file's name is
+ *   still stored in the clear.
+ * - `OCE2` also hides the name: the server stores an opaque placeholder and
+ *   the real name lives only in the client's encrypted index.
+ */
+export const ENCRYPTION_FORMAT_OCE1 = "OCE1";
+export const ENCRYPTION_FORMAT_OCE2 = "OCE2";
+export const ENCRYPTION_FORMATS = [ENCRYPTION_FORMAT_OCE1, ENCRYPTION_FORMAT_OCE2] as const;
+export type EncryptionFormat = (typeof ENCRYPTION_FORMATS)[number];
+
+/** True when the value is a known encryption format. */
+export function isEncryptionFormat(value: string): value is EncryptionFormat {
+  return (ENCRYPTION_FORMATS as readonly string[]).includes(value);
+}
+
 export * from "./mime";
+export * from "./opaque-name";
 export * from "./query";
 export * from "./search";

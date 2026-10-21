@@ -55,13 +55,9 @@ export {
   INDEX_HKDF_SALT,
   INDEX_KEY_INFO,
   OCE2_MAGIC,
-  OPAQUE_NAME_BYTES,
-  OPAQUE_NAME_PREFIX,
   canonicalIndexJson,
   createIndexContainer,
   deriveIndexKey,
-  generateOpaqueName,
-  isOpaqueName,
   openIndexContainer,
   parseIndexJson,
 } from "./name-index";

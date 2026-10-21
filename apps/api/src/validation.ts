@@ -1,13 +1,21 @@
 import { ValidationError, type VersionRetentionPolicy } from "@omnicloud/core";
 import type { MultipartFields } from "@fastify/multipart";
 import {
+  ENCRYPTION_FORMATS,
+  isEncryptionFormat,
   ITEM_STATUSES,
   normalizeLimit,
   normalizeOrder,
   normalizePage,
   normalizeSort,
 } from "@omnicloud/shared";
-import type { ItemStatus, ListQuery, SortField, SortOrder } from "@omnicloud/shared";
+import type {
+  EncryptionFormat,
+  ItemStatus,
+  ListQuery,
+  SortField,
+  SortOrder,
+} from "@omnicloud/shared";
 
 /** Reads a required string property from a parsed JSON body. */
 export function requireString(body: unknown, field: string): string {
@@ -218,9 +226,9 @@ export function parseRecoveryBlob(request: { body?: unknown }): string {
   return blob;
 }
 
-/** Validated, opaque OCE1 encryption metadata from a multipart upload. */
+/** Validated, opaque encryption metadata from a multipart upload. */
 export interface ParsedEncryption {
-  format: "OCE1";
+  format: EncryptionFormat;
   wrappedKey: string;
   metadataBlob: string;
   keyEpoch: number;
@@ -257,9 +265,9 @@ export function parseEncryptionFields(fields: MultipartFields): ParsedEncryption
     return undefined;
   }
 
-  if (encryptionFormat !== "OCE1") {
+  if (encryptionFormat !== undefined && !isEncryptionFormat(encryptionFormat)) {
     throw new ValidationError(
-      'encryptionFormat must be exactly "OCE1" when encryption fields are present',
+      `encryptionFormat must be one of ${ENCRYPTION_FORMATS.map((f) => `"${f}"`).join(", ")} when encryption fields are present`,
     );
   }
 
@@ -275,7 +283,7 @@ export function parseEncryptionFields(fields: MultipartFields): ParsedEncryption
   }
 
   return {
-    format: "OCE1",
+    format: encryptionFormat as EncryptionFormat,
     wrappedKey: checkedWrappedKey,
     metadataBlob: checkedMetadataBlob,
     keyEpoch,

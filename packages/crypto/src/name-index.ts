@@ -23,11 +23,6 @@ export const INDEX_AAD_TYPE = 0x06;
 export const INDEX_KEY_INFO = "omnicloud/e2ee/v2/index";
 export const INDEX_HKDF_SALT = "omnicloud-e2ee-v2";
 
-/** The prefix every opaque server-side name carries. */
-export const OPAQUE_NAME_PREFIX = "om_";
-/** Random bytes behind an opaque name. */
-export const OPAQUE_NAME_BYTES = 16;
-
 const HKDF_INFO = INDEX_KEY_INFO;
 
 /** One file's entry in the index. */
@@ -45,30 +40,6 @@ export interface IndexEntry {
   versionCount: number;
   createdAt: string;
   updatedAt: string;
-}
-
-/**
- * An opaque name for the server to store: a prefix and 16 random bytes.
- *
- * The bytes are random rather than derived from the file, so two uploads of
- * the same content get unrelated placeholders and the server cannot tell that
- * two accounts hold the same file.
- */
-export function generateOpaqueName(random?: Uint8Array): string {
-  const bytes = random ?? randomBytes(OPAQUE_NAME_BYTES);
-  if (!(bytes instanceof Uint8Array) || bytes.length !== OPAQUE_NAME_BYTES) {
-    throw new ValidationError(`opaque name needs ${OPAQUE_NAME_BYTES} random bytes`);
-  }
-  let hex = "";
-  for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
-  return `${OPAQUE_NAME_PREFIX}${hex}`;
-}
-
-/** True when a name is one this client generated as an opaque name. */
-export function isOpaqueName(name: string): boolean {
-  if (!name.startsWith(OPAQUE_NAME_PREFIX)) return false;
-  const hex = name.slice(OPAQUE_NAME_PREFIX.length);
-  return hex.length === OPAQUE_NAME_BYTES * 2 && /^[0-9a-f]+$/.test(hex);
 }
 
 /** The key that encrypts the index, derived from the user's root key. */
