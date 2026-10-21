@@ -51,7 +51,7 @@
     "big-integer": "^1.6.52",
     "telegram": "^2.26.22",
     "@fastify/cookie": "^11.0.0",
-    "@fastify/multipart": "^9.0.0",
+    "@fastify/multipart": "^10.1.4",
     "@fastify/static": "^10.1.5",
     "@prisma/client": "^6.2.0",
     "fastify": "^5.0.0",
