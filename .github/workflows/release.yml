@@ -101,11 +101,14 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
-
+      # Build before test, as the CI workflow does: the SDK declarations test
+      # and the web bundle checks need build output, and a skipped check is not
+      # a passing one.
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test
 
       - name: Verify the published bundle imports in Node (ESM + CJS)
         run: |
