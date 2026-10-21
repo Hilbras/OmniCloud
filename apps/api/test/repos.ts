@@ -374,9 +374,9 @@ export function createInMemoryRepos(): InMemoryRepos {
       folder.updatedAt = now();
       return folder;
     },
-    restoreSubtree: async (folderIds, fileIds, options) => {
+    restoreSubtree: async (userId, folderIds, fileIds, options) => {
       for (const folder of folders) {
-        if (folderIds.includes(folder.id)) {
+        if (folderIds.includes(folder.id) && folder.userId === userId) {
           folder.deletedAt = null;
           folder.trashBatchId = null;
           folder.updatedAt = new Date();
@@ -384,26 +384,26 @@ export function createInMemoryRepos(): InMemoryRepos {
       }
       if (options.reparent) {
         const root = folders.find((f) => f.id === options.rootId);
-        if (root) root.parentId = options.reparent.parentId;
+        if (root && root.userId === userId) root.parentId = options.reparent.parentId;
       }
       for (const file of files) {
-        if (fileIds.includes(file.id)) {
+        if (fileIds.includes(file.id) && file.userId === userId) {
           file.deletedAt = null;
           file.trashBatchId = null;
           file.updatedAt = new Date();
         }
       }
     },
-    trashSubtree: async (folderIds, fileIds, stamp) => {
+    trashSubtree: async (userId, folderIds, fileIds, stamp) => {
       for (const folder of folders) {
-        if (folderIds.includes(folder.id)) {
+        if (folderIds.includes(folder.id) && folder.userId === userId) {
           folder.deletedAt = stamp.deletedAt;
           folder.trashBatchId = stamp.trashBatchId;
           folder.updatedAt = new Date();
         }
       }
       for (const file of files) {
-        if (fileIds.includes(file.id)) {
+        if (fileIds.includes(file.id) && file.userId === userId) {
           file.deletedAt = stamp.deletedAt;
           file.trashBatchId = stamp.trashBatchId;
           file.updatedAt = new Date();

@@ -646,39 +646,39 @@ function createFolderRepo(prisma: PrismaClient): FolderRepository {
       });
       return mapFolder(folder);
     },
-    async restoreSubtree(folderIds, fileIds, options) {
+    async restoreSubtree(userId, folderIds, fileIds, options) {
       await prisma.$transaction(async (tx) => {
         if (folderIds.length > 0) {
           await tx.folder.updateMany({
-            where: { id: { in: folderIds } },
+            where: { id: { in: folderIds }, userId },
             data: { deletedAt: null, trashBatchId: null },
           });
         }
         if (options.reparent) {
-          await tx.folder.update({
-            where: { id: options.rootId },
+          await tx.folder.updateMany({
+            where: { id: options.rootId, userId },
             data: { parentId: options.reparent.parentId },
           });
         }
         if (fileIds.length > 0) {
           await tx.file.updateMany({
-            where: { id: { in: fileIds } },
+            where: { id: { in: fileIds }, userId },
             data: { deletedAt: null, trashBatchId: null },
           });
         }
       });
     },
-    async trashSubtree(folderIds, fileIds, stamp) {
+    async trashSubtree(userId, folderIds, fileIds, stamp) {
       await prisma.$transaction(async (tx) => {
         if (folderIds.length > 0) {
           await tx.folder.updateMany({
-            where: { id: { in: folderIds } },
+            where: { id: { in: folderIds }, userId },
             data: { deletedAt: stamp.deletedAt, trashBatchId: stamp.trashBatchId },
           });
         }
         if (fileIds.length > 0) {
           await tx.file.updateMany({
-            where: { id: { in: fileIds } },
+            where: { id: { in: fileIds }, userId },
             data: { deletedAt: stamp.deletedAt, trashBatchId: stamp.trashBatchId },
           });
         }

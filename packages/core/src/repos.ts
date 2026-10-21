@@ -145,8 +145,13 @@ export interface FolderRepository {
   /**
    * Trashes a folder subtree and the files inside it in one atomic step, so a
    * failure cannot leave the folders trashed while their files stay active.
+   *
+   * The write is scoped to `userId`. The caller checks ownership too, but the
+   * predicate is repeated here so that a bug in a caller cannot trash another
+   * account's items.
    */
   trashSubtree(
+    userId: string,
     folderIds: string[],
     fileIds: string[],
     stamp: { deletedAt: Date; trashBatchId: string },
@@ -154,8 +159,11 @@ export interface FolderRepository {
   /**
    * Restores a folder subtree and its files in one atomic step. When `reparent` is
    * given, the subtree root is moved under that parent in the same step.
+   *
+   * Scoped to `userId`, for the same reason as `trashSubtree`.
    */
   restoreSubtree(
+    userId: string,
     folderIds: string[],
     fileIds: string[],
     options: { rootId: string; reparent: { parentId: string | null } | null },

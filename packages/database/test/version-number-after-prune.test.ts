@@ -64,6 +64,10 @@ describe.skipIf(!url)("version numbers after pruning (PostgreSQL)", () => {
       mimeType: "text/plain",
       sha256,
       telegramMessageId,
+      encryptionFormat: null,
+      wrappedKey: null,
+      metadataBlob: null,
+      keyEpoch: null,
       version: { userId, size: 1, mimeType: "text/plain", sha256, telegramMessageId },
     });
 
@@ -77,12 +81,13 @@ describe.skipIf(!url)("version numbers after pruning (PostgreSQL)", () => {
       orderBy: { versionNumber: "asc" },
     });
     const current = await prisma.file.findUnique({ where: { id: fileId } });
+    expect(current).not.toBeNull();
     expect(versions.map((version) => version.versionNumber)).toEqual([1, 2, 3, 4, 5]);
     expect(new Set(versions.map((version) => version.versionNumber)).size).toBe(5);
     expect(current?.versionCount).toBe(5);
     expect(versions.some((version) => version.id === current?.currentVersionId)).toBe(true);
     expect(current?.sha256).toBe(
-      versions.find((version) => version.id === current.currentVersionId)?.sha256,
+      versions.find((version) => version.id === current?.currentVersionId)?.sha256,
     );
   });
 
