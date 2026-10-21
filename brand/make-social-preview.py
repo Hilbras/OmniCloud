@@ -31,7 +31,10 @@ MUTED = (183, 176, 160)
 DIM = (126, 119, 104)
 
 FONT_DIR = "/usr/share/fonts/truetype/noto"
-OUT = Path(__file__).with_name("social-preview.png")
+BRAND_OUT = Path(__file__).with_name("social-preview.png")
+# GitHub looks for the social preview in .github/assets, so the same image is
+# written to both places and they can never drift apart.
+GITHUB_OUT = Path(__file__).resolve().parent.parent / ".github" / "assets" / "social-preview.png"
 
 
 def font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -305,5 +308,7 @@ def build() -> Image.Image:
 
 if __name__ == "__main__":
     image = build()
-    image.save(OUT, "PNG", optimize=True)
-    print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB)")
+    for out in (BRAND_OUT, GITHUB_OUT):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        image.save(out, "PNG", optimize=True)
+        print(f"wrote {out} ({out.stat().st_size // 1024} KB)")
