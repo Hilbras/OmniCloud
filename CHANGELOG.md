@@ -98,6 +98,13 @@ and there is no silent fallback to unencrypted uploads.
 - The web build now rewrites `index.html` and regenerates `robots.txt` /
   `sitemap.xml` from the configured origin at build time; the previous Vercel
   URL remains the default.
+- **The npm package name is real now.** v0.3.0 renamed the package to
+  `@hilbras/omnicloud` in the manifest and shipped a GitHub release, but it was
+  never uploaded to npm under that name — the registry only ever had
+  `@lacrous/omnicloud`, up to `0.2.35`. v0.4.0 is the first release actually
+  published as `@hilbras/omnicloud`, from `Hilbras/OmniCloud`. Install it with
+  `npm install @hilbras/omnicloud`; the old `@lacrous/omnicloud` package stays
+  published at `0.2.35` and is deprecated.
 
 ### Fixed
 
