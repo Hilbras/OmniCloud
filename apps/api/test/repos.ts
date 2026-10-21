@@ -589,6 +589,20 @@ export function createInMemoryRepos(): InMemoryRepos {
         ...input,
       };
       versions.push(record);
+      // The parent file moves with the new version, as the database does.
+      const file = files.find((f) => f.id === input.fileId);
+      if (file !== undefined) {
+        file.size = input.size;
+        file.mimeType = input.mimeType;
+        file.sha256 = input.sha256;
+        file.telegramMessageId = input.telegramMessageId;
+        file.encryptionFormat = input.encryptionFormat ?? null;
+        file.wrappedKey = input.wrappedKey ?? null;
+        file.metadataBlob = input.metadataBlob ?? null;
+        file.keyEpoch = input.keyEpoch ?? null;
+        file.currentVersionId = record.id;
+        file.versionCount = existing.length + 1;
+      }
       return record;
     },
     listVersions: async (fileId) =>
@@ -610,9 +624,17 @@ export function createInMemoryRepos(): InMemoryRepos {
         if (allowed.has(versions[i]!.fileId)) versions.splice(i, 1);
       }
     },
-    deleteVersion: async (versionId) => {
+    deleteVersion: async (fileId, versionId) => {
       const index = versions.findIndex((v) => v.id === versionId);
-      if (index >= 0) versions.splice(index, 1);
+      if (index < 0) return;
+      const version = versions[index]!;
+      if (version.fileId !== fileId) return;
+      const file = files.find((f) => f.id === fileId);
+      if (file !== undefined && file.currentVersionId === versionId) {
+        throw new Error("The current version cannot be deleted");
+      }
+      versions.splice(index, 1);
+      if (file !== undefined) file.versionCount = Math.max(0, file.versionCount - 1);
     },
   };
 

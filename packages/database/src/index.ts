@@ -946,29 +946,62 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
       // The next number is one past the highest existing number, not the row count:
       // pruning removes rows from the middle, so a count can repeat a number that
       // still exists. The unique (fileId, versionNumber) index guards the rest.
-      const version = await prisma.$transaction(async (tx) => {
-        const latest = await tx.fileVersion.findFirst({
-          where: { fileId: input.fileId },
-          orderBy: { versionNumber: "desc" },
-          select: { versionNumber: true },
-        });
-        return tx.fileVersion.create({
-          data: {
-            fileId: input.fileId,
-            userId: input.userId,
-            versionNumber: (latest?.versionNumber ?? 0) + 1,
-            size: BigInt(input.size),
-            mimeType: input.mimeType,
-            sha256: input.sha256,
-            telegramMessageId: BigInt(input.telegramMessageId),
-            encryptionFormat: input.encryptionFormat ?? null,
-            wrappedKey: input.wrappedKey ?? null,
-            metadataBlob: input.metadataBlob ?? null,
-            keyEpoch: input.keyEpoch ?? null,
-          },
-        });
-      });
-      return mapVersion(version, null);
+      //
+      // The transaction is serializable and retried on P2034, so two concurrent
+      // creations cannot both read the same "latest" number and collide. The
+      // parent file's current-version state is written in the same transaction,
+      // so it can never describe a different version than the one this row
+      // belongs to.
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const version = await prisma.$transaction(
+            async (tx) => {
+              const latest = await tx.fileVersion.findFirst({
+                where: { fileId: input.fileId },
+                orderBy: { versionNumber: "desc" },
+                select: { versionNumber: true },
+              });
+              const count = await tx.fileVersion.count({ where: { fileId: input.fileId } });
+              const created = await tx.fileVersion.create({
+                data: {
+                  fileId: input.fileId,
+                  userId: input.userId,
+                  versionNumber: (latest?.versionNumber ?? 0) + 1,
+                  size: BigInt(input.size),
+                  mimeType: input.mimeType,
+                  sha256: input.sha256,
+                  telegramMessageId: BigInt(input.telegramMessageId),
+                  encryptionFormat: input.encryptionFormat ?? null,
+                  wrappedKey: input.wrappedKey ?? null,
+                  metadataBlob: input.metadataBlob ?? null,
+                  keyEpoch: input.keyEpoch ?? null,
+                },
+              });
+              await tx.file.update({
+                where: { id: input.fileId },
+                data: {
+                  size: BigInt(input.size),
+                  mimeType: input.mimeType,
+                  sha256: input.sha256,
+                  telegramMessageId: BigInt(input.telegramMessageId),
+                  encryptionFormat: input.encryptionFormat ?? null,
+                  wrappedKey: input.wrappedKey ?? null,
+                  metadataBlob: input.metadataBlob ?? null,
+                  keyEpoch: input.keyEpoch ?? null,
+                  currentVersionId: created.id,
+                  versionCount: count + 1,
+                },
+              });
+              return created;
+            },
+            { isolationLevel: "Serializable" },
+          );
+          return mapVersion(version, null);
+        } catch (error) {
+          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          throw error;
+        }
+      }
     },
     async listVersionsForFiles(fileIds) {
       const grouped = new Map<string, FileVersionRecord[]>();
@@ -1000,8 +1033,43 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
       if (fileIds.length === 0) return;
       await prisma.fileVersion.deleteMany({ where: { fileId: { in: fileIds } } });
     },
-    async deleteVersion(versionId) {
-      await prisma.fileVersion.deleteMany({ where: { id: versionId } });
+    async deleteVersion(fileId, versionId) {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await prisma.$transaction(
+            async (tx) => {
+              const version = await tx.fileVersion.findUnique({
+                where: { id: versionId },
+                select: { id: true, fileId: true },
+              });
+              // The version belongs to another file, or is already gone.
+              if (!version || version.fileId !== fileId) return;
+              const file = await tx.file.findUnique({
+                where: { id: fileId },
+                select: { currentVersionId: true, versionCount: true },
+              });
+              if (file?.currentVersionId === versionId) {
+                throw new ConflictError(
+                  "The current version cannot be deleted. Restore another version first, or delete the file.",
+                );
+              }
+              await tx.fileVersion.delete({ where: { id: versionId } });
+              // The count is read and written inside the same serializable
+              // transaction, so two concurrent deletes cannot both read the same
+              // count and write the same decremented value.
+              await tx.file.update({
+                where: { id: fileId },
+                data: { versionCount: Math.max(0, (file?.versionCount ?? 1) - 1) },
+              });
+            },
+            { isolationLevel: "Serializable" },
+          );
+          return;
+        } catch (error) {
+          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          throw error;
+        }
+      }
     },
   };
 }

@@ -99,7 +99,7 @@ describe.skipIf(!url)("version numbers after pruning (PostgreSQL)", () => {
     // Remove a middle entry, never the highest, so the test stays valid whatever
     // earlier tests left behind.
     const middle = versions[Math.floor(versions.length / 2)]!;
-    await repos.files.deleteVersion(middle.id);
+    await repos.files.deleteVersion(fileId, middle.id);
 
     const created = await repos.files.createVersion({
       fileId,

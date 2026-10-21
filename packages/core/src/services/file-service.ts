@@ -394,6 +394,15 @@ export class FileService {
         telegramMessageId: op.telegramMessageId!,
       });
     } catch (error) {
+      // The object IS stored — that is why this path exists — so the operation
+      // is not FAILED: FAILED means the Telegram write definitively failed, and
+      // the path that claims a FAILED operation re-uploads, which would leave
+      // this object orphaned in the channel beside a second copy.
+      //
+      // UPLOADING with the message id still set is the recovery state: the next
+      // request with the same operation id finds the stored object and commits
+      // it without uploading again. The reconciliation sweep protects the
+      // object from being reported as an orphan in the meantime.
       await operations.claim(op.id, "COMMITTING", "UPLOADING");
       throw error;
     }
@@ -909,7 +918,7 @@ export class FileService {
     let removed = 0;
     for (const version of doomed) {
       await engine.remove({ messageId: String(version.telegramMessageId) });
-      await this.files.deleteVersion(version.id);
+      await this.files.deleteVersion(fileId, version.id);
       removed += 1;
     }
     await this.activity.record({
@@ -994,10 +1003,9 @@ export class FileService {
 
     const engine = await this.engineFor(userId);
     await engine.remove({ messageId: String(version.telegramMessageId) });
-    await this.files.deleteVersion(version.id);
-
-    const remaining = Math.max(0, record.versionCount - 1);
-    await this.files.update(fileId, { versionCount: remaining });
+    // The version row and the file's version count move together, so a
+    // concurrent delete cannot make the count drift.
+    await this.files.deleteVersion(fileId, version.id);
 
     await this.activity.record({
       userId,

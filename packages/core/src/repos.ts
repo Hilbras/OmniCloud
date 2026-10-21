@@ -334,6 +334,13 @@ export interface FileRepository {
   deleteMany(ids: string[]): Promise<void>;
 
   // ── Versioning foundation ────────────────────────────────────────────────
+  /**
+   * Creates a version row and makes it the file's current version.
+   *
+   * The version number is allocated atomically, so concurrent creations cannot
+   * collide, and the parent file's current-version fields are written in the
+   * same transaction as the row.
+   */
   createVersion(input: FileVersionInput & { fileId: string }): Promise<FileVersionRecord>;
   listVersions(fileId: string): Promise<FileVersionRecord[]>;
   /** All versions for many files in one query, grouped by file id. */
@@ -341,8 +348,15 @@ export interface FileRepository {
   findVersionById(versionId: string): Promise<FileVersionRecord | null>;
   countVersions(fileId: string): Promise<number>;
   deleteVersionsByFileIds(fileIds: string[]): Promise<void>;
-  /** Removes one version row. Callers must delete its Telegram object first. */
-  deleteVersion(versionId: string): Promise<void>;
+  /**
+   * Removes one historical version of a file and decrements the file's version
+   * count.
+   *
+   * The delete and the count move together, so two concurrent deletes cannot
+   * both read the same count and write the same decremented value. The current
+   * version is refused: the file would have nothing left to point at.
+   */
+  deleteVersion(fileId: string, versionId: string): Promise<void>;
 }
 
 export interface ActivityRepository {
