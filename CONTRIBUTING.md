@@ -122,14 +122,35 @@ behavior those pages describe, update them in the same pull request. Note that
   it, and any follow-up work you deliberately left out.
 - For larger changes or anything that alters the architecture, open an issue
   first so we can agree on the approach before you invest in it.
+- The pull request template asks for the same three things: what changed, why,
+  and how you tested it. Fill it in — it is short.
 
-## What is out of scope for v0.2
+## Issues and discussions
 
-To keep the reliability foundation solid, these are intentionally not part of
-v0.2: public sharing and public links, multi-user collaboration, mobile/desktop
-apps, sync clients, end-to-end encryption, file previews as a subsystem,
-alternative storage providers (S3, WebDAV), Redis, Elasticsearch, Kubernetes,
-microservices, and distributed workers.
+- **Bug reports** and **feature requests** have forms under `.github/ISSUE_TEMPLATE/`.
+  They ask for the version, the environment and the reproduction steps, because
+  that is what a fix needs and it is easier to answer in a form than in prose.
+- **Security issues do not go in the tracker.** Use
+  [private vulnerability reporting](https://github.com/Hilbras/OmniCloud/security/advisories/new).
+- **Questions, ideas and "how do I run this"** belong in
+  [discussions](https://github.com/Hilbras/OmniCloud/discussions), not in issues.
+- Always remove API tokens, session cookies, encryption keys, recovery codes and
+  personal file names from anything you paste. A public issue is not a private
+  channel.
+
+## What is out of scope right now
+
+To keep the reliability and the security foundation solid, these are
+intentionally not part of the current release: public sharing and public links,
+multi-user collaboration, desktop and mobile apps, sync clients, alternative
+storage providers (S3, WebDAV), Redis, Elasticsearch, Kubernetes, microservices,
+and distributed workers.
+
+Client-side end-to-end encryption, encrypted previews and file versioning are
+in, but encryption is **experimental and opt-in** — see
+[`docs/limitations.md`](docs/limitations.md) and
+[`docs/audits/encryption-review.md`](docs/audits/encryption-review.md). No
+independent cryptographic review has happened yet.
 
 ## License
 
