@@ -59,9 +59,15 @@ export class TelegramStorageProvider implements StorageProvider {
   // ── Upload ───────────────────────────────────────────────────────────────
 
   async put(input: StorageUploadInput, control: TransferControl = {}): Promise<StoredObject> {
-    const total = input.data ? input.data.byteLength : input.size;
-    if (total === undefined || (!input.data && !input.path)) {
+    // A spooled file is described by its path and its size; a buffer carries its
+    // own length. Each missing piece gets its own message, so a caller that
+    // forgot the size is not told it supplied no file at all.
+    if (!input.data && !input.path) {
       throw new UploadFailedError("Upload input has neither data nor a spooled file");
+    }
+    const total = input.data ? input.data.byteLength : input.size;
+    if (total === undefined) {
+      throw new UploadFailedError("A spooled file upload must include its size");
     }
     if (total > MAX_DOCUMENT_BYTES) {
       throw new UploadFailedError(

@@ -115,8 +115,8 @@ describe("roundtrip", () => {
     for (let i = 0; i < plaintext.length; i += 4096) plaintext[i] = i & 0xff;
     const out = await decryptFile({
       urk: URK,
-      fileId: FILE_ID,
-      versionId: VERSION_ID,
+      // encryptFile returns the file and version ids it used, so they are
+      // spread in rather than repeated here.
       ...(await encryptFile(plaintext, {
         urk: URK,
         metadata: { name: "big.bin" },

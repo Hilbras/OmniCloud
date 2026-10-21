@@ -15,7 +15,8 @@
     "test": "vitest run",
     "lint": "eslint src test scripts",
     "verify:vectors": "tsx scripts/verify-vectors-node.ts",
-    "verify:vectors:cross-client": "tsx scripts/verify-cross-client.mjs"
+    "verify:vectors:cross-client": "tsx scripts/verify-cross-client.mjs",
+    "vectors:write": "tsx scripts/write-vectors.ts"
   },
   "dependencies": {
     "@noble/ciphers": "1.3.0",
