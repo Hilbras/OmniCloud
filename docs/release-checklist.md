@@ -75,7 +75,7 @@ real account and the release notes must say so.
 
       ```sh
       gh workflow run release.yml --repo Hilbras/OmniCloud --ref main \
-        -f version=0.4.0
+        -f version=0.5.0
       ```
 
       The dispatched version must match every manifest, and the tag must

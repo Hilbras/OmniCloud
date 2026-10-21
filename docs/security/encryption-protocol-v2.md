@@ -8,7 +8,7 @@ and does not contradict it.
 
 **Related:** [`encryption-protocol-v1.md`](encryption-protocol-v1.md),
 [`recovery-and-device-revocation.md`](recovery-and-device-revocation.md),
-[`../threat-model.md`](../threat-model.md)
+[`../threat-model.md`](threat-model.md)
 
 ---
 

@@ -222,7 +222,7 @@ cause is not identified from here.
 Two consequences, both worked around rather than ignored:
 
 - **The `Release` workflow also accepts a manual dispatch** with the version
-  to release (`gh workflow run release.yml --ref main -f version=0.4.0`). It
+  to release (`gh workflow run release.yml --ref main -f version=0.5.0`). It
   still checks the version against every manifest, still checks out the tag,
   and still runs the full gate.
 - **A direct push to `main` is not verified by CI on its own.** Run it by hand

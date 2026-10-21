@@ -56,7 +56,7 @@ Both factors are required: the ciphertext alone is useless without the code, and
 
 - An attacker who obtains **both** the account session **and** the code (they can restore the key). Store the code offline, apart from account credentials.
 - Malware on an authorized device while the key is unlocked.
-- A compromised Web deployment serving malicious JavaScript (see [`web-client-security`](../security.md#the-web-specific-trust-problem) — the browser delivery risk documented in the roadmap).
+- A compromised Web deployment serving malicious JavaScript (see the [trust model](../security.md#trust-model) — the browser delivery risk documented in the roadmap).
 - Loss of **both** key and code: encrypted data is then permanently unrecoverable. This is intentional; the server must never be able to recover it.
 
 **Account recovery vs encryption recovery.** Resetting or recovering the Telegram account restores _authentication only_. It does not restore the root key. The UI and this document must keep stating that distinction; do not claim otherwise.

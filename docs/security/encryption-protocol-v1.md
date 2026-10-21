@@ -4,7 +4,7 @@
 
 **Stack decision:** see [`architecture-decisions/0002-e2ee-crypto-stack.md`](architecture-decisions/0002-e2ee-crypto-stack.md). Primitives: XChaCha20-Poly1305 AEAD and HKDF-SHA256 from `@noble/ciphers@1.3.0` / `@noble/hashes@1.8.0`. These are established primitives from maintained libraries; the OmniCloud-specific framing below is new and is the part that needs review.
 
-**Supersedes for implementation purposes:** the open algorithm questions in [`encryption-protocol-proposal.md`](encryption-protocol-proposal.md) (that document remains the architectural proposal). The libsodium secretstream option was dropped for v1 because no published `libsodium.js` release provides supported stream-state release ([`crypto-library-research.md`](../crypto-library-research.md)).
+**Supersedes for implementation purposes:** the open algorithm questions in [`encryption-protocol-proposal.md`](encryption-protocol-proposal.md) (that document remains the architectural proposal). The libsodium secretstream option was dropped for v1 because no published `libsodium.js` release provides supported stream-state release ([`crypto-library-research.md`](crypto-library-research.md)).
 
 ## 1. Goals and non-goals
 
