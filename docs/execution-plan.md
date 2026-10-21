@@ -212,11 +212,25 @@ browser memory is evidenced indirectly rather than sampled. The buffered-Blob
 fallback path (browsers without OPFS) is code-guarded but untested.
 
 **Known release-process caveat:** the `Hilbras` organisation does not run
-workflows triggered by tag pushes — pushing `v0.4.0` started no run, and a
-throwaway probe tag confirmed it. The organisation's Actions policy is not
+workflows triggered by a push — not by a branch push, not by a tag push.
+Pushing `v0.4.0` started no run, and a throwaway probe tag confirmed it; the
+same holds for pushes to `main`, which start no `CI` run. `pull_request` and
+`workflow_dispatch` triggers do work. The organisation's Actions policy is not
 readable with the token this account has (403, `admin:org` required), so the
-cause is not identified from here. The `Release` workflow therefore also
-accepts a manual dispatch with the version to release
-(`gh workflow run release.yml --ref main -f version=0.4.0`); it still checks
-the version against every manifest, still checks out the tag, and still runs
-the full gate. `docs/release-checklist.md` records both paths.
+cause is not identified from here.
+
+Two consequences, both worked around rather than ignored:
+
+- **The `Release` workflow also accepts a manual dispatch** with the version
+  to release (`gh workflow run release.yml --ref main -f version=0.4.0`). It
+  still checks the version against every manifest, still checks out the tag,
+  and still runs the full gate.
+- **A direct push to `main` is not verified by CI on its own.** Run it by hand
+  (`gh workflow run ci.yml --ref main`) or land the change through a pull
+  request, which does trigger CI. `docs/release-checklist.md` records both
+  paths.
+
+Branch protection on `main` that requires the CI status check is the durable
+fix, and it is viable here because pull requests do trigger CI. It has not been
+enabled, because it changes how the repository is worked on and that is a
+decision for the maintainers.

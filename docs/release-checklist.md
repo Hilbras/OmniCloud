@@ -65,10 +65,13 @@ real account and the release notes must say so.
 - [ ] Version numbers agree in every `package.json`.
 - [ ] `CHANGELOG.md` has an entry for every user-visible change, with breaking
       changes stated.
-- [ ] Tag, push, and confirm CI passes on the tagged commit.
-- [ ] Run the release: pushing the tag starts the `Release` workflow. Some
-      organisations disable tag-triggered workflows — in that case dispatch it
-      by hand instead:
+- [ ] Tag, push, and confirm CI passes on the tagged commit. - A push does not start `CI` in this organisation — neither a branch push
+      nor a tag push. Run it by hand with
+      `gh workflow run ci.yml --repo Hilbras/OmniCloud --ref main`, or land
+      the change through a pull request, which does trigger CI.
+- [ ] Run the release: pushing the tag starts the `Release` workflow. This
+      organisation does not run tag-triggered workflows, so dispatch it by
+      hand instead:
 
       ```sh
       gh workflow run release.yml --repo Hilbras/OmniCloud --ref main \
