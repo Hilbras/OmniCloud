@@ -153,6 +153,12 @@ Recorded evidence, all reproducible:
 - Web streaming benchmark in headless Firefox at 32 MiB and 256 MiB, both
   producing `OCE1` envelopes via the OPFS spool
   (`docs/evidence/web-streaming-bench.md`)
+- Published to npm as `@hilbras/omnicloud@0.4.0` from the `Release` workflow
+  on `Hilbras/OmniCloud`, built from the tagged commit. The tarball was
+  installed from the live registry into a clean project: the `omnicloud`
+  binary reports `0.4.0`, the ESM and CJS entry points both load, and the
+  bundled server, web assets, Prisma schema and type declarations are all
+  present in the installed package.
 
 **Not independently reviewed.** No external cryptographic review has taken
 place; see `docs/audits/encryption-review.md`. Encryption remains experimental

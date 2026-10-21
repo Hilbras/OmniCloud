@@ -186,21 +186,21 @@ Android app (roadmap Phase 8), file sharing (Phase 10), encrypted server-side se
 Roadmap §21.16 requires every result to be recorded as verified, assumed, or
 not done. Current state:
 
-| Gate                                | Status       | Evidence                                                                          |
-| ----------------------------------- | ------------ | --------------------------------------------------------------------------------- |
-| M1 live E2EE round trip             | **Verified** | `docs/audits/live-e2ee-smoke.md` (29/29, real Telegram)                           |
-| M2 legacy migration                 | **Verified** | `docs/audits/m2-migration-smoke.md` (14/14)                                       |
-| M3 independent cryptographic review | **Not done** | `docs/audits/encryption-review.md` — package assembled, no reviewer engaged       |
-| M4 CLI encryption commands          | **Verified** | `docs/audits/m4-cli-smoke.md`                                                     |
-| M5 streaming large files (SDK/CLI)  | **Verified** | `docs/evidence/streaming-memory.md`                                               |
-| M5 streaming large files (web)      | **Verified** | `docs/evidence/web-streaming-bench.md` (Firefox; see caveats)                     |
-| M6 trusted-device enrollment        | **Not done** | Design ADR pending; blocked behind M3 by design                                   |
-| 3.1 canonical URLs                  | **Verified** | `VITE_SITE_URL`; both default and custom builds checked                           |
-| 3.2 npm publish                     | **Not done** | Requires npm org scope and `NPM_TOKEN`; awaiting authorization                    |
-| 3.3 docs sync                       | **Verified** | CHANGELOG `[Unreleased]`, README, sdk docs updated in this cycle                  |
-| 3.4 bundle trim                     | **Verified** | `docs/audits/test-evidence.md` — main chunk 142 KB gzip, under the 350 KB target  |
-| 3.5 encrypted previews              | **Verified** | Encrypted images/video decrypt in-tab; object URL revoked; plaintext never cached |
-| 3.6 ops notes                       | **Not done** | Documentation only; not started                                                   |
+| Gate                                | Status       | Evidence                                                                                                                                                                                                              |
+| ----------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1 live E2EE round trip             | **Verified** | `docs/audits/live-e2ee-smoke.md` (29/29, real Telegram)                                                                                                                                                               |
+| M2 legacy migration                 | **Verified** | `docs/audits/m2-migration-smoke.md` (14/14)                                                                                                                                                                           |
+| M3 independent cryptographic review | **Not done** | `docs/audits/encryption-review.md` — package assembled, no reviewer engaged                                                                                                                                           |
+| M4 CLI encryption commands          | **Verified** | `docs/audits/m4-cli-smoke.md`                                                                                                                                                                                         |
+| M5 streaming large files (SDK/CLI)  | **Verified** | `docs/evidence/streaming-memory.md`                                                                                                                                                                                   |
+| M5 streaming large files (web)      | **Verified** | `docs/evidence/web-streaming-bench.md` (Firefox; see caveats)                                                                                                                                                         |
+| M6 trusted-device enrollment        | **Not done** | Design ADR pending; blocked behind M3 by design                                                                                                                                                                       |
+| 3.1 canonical URLs                  | **Verified** | `VITE_SITE_URL`; both default and custom builds checked                                                                                                                                                               |
+| 3.2 npm publish                     | **Verified** | `@hilbras/omnicloud@0.4.0` published from the `Release` workflow on `Hilbras/OmniCloud`; installed from the live registry into a clean project — CLI reports `0.4.0`, ESM + CJS load, server bundle and types present |
+| 3.3 docs sync                       | **Verified** | CHANGELOG `[Unreleased]`, README, sdk docs updated in this cycle                                                                                                                                                      |
+| 3.4 bundle trim                     | **Verified** | `docs/audits/test-evidence.md` — main chunk 142 KB gzip, under the 350 KB target                                                                                                                                      |
+| 3.5 encrypted previews              | **Verified** | Encrypted images/video decrypt in-tab; object URL revoked; plaintext never cached                                                                                                                                     |
+| 3.6 ops notes                       | **Not done** | Documentation only; not started                                                                                                                                                                                       |
 
 **Assumed, not verified:** that the protocol survives independent review. The
 design is documented and internally consistent, but no external party has
@@ -210,3 +210,13 @@ examined it. Nothing in the product, README, or changelog claims otherwise.
 was recorded in headless Firefox; browser heap is not measurable there, so
 browser memory is evidenced indirectly rather than sampled. The buffered-Blob
 fallback path (browsers without OPFS) is code-guarded but untested.
+
+**Known release-process caveat:** the `Hilbras` organisation does not run
+workflows triggered by tag pushes — pushing `v0.4.0` started no run, and a
+throwaway probe tag confirmed it. The organisation's Actions policy is not
+readable with the token this account has (403, `admin:org` required), so the
+cause is not identified from here. The `Release` workflow therefore also
+accepts a manual dispatch with the version to release
+(`gh workflow run release.yml --ref main -f version=0.4.0`); it still checks
+the version against every manifest, still checks out the tag, and still runs
+the full gate. `docs/release-checklist.md` records both paths.
