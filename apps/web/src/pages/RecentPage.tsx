@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   replace: "New version",
   restore_version: "Version restored",
   delete_version: "Version deleted",
+  other: "Activity",
 };
 
 interface RecentRow {

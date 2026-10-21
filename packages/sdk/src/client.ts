@@ -374,7 +374,11 @@ export class OmniCloudClient {
       );
     }
 
-    const total = Number(response.headers.get("content-length") ?? 0) || null;
+    // An absent header means the length is unknown; a header of 0 means the
+    // file is empty. Collapsing both to null would skip the length check for
+    // an empty download.
+    const lengthHeader = response.headers.get("content-length");
+    const total = lengthHeader === null ? null : Number(lengthHeader);
     const contentType = response.headers.get("content-type") ?? "application/octet-stream";
     const sha256 = response.headers.get("x-content-sha256");
     const source = response.body;
@@ -437,7 +441,11 @@ export class OmniCloudClient {
       );
     }
 
-    const total = Number(response.headers.get("content-length") ?? 0) || null;
+    // An absent header means the length is unknown; a header of 0 means the
+    // file is empty. Collapsing both to null would skip the length check for
+    // an empty download.
+    const lengthHeader = response.headers.get("content-length");
+    const total = lengthHeader === null ? null : Number(lengthHeader);
     const contentType = response.headers.get("content-type") ?? "application/octet-stream";
     const sha256 = response.headers.get("x-content-sha256");
     const integrityHeader = response.headers.get("x-integrity-verified");

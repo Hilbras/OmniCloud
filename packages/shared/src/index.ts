@@ -186,11 +186,23 @@ export const ACTIVITY_ACTIONS = [
   "replace",
   "restore_version",
   "delete_version",
+  /** A stored action this version does not recognise. */
+  "other",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
 
+/** True when the value is a known activity action. */
+export function isActivityAction(value: string): value is ActivityAction {
+  return (ACTIVITY_ACTIONS as readonly string[]).includes(value);
+}
+
 export const RESOURCE_TYPES = ["file", "folder", "storage"] as const;
 export type ResourceType = (typeof RESOURCE_TYPES)[number];
+
+/** True when the value is a known resource type. */
+export function isResourceType(value: string): value is ResourceType {
+  return (RESOURCE_TYPES as readonly string[]).includes(value);
+}
 
 export interface ActivityEventDTO {
   id: string;

@@ -6,7 +6,13 @@ import {
   type FileVersion as DbFileVersion,
   type ActivityEvent as DbActivityEvent,
 } from "@prisma/client";
-import { ConflictError, NotFoundError, OperationAlreadyExistsError } from "@omnicloud/core";
+import {
+  ConflictError,
+  isActivityAction,
+  isResourceType,
+  NotFoundError,
+  OperationAlreadyExistsError,
+} from "@omnicloud/core";
 import type {
   ActivityEventRecord,
   ActivityRepository,
@@ -17,7 +23,6 @@ import type {
   UploadOperationRecord,
   UploadOperationRepository,
   UploadOperationStatus,
-  ActivityAction,
   FileRecord,
   FileRepository,
   FileVersionRecord,
@@ -26,7 +31,6 @@ import type {
   ItemQuery,
   PageRequest,
   Repos,
-  ResourceType,
   SecretBox,
   SessionRepository,
   StorageRecord,
@@ -34,8 +38,6 @@ import type {
   TelegramSessionRecord,
   UserRepository,
 } from "@omnicloud/core";
-
-export { PrismaClient } from "@prisma/client";
 
 export function createPrismaClient(): PrismaClient {
   return new PrismaClient();
@@ -125,7 +127,7 @@ function mapFile(file: DbFile): FileRecord {
   };
 }
 
-function mapVersion(version: DbFileVersion, _currentVersionId: string | null): FileVersionRecord {
+function mapVersion(version: DbFileVersion): FileVersionRecord {
   return {
     id: version.id,
     fileId: version.fileId,
@@ -147,8 +149,10 @@ function mapActivity(event: DbActivityEvent): ActivityEventRecord {
   return {
     id: event.id,
     userId: event.userId,
-    action: event.action as ActivityAction,
-    resourceType: event.resourceType as ResourceType,
+    // A stored value this version does not recognise becomes "other" rather
+    // than an invalid union member that the UI would have to render blind.
+    action: isActivityAction(event.action) ? event.action : "other",
+    resourceType: isResourceType(event.resourceType) ? event.resourceType : "file",
     resourceId: event.resourceId,
     resourceName: event.resourceName,
     metadata: (event.metadata as Record<string, unknown> | null) ?? null,
@@ -255,7 +259,11 @@ function folderOrderBy(query: ItemQuery): Prisma.FolderOrderByWithRelationInput[
 }
 
 function skipTake(page: PageRequest): { skip: number; take: number } {
-  return { skip: (page.page - 1) * page.limit, take: page.limit };
+  // A page or limit below 1 would produce a negative skip, which Prisma
+  // rejects with an error that says nothing useful.
+  const limit = Math.max(1, page.limit);
+  const current = Math.max(1, page.page);
+  return { skip: (current - 1) * limit, take: limit };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -996,7 +1004,7 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
             },
             { isolationLevel: "Serializable" },
           );
-          return mapVersion(version, null);
+          return mapVersion(version);
         } catch (error) {
           if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
           throw error;
@@ -1011,20 +1019,19 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
         where: { fileId: { in: fileIds } },
         orderBy: { versionNumber: "desc" },
       });
-      for (const row of rows) grouped.get(row.fileId)?.push(mapVersion(row, null));
+      for (const row of rows) grouped.get(row.fileId)?.push(mapVersion(row));
       return grouped;
     },
     async listVersions(fileId) {
-      const [rows, file] = await Promise.all([
-        prisma.fileVersion.findMany({ where: { fileId }, orderBy: { versionNumber: "desc" } }),
-        prisma.file.findUnique({ where: { id: fileId }, select: { currentVersionId: true } }),
-      ]);
-      const currentId = file?.currentVersionId ?? null;
-      return rows.map((row) => mapVersion(row, currentId));
+      const rows = await prisma.fileVersion.findMany({
+        where: { fileId },
+        orderBy: { versionNumber: "desc" },
+      });
+      return rows.map((row) => mapVersion(row));
     },
     async findVersionById(versionId) {
       const version = await prisma.fileVersion.findUnique({ where: { id: versionId } });
-      return version ? mapVersion(version, null) : null;
+      return version ? mapVersion(version) : null;
     },
     async countVersions(fileId) {
       return prisma.fileVersion.count({ where: { fileId } });

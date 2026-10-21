@@ -16,8 +16,9 @@ import {
 } from "../errors";
 import { isRetryableError, retryDelayMs } from "./retry";
 
-export { sha256Hex } from "../utils/hash";
 import { sha256Hex } from "../utils/hash";
+
+export { sha256Hex } from "../utils/hash";
 
 export interface EngineUploadResult {
   stored: StoredObject;
@@ -96,6 +97,7 @@ export class StorageEngine {
         control,
         (error) => new UploadFailedError("Upload failed", error),
       );
+      this.assertStoredSize(stored.size, size);
       control.onProgress?.({ transferred: size, total: size, percent: 100 });
       return { stored, sha256, size };
     }
@@ -110,8 +112,22 @@ export class StorageEngine {
       control,
       (error) => new UploadFailedError("Upload failed", error),
     );
+    this.assertStoredSize(stored.size, size);
     control.onProgress?.({ transferred: size, total: size, percent: 100 });
     return { stored, sha256, size };
+  }
+
+  /**
+   * The provider must have stored exactly the bytes it was given. A mismatch
+   * means the object in the channel is not the object that was hashed, so the
+   * checksum and the recorded size would both be wrong.
+   */
+  private assertStoredSize(storedSize: number, expectedSize: number): void {
+    if (storedSize !== expectedSize) {
+      throw new UploadFailedError(
+        `The stored object is ${storedSize} bytes but ${expectedSize} were uploaded`,
+      );
+    }
   }
 
   async download(ref: StoredRef, control: TransferControl = {}): Promise<Buffer> {
@@ -129,6 +145,12 @@ export class StorageEngine {
    * been checked, so a corrupt object errors the stream before its final bytes
    * are released. A consumer therefore never sees a complete-looking body that
    * fails the checksum. Memory stays bounded to about two provider chunks.
+   *
+   * The checksum can only be checked once the whole object has been read, so a
+   * consumer that stops reading early gets no error and has seen unverified
+   * bytes. Read the stream to the end to have the checksum enforced. Callers
+   * that also know the expected length can detect an early stop themselves; the
+   * SDK does this from the response's `Content-Length`.
    */
   async downloadStream(
     ref: StoredRef,

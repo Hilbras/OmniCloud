@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Api, TelegramClient } from "telegram";
 import { CustomFile } from "telegram/client/uploads.js";
+import { StringSession } from "telegram/sessions/index.js";
 import { computeCheck } from "telegram/Password.js";
 import {
   NotFoundError,
@@ -502,7 +503,13 @@ export class TelegramConnectionService {
     let stringSession: string;
     let user: UserRecord;
     try {
-      stringSession = client.session.save() as unknown as string;
+      // The client is always built with a StringSession, whose save() returns
+      // the session as a string. Checked rather than cast, so a change of
+      // session type fails here instead of storing an unusable value.
+      if (!(client.session instanceof StringSession)) {
+        throw new Error("Telegram client was created with an unexpected session type");
+      }
+      stringSession = client.session.save();
       const me = await client.getMe();
       if (!(me instanceof Api.User)) {
         throw new Error("Telegram did not return the authenticated user");

@@ -29,8 +29,6 @@ export type ItemAction =
   | "restore"
   | "delete";
 
-export type ItemActionHandler = (action: ItemAction, item: ItemRefLike) => void;
-
 /** Minimal shape the action builders need (avoids importing the view model). */
 export interface ItemRefLike {
   kind: "file" | "folder";
