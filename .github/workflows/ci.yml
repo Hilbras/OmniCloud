@@ -15,7 +15,7 @@ jobs:
     name: Lint, typecheck, test & build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -53,7 +53,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://omnicloud:omnicloud@localhost:5432/omnicloud
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Start PostgreSQL from the runner image
         run: |
