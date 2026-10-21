@@ -14,6 +14,13 @@ updates:
       - dependencies
     commit-message:
       prefix: "build(deps)"
+    ignore:
+      # A major bump can change behaviour, so it is a decision for a human,
+      # not something that opens a pull request on its own. Security updates
+      # are still opened.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
     groups:
       # Minor and patch updates for the same package arrive together and are
       # easier to review as one.
@@ -28,7 +35,8 @@ updates:
         exclude-patterns:
           - "*"
 
-  # Actions are pinned to a major version; a new major is worth reading.
+  # Actions are pinned to a major version, and a new major can change how a
+  # workflow behaves — the release workflow in particular.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -38,3 +46,7 @@ updates:
       - dependencies
     commit-message:
       prefix: "ci"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
