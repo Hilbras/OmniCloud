@@ -1,11 +1,15 @@
 import {
+  canonicalIndexJson,
+  createIndexContainer,
   createRecoveryBlob,
+  deriveIndexKey,
   deriveKek,
   deriveMek,
   encryptBytes,
   encryptMetadata,
   wrapDek,
 } from "../src/index";
+import type { IndexEntry } from "../src/index";
 
 /**
  * The OCE1 v1 known-answer vector.
@@ -43,6 +47,37 @@ export const FILE_ID = fromHex("a1".repeat(16));
 export const VERSION_ID = fromHex("b2".repeat(16));
 export const RECOVERY_CODE = fromHex("d4".repeat(32));
 export const RECOVERY_NONCE = fromHex("6e".repeat(24));
+export const INDEX_NONCE = fromHex("7f".repeat(24));
+
+/** The entries the OCE2 index vector is built from. */
+export const INDEX_ENTRIES: IndexEntry[] = [
+  {
+    id: "cmux72xpt0008mcvg8bsv9quk",
+    name: "report.pdf",
+    mimeType: "application/pdf",
+    description: "Q3 numbers",
+    size: 2097152,
+    folderId: "cmux76h8s0004mczja52i07i8",
+    starred: true,
+    trashed: false,
+    versionCount: 2,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-02T00:00:00.000Z",
+  },
+  {
+    id: "cmux76h9l000amczj8ivjnvhp",
+    name: "notes.md",
+    mimeType: "text/markdown",
+    description: null,
+    size: 512,
+    folderId: null,
+    starred: false,
+    trashed: false,
+    versionCount: 1,
+    createdAt: "2026-10-03T00:00:00.000Z",
+    updatedAt: "2026-10-03T00:00:00.000Z",
+  },
+];
 export const PLAINTEXT = new TextEncoder().encode(
   "OmniCloud OCE1 known-answer vector. 0123456789abcdefghijklmnopqrstuvwxyz. pack my box with five dozen liquor jugs.",
 );
@@ -74,6 +109,13 @@ export interface Oce1Vector {
     nonceHex: string;
     blobHex: string;
     urkHex: string;
+  };
+  index: {
+    keyHex: string;
+    nonceHex: string;
+    entries: IndexEntry[];
+    jsonHex: string;
+    containerHex: string;
   };
 }
 
@@ -121,6 +163,13 @@ export async function buildVector(): Promise<Oce1Vector> {
       nonceHex: hex(RECOVERY_NONCE),
       blobHex: hex(createRecoveryBlob(URK, RECOVERY_CODE, 0, RECOVERY_NONCE)),
       urkHex: hex(URK),
+    },
+    index: {
+      keyHex: hex(deriveIndexKey(URK)),
+      nonceHex: hex(INDEX_NONCE),
+      entries: INDEX_ENTRIES,
+      jsonHex: hex(canonicalIndexJson(INDEX_ENTRIES)),
+      containerHex: hex(createIndexContainer(URK, INDEX_ENTRIES, 0, INDEX_NONCE)),
     },
   };
 }

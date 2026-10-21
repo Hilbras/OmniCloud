@@ -50,6 +50,23 @@ export {
   generateUrk,
 } from "./keys";
 export {
+  INDEX_AAD_TYPE,
+  INDEX_CONTAINER_VERSION,
+  INDEX_HKDF_SALT,
+  INDEX_KEY_INFO,
+  OCE2_MAGIC,
+  OPAQUE_NAME_BYTES,
+  OPAQUE_NAME_PREFIX,
+  canonicalIndexJson,
+  createIndexContainer,
+  deriveIndexKey,
+  generateOpaqueName,
+  isOpaqueName,
+  openIndexContainer,
+  parseIndexJson,
+} from "./name-index";
+export type { IndexEntry } from "./name-index";
+export {
   RECOVERY_BLOB_BYTES,
   RECOVERY_CODE_BYTES,
   createRecoveryBlob,

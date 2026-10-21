@@ -367,3 +367,4 @@ export const REQUEST_ID_HEADER = "x-request-id";
 
 export * from "./mime";
 export * from "./query";
+export * from "./search";
