@@ -8,7 +8,14 @@ import {
 import type { FileDTO } from "@omnicloud/shared";
 import { base64ToBytes } from "../lib/bytes";
 import { getUrk } from "../lib/crypto-session";
-import { api, ApiError, apiErrorFromText, errorMessage, notifyUnauthorized } from "./client";
+import {
+  api,
+  ApiError,
+  apiErrorFromText,
+  ERROR_CODES,
+  errorMessage,
+  notifyUnauthorized,
+} from "./client";
 
 function downloadPath(id: string): string {
   return `/api/files/${encodeURIComponent(id)}/download`;
@@ -51,7 +58,8 @@ export async function fetchFileBytes(id: string): Promise<Uint8Array> {
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     const error = apiErrorFromText(response.status, text);
-    if (response.status === 401 && error.code !== "TELEGRAM_AUTH_REQUIRED") notifyUnauthorized();
+    if (response.status === 401 && error.code !== ERROR_CODES.TELEGRAM_AUTH_REQUIRED)
+      notifyUnauthorized();
     throw error;
   }
   return new Uint8Array(await response.arrayBuffer());
@@ -202,7 +210,8 @@ export async function fetchDecryptedPreview(
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     const error = apiErrorFromText(response.status, text);
-    if (response.status === 401 && error.code !== "TELEGRAM_AUTH_REQUIRED") notifyUnauthorized();
+    if (response.status === 401 && error.code !== ERROR_CODES.TELEGRAM_AUTH_REQUIRED)
+      notifyUnauthorized();
     throw error;
   }
 
@@ -298,7 +307,8 @@ export async function downloadFile(id: string, knownFile?: FileDTO | null): Prom
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     const error = apiErrorFromText(response.status, text);
-    if (response.status === 401 && error.code !== "TELEGRAM_AUTH_REQUIRED") notifyUnauthorized();
+    if (response.status === 401 && error.code !== ERROR_CODES.TELEGRAM_AUTH_REQUIRED)
+      notifyUnauthorized();
     throw error;
   }
 

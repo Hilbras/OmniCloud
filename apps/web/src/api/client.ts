@@ -367,8 +367,21 @@ export const api = {
     ): Promise<{ removed: number }> {
       return requestJson("POST", filePath(id, "/versions/prune"), policy);
     },
-    /** Triggers a browser download of the file (the API sends an attachment). */
+    /**
+     * Triggers a browser download of the file (the API sends an attachment).
+     *
+     * This needs a DOM to click a link in. In Node or during server rendering
+     * there is none, so it says so plainly rather than failing with
+     * "document is not defined".
+     */
     download(id: string): void {
+      if (typeof document === "undefined") {
+        throw new ApiError(
+          0,
+          "NO_DOM",
+          "Triggering a browser download needs a browser. Use the SDK's download or downloadToFile instead.",
+        );
+      }
       const anchor = document.createElement("a");
       anchor.href = filePath(id, "/download");
       anchor.rel = "noopener";

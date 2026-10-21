@@ -1,8 +1,15 @@
 import { encryptFile } from "@omnicloud/crypto";
 import type { FileDTO } from "@omnicloud/shared";
 import { getUrk, isEncryptUploadsEnabled } from "../lib/crypto-session";
+import { isFileDTO } from "../lib/dto";
 import { bytesToBase64, toArrayBuffer } from "../lib/bytes";
-import { ApiError, apiErrorFromText, errorMessage, notifyUnauthorized } from "./client";
+import {
+  ApiError,
+  apiErrorFromText,
+  ERROR_CODES,
+  errorMessage,
+  notifyUnauthorized,
+} from "./client";
 import { STREAM_MIN_BYTES, encryptFileStreaming } from "./encrypt-stream";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -16,11 +23,8 @@ function parseFileResponse(status: number, responseText: string): FileDTO {
   } catch {
     // Handled by the shape check below.
   }
-  if (isRecord(parsed) && isRecord(parsed["file"])) {
-    const file = parsed["file"];
-    if (typeof file["id"] === "string" && typeof file["name"] === "string") {
-      return file as unknown as FileDTO;
-    }
+  if (isRecord(parsed) && isRecord(parsed["file"]) && isFileDTO(parsed["file"])) {
+    return parsed["file"];
   }
   throw new ApiError(status, "UNKNOWN", "The server returned an unexpected response");
 }
@@ -150,7 +154,8 @@ function xhrUpload(
         return;
       }
       const error = apiErrorFromText(xhr.status, xhr.responseText);
-      if (xhr.status === 401 && error.code !== "TELEGRAM_AUTH_REQUIRED") notifyUnauthorized();
+      if (xhr.status === 401 && error.code !== ERROR_CODES.TELEGRAM_AUTH_REQUIRED)
+        notifyUnauthorized();
       reject(error);
     });
     xhr.addEventListener("error", () => {
