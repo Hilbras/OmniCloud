@@ -37,11 +37,18 @@ jobs:
             echo "::error::Tag v$TAG does not match @hilbras/omnicloud version $SDK_VERSION"
             exit 1
           fi
-          # The API embeds its version in server/index.js, and the other manifests
-          # ship inside the package, so all of them must carry the released version.
-          API_VERSION="$(sed -n 's/^const VERSION = "\(.*\)";$/\1/p' apps/api/src/routes/storage.ts)"
+          # The API reports the version it was built with, and reads it from the
+          # package manifest next to it. Check it the same way the code does,
+          # rather than grepping a source constant that is no longer inline.
+          API_VERSION="$(node -e "
+            const {readFileSync} = require('node:fs');
+            const {join, resolve} = require('node:path');
+            const here = resolve('apps/api/src');
+            const manifest = JSON.parse(readFileSync(resolve(join(here, '..', 'package.json')), 'utf8'));
+            process.stdout.write(manifest.version);
+          ")"
           if [ "$API_VERSION" != "$SDK_VERSION" ]; then
-            echo "::error::API VERSION is $API_VERSION but the tag is v$TAG"
+            echo "::error::the API reports version $API_VERSION but the tag is v$TAG"
             exit 1
           fi
           for manifest in package.json apps/api/package.json apps/web/package.json \

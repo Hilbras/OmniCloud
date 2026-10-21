@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**Streaming large-file encryption, legacy migration, CLI encryption, and SEO
-hardening.**
+## [0.4.0] - 2026-10-21
+
+**Streaming large-file encryption, legacy migration, CLI encryption, version
+history, and the first step towards a server that cannot see your file names.**
 
 Everything below is opt-in or internal; existing plaintext files stay readable
 and there is no silent fallback to unencrypted uploads.

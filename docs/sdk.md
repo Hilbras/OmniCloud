@@ -1,4 +1,4 @@
-# SDK (`@hilbras/omnicloud`) v0.3
+# SDK (`@hilbras/omnicloud`) v0.4
 
 The package ships three things:
 

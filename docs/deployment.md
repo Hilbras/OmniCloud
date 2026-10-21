@@ -97,7 +97,7 @@ WantedBy=multi-user.target
 Adjust the `node` path to the output of `which node`. The unit runs the
 package's own entry point directly, so it does not depend on npm at startup.
 Keep the `.env` file readable only by the service user, and pin the version
-(`npm install @hilbras/omnicloud@0.3.0`) so upgrades happen deliberately.
+(`npm install @hilbras/omnicloud@0.4.0`) so upgrades happen deliberately.
 
 ## Build
 
