@@ -14,7 +14,8 @@ Requested review areas (in priority order):
 4. **Device enrollment design draft** — planned cross-device key transfer (design only; not yet implemented — reviewer should flag design flaws before M6 code).
 5. **Implementation quality of `packages/crypto`** — constant-time concerns with the chosen libraries, key-material lifetime in JS, error taxonomy leaking oracle information, test coverage gaps.
 6. **Migration and legacy handling** — verify-before-delete ordering, PENDING-resume hash check, plaintext-history retention rules (`docs/security/legacy-migration.md`).
-7. **Metadata privacy boundary** — what v1 actually hides and what it does not. The protocol document was corrected on 2026-10-21 to state plainly that the plaintext filename is stored in `File.name` and is also carried by the Telegram document's filename attribute. The reviewer's task is to confirm that boundary as described is the correct one, and to review the proposed OCE2 direction (`docs/security/architecture-decisions/0004-client-side-filename-index.md`) before any of it is built.
+7. **Metadata privacy boundary** — what v1 actually hides and what it does not. The protocol document was corrected on 2026-10-21 to state plainly that the plaintext filename is stored in `File.name` and is also carried by the Telegram document's filename attribute. The reviewer's task is to confirm that boundary as described is the correct one.
+8. **OCE2, the server-blind filename format** — the design (`architecture-decisions/0004-client-side-filename-index.md`), the normative format (`encryption-protocol-v2.md`) and the implementation. `docs/audits/oce2-review-note.md` is the hand-off: it lists the decisions worth arguing with, what is deliberately not done, and the fact that **OCE2 is implemented but not enabled by default**. It stays that way until this review has returned findings on it.
 
 Out of scope for this round: Android local storage (no client exists yet), sharing/permissions (not implemented), web supply-chain process (documented separately; reviewer comments welcome but not gating).
 
@@ -38,7 +39,8 @@ Out of scope for this round: Android local storage (no client exists yet), shari
 | Threat model                                            | `docs/security/threat-model.md`                                                     |
 | Three-tier execution plan                               | `docs/execution-plan.md`                                                            |
 | Device-enrollment design (review scope item 4)          | `docs/security/architecture-decisions/0003-trusted-device-enrollment.md`            |
-| Client-side filename index design (review scope item 7) | `docs/security/architecture-decisions/0004-client-side-filename-index.md`           |
+| Client-side filename index design (review scope item 8) | `docs/security/architecture-decisions/0004-client-side-filename-index.md`           |
+| OCE2 hand-off note (review scope item 8)                | `docs/audits/oce2-review-note.md`                                                   |
 
 All paths above were re-verified to exist on the branch named below.
 

@@ -101,7 +101,9 @@ One entry per file the client knows about:
   "trashed": false,
   "versionCount": 2,
   "createdAt": "2026-10-01T00:00:00.000Z",
-  "updatedAt": "2026-10-02T00:00:00.000Z"
+  "updatedAt": "2026-10-02T00:00:00.000Z",
+  "cryptoFileId": "hex…",
+  "cryptoVersionId": "hex…"
 }
 ```
 
@@ -109,6 +111,12 @@ One entry per file the client knows about:
 timestamps come from the server's listing; `name`, `mimeType` and `description`
 come from the file's encrypted metadata blob. Together they are enough to
 answer every query the server could answer, locally.
+
+`cryptoFileId` and `cryptoVersionId` are the ids the envelope's own header
+carries, not the server's. The metadata blob is authenticated against them, so a
+rename has to re-encrypt the metadata under the same pair; keeping them in the
+entry is what makes that possible. They are omitted when the client does not
+know them, in which case the file's name cannot be changed.
 
 ### 4.2 The container
 
@@ -189,26 +197,31 @@ status, using only index data.
 
 ## 6. Migration from OCE1
 
-A file moves from OCE1 to OCE2 by being uploaded again under an opaque name
-with the metadata blob re-encrypted. The **contents are not re-encrypted**:
-the same ciphertext is uploaded under a new version id, because the OCE1
-record authentication binds the version id.
+A file moves from OCE1 to OCE2 by being uploaded again under an opaque name.
+The **content is not re-encrypted**: the same envelope bytes are uploaded
+again, so the envelope's own file and version ids — which the ciphertext is
+authenticated against — do not change, and the same wrapped key and metadata
+blob apply. The real name therefore travels in exactly one encrypted place, as
+it did before.
+
+What changes is the name the server stores, from the real one to an opaque
+placeholder, and the format recorded against the version.
 
 The sequence, following the verify-before-delete rule the legacy migration
 already uses:
 
-1. Download the current OCE1 version's ciphertext.
-2. Create a new OCE2 version: the same ciphertext bytes, a new version id, a
-   new opaque name, and a metadata blob encrypted under the new version id
-   with the real name in it.
-3. Upload it.
-4. Download it back, decrypt it, and compare the plaintext byte for byte with
+1. Download the current version's envelope and decrypt it, which yields the
+   plaintext to compare against and the real name to keep.
+2. Upload the same envelope bytes under a new opaque name, with the format
+   recorded as OCE2.
+3. Download it back, decrypt it, and compare the plaintext byte for byte with
    the original.
-5. Only then remove the old OCE1 version's object and mark the file OCE2.
-6. Update the index: the entry's name, mime type and description now come from
-   the OCE2 metadata blob.
+4. Only then remove the old version's object and record.
+5. Update the index: the entry's name, MIME type and description now come from
+   the OCE2 metadata blob, and the entry records the envelope's own file and
+   version ids so that a later rename can re-encrypt the metadata.
 
-If step 4 fails, the old version is left in place and the file stays OCE1. The
+If step 3 fails, the old version is left in place and the file stays OCE1. The
 migration is therefore safe to retry and never risks the content.
 
 ## 7. What remains visible

@@ -87,3 +87,39 @@ export function isEncryptUploadsEnabled(): boolean {
     return false;
   }
 }
+
+/**
+ * Which encrypted format new uploads are stored in.
+ *
+ * `OCE1` leaves the file's name visible to the server. `OCE2` hides it: the
+ * server stores an opaque placeholder and the real name lives only in this
+ * client's index. OCE1 is the default until the format has been reviewed.
+ *
+ * Like the preference above, this carries no secret, so it may be persisted.
+ */
+export const ENCRYPT_FORMAT_KEY = "omnicloud-encrypt-format";
+
+export type EncryptFormatPref = "OCE1" | "OCE2";
+
+export function isEncryptFormatPref(value: string): value is EncryptFormatPref {
+  return value === "OCE1" || value === "OCE2";
+}
+
+/** Reads the persisted format preference; defaults to OCE1. */
+export function encryptFormatPref(): EncryptFormatPref {
+  try {
+    const stored = localStorage.getItem(ENCRYPT_FORMAT_KEY);
+    return stored !== null && isEncryptFormatPref(stored) ? stored : "OCE1";
+  } catch {
+    return "OCE1";
+  }
+}
+
+/** Persists the format preference. */
+export function setEncryptFormatPref(format: EncryptFormatPref): void {
+  try {
+    localStorage.setItem(ENCRYPT_FORMAT_KEY, format);
+  } catch {
+    // A preference that cannot be stored simply does not persist.
+  }
+}

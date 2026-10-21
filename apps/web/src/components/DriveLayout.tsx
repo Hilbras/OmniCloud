@@ -9,6 +9,7 @@ import { DriveShellContext, useDriveShell } from "../hooks/useDriveShell";
 import type { PageShortcuts } from "../hooks/useDriveShell";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useMe } from "../hooks/useMe";
+import { useNameIndex } from "../hooks/useNameIndex";
 import { useUploads } from "../hooks/useUploads";
 import { useUpdateCheck } from "../hooks/useUpdateCheck";
 import { invalidateDriveQueries, ME_QUERY_KEY, SIGNED_OUT_SESSION } from "../lib/queries";
@@ -31,6 +32,9 @@ export default function DriveLayout() {
   const location = useLocation();
   const toast = useToast();
   const uploads = useUploads();
+  // Loads the client's index of the names the server cannot see, and keeps it
+  // in step with uploads and deletions.
+  useNameIndex();
   const reduceMotion = useReducedMotion();
   usePageMeta({
     title: "My Drive — OmniCloud",

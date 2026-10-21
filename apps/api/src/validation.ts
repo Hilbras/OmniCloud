@@ -234,6 +234,19 @@ export interface ParsedEncryption {
   keyEpoch: number;
 }
 
+/**
+ * An optional base64 field. Returns undefined when the field is absent, and
+ * throws when it is present but is not a plausible base64 blob.
+ */
+export function optionalBase64Field(body: unknown, field: string, max: number): string | undefined {
+  const value = optionalString(body, field);
+  if (value === undefined) return undefined;
+  if (!BASE64_PATTERN.test(value) || value.length < 56 || value.length > max) {
+    throw new ValidationError(`"${field}" must be a base64 string of 56 to ${max} characters`);
+  }
+  return value;
+}
+
 function requireBase64Field(value: string | undefined, name: string, max: number): string {
   if (value === undefined) {
     throw new ValidationError(`"${name}" is required when encryption fields are present`);
@@ -265,7 +278,8 @@ export function parseEncryptionFields(fields: MultipartFields): ParsedEncryption
     return undefined;
   }
 
-  if (encryptionFormat !== undefined && !isEncryptionFormat(encryptionFormat)) {
+  // Any field present means the whole set is present, including the format.
+  if (encryptionFormat === undefined || !isEncryptionFormat(encryptionFormat)) {
     throw new ValidationError(
       `encryptionFormat must be one of ${ENCRYPTION_FORMATS.map((f) => `"${f}"`).join(", ")} when encryption fields are present`,
     );
@@ -283,7 +297,7 @@ export function parseEncryptionFields(fields: MultipartFields): ParsedEncryption
   }
 
   return {
-    format: encryptionFormat as EncryptionFormat,
+    format: encryptionFormat,
     wrappedKey: checkedWrappedKey,
     metadataBlob: checkedMetadataBlob,
     keyEpoch,

@@ -40,8 +40,17 @@ export interface StreamedEncryption {
   /** Base64 encrypted metadata. */
   metadataBlob: string;
   keyEpoch: number;
+  /** The ids the metadata blob is bound to, as hex. */
+  fileIdHex: string;
+  versionIdHex: string;
   /** Removes any temporary spool (OPFS file). Safe to call more than once. */
   dispose: () => Promise<void>;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  let out = "";
+  for (const byte of bytes) out += byte.toString(16).padStart(2, "0");
+  return out;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -143,6 +152,8 @@ export async function encryptFileStreaming(
     wrappedKey: bytesToBase64(wrappedKey),
     metadataBlob: bytesToBase64(metadataBlob),
     keyEpoch,
+    fileIdHex: bytesToHex(ctx.fileId),
+    versionIdHex: bytesToHex(ctx.versionId),
     dispose,
   };
 }

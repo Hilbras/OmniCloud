@@ -42,6 +42,24 @@ describe("the canonical index form", () => {
     expect(canonicalIndexJson([a, b])).not.toEqual(canonicalIndexJson([b, a]));
   });
 
+  it("keeps the ids the metadata blob is bound to, when they are known", () => {
+    const json = new TextDecoder().decode(
+      canonicalIndexJson([
+        entry({ cryptoFileId: "aa".repeat(16), cryptoVersionId: "bb".repeat(16) }),
+      ]),
+    );
+    expect(json).toContain(`"cryptoFileId":"${"aa".repeat(16)}"`);
+    expect(json).toContain(`"cryptoVersionId":"${"bb".repeat(16)}"`);
+    // They stay in lexicographic order among the other keys.
+    const keys = [...json.matchAll(/"([a-zA-Z]+)":/g)].map((m) => m[1]).slice(1);
+    expect(keys).toEqual([...keys].sort());
+  });
+
+  it("omits the ids when they are not known", () => {
+    const json = new TextDecoder().decode(canonicalIndexJson([entry()]));
+    expect(json).not.toContain("cryptoFileId");
+  });
+
   it("keeps a null folder and description rather than dropping them", () => {
     const json = new TextDecoder().decode(
       canonicalIndexJson([entry({ folderId: null, description: null })]),
@@ -57,6 +75,14 @@ describe("the index container", () => {
     const entries = [entry(), entry({ id: "second", name: "notes.md" })];
     const container = createIndexContainer(urk, entries);
     expect(openIndexContainer(urk, container)).toEqual(entries);
+  });
+
+  it("round-trips the ids the metadata blob is bound to", () => {
+    const urk = generateUrk();
+    const withIds = entry({ cryptoFileId: "aa".repeat(16), cryptoVersionId: "bb".repeat(16) });
+    const opened = openIndexContainer(urk, createIndexContainer(urk, [withIds]));
+    expect(opened[0]?.cryptoFileId).toBe("aa".repeat(16));
+    expect(opened[0]?.cryptoVersionId).toBe("bb".repeat(16));
   });
 
   it("round-trips an empty index", () => {

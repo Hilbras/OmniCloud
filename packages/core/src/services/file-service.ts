@@ -635,11 +635,27 @@ export class FileService {
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
-  async rename(userId: string, id: string, name: string): Promise<FileRecord> {
+  /**
+   * Renames a file.
+   *
+   * An encrypted file carries its name inside the metadata blob, so the client
+   * re-encrypts the metadata and passes the new blob here; without it the file
+   * would be renamed in the listing but still decrypt to the old name. The
+   * blob is opaque to the server, which only stores it.
+   */
+  async rename(
+    userId: string,
+    id: string,
+    name: string,
+    metadataBlob?: string,
+  ): Promise<FileRecord> {
     const existing = await this.get(userId, id);
     const clean = sanitizeFileName(name);
     if (!clean) throw new ValidationError("Invalid file name");
     const updated = await this.files.update(id, { name: clean });
+    if (metadataBlob !== undefined && existing.currentVersionId !== null) {
+      await this.files.updateVersionMetadata(existing.currentVersionId, metadataBlob);
+    }
     await this.activity.record({
       userId,
       action: "rename",

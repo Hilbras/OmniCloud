@@ -122,6 +122,10 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design.
 
 - Files are encrypted on your device before upload with a per-file data key; the
   server and Telegram only ever receive ciphertext
+- The file's **name** is still visible to the server by default, because the
+  server needs it to list and search. The experimental OCE2 format hides it
+  behind an opaque placeholder that only your browser can undo — it is not
+  enabled by default and has not been reviewed
 - Encrypted files are marked in the UI and can be migrated from earlier plaintext
   uploads with a verify-before-delete flow that keeps the original if anything fails
 - Large files are encrypted chunk by chunk, so peak memory follows the chunk size
@@ -186,7 +190,7 @@ The repository includes a fully commented template at [`.env.example`](.env.exam
 
 Your Telegram session stays on the server. It is stored encrypted in PostgreSQL, is never sent to the browser, and never appears in logs. The browser only receives OmniCloud's own session cookie. Details are in [`docs/telegram.md`](docs/telegram.md).
 
-> OmniCloud runs as **your** Telegram account. Anyone who can use your account can read your files, and Telegram itself can read the channel content. End-to-end encryption is not implemented (see [Limitations](#limitations)).
+> OmniCloud runs as **your** Telegram account. Anyone who can use your account can read your files, and Telegram itself can read the channel content. End-to-end encryption is available as an opt-in for the file _contents_ (see [End-to-end encryption](#end-to-end-encryption-experimental-opt-in)); until it is enabled, Telegram can read both the content and the file names.
 
 ---
 

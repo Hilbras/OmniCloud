@@ -624,6 +624,10 @@ export function createInMemoryRepos(): InMemoryRepos {
         if (allowed.has(versions[i]!.fileId)) versions.splice(i, 1);
       }
     },
+    updateVersionMetadata: async (versionId, metadataBlob) => {
+      const version = versions.find((v) => v.id === versionId);
+      if (version !== undefined) version.metadataBlob = metadataBlob;
+    },
     deleteVersion: async (fileId, versionId) => {
       const index = versions.findIndex((v) => v.id === versionId);
       if (index < 0) return;

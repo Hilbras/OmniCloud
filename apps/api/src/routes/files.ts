@@ -8,6 +8,7 @@ import {
 import type { MultipartFields, MultipartFile } from "@fastify/multipart";
 import type { Container } from "../container";
 import {
+  optionalBase64Field,
   optionalBoolean,
   optionalString,
   parseEncryptionFields,
@@ -222,12 +223,23 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
 
     const name = optionalString(body, "name");
     const starred = optionalBoolean(body, "starred");
+    // An encrypted file carries its name inside the metadata blob, so the
+    // client re-encrypts it and sends the new blob along with the rename. The
+    // server only stores it.
+    const metadataBlob = optionalBase64Field(body, "metadataBlob", 65536);
     if (name === undefined && starred === undefined) {
       throw new ValidationError('At least one of "name" or "starred" is required');
     }
 
     let record = await container.files.get(request.user.id, id);
-    if (name !== undefined) record = await container.files.rename(request.user.id, id, name);
+    if (name !== undefined) {
+      record = await container.files.rename(
+        request.user.id,
+        id,
+        name,
+        ...(metadataBlob !== undefined ? [metadataBlob] : []),
+      );
+    }
     if (starred !== undefined)
       record = await container.files.setStarred(request.user.id, id, starred);
     return { file: toFileDTO(record) };

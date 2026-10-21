@@ -1,8 +1,11 @@
 # ADR 0004: Client-Side Filename Index and Client-Side Search
 
-- **Status:** Proposed — design only. **No implementation exists.** The
-  protocol change it describes would be OCE2 and must pass independent review
-  before any code is written.
+- **Status:** Accepted and specified. The normative format is
+  [`encryption-protocol-v2.md`](../encryption-protocol-v2.md); this document is
+  the design that led to it. **OCE2 has not been independently reviewed**, and
+  it is not enabled by default: new uploads stay in OCE1 until the review in
+  [`../../audits/encryption-review.md`](../../audits/encryption-review.md) has
+  returned findings on it.
 - **Date:** 2026-10-21
 - **Related:** [`encryption-protocol-v1.md`](../encryption-protocol-v1.md),
   [`architecture-decisions/0003-trusted-device-enrollment.md`](0003-trusted-device-enrollment.md),

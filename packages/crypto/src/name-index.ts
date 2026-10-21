@@ -31,6 +31,13 @@ export interface IndexEntry {
   id: string;
   /** The real file name, which the server never sees. */
   name: string;
+  /**
+   * The ids the metadata blob is bound to, as hex. The blob is authenticated
+   * against the envelope's own file and version ids, not the server's, so a
+   * rename has to re-encrypt it under the same pair.
+   */
+  cryptoFileId?: string;
+  cryptoVersionId?: string;
   mimeType: string | null;
   description: string | null;
   size: number;
@@ -79,6 +86,12 @@ export function canonicalIndexJson(entries: readonly IndexEntry[]): Uint8Array {
     // Lexicographic order of the entry's keys.
     const fields: string[] = [];
     fields.push(`"createdAt":${JSON.stringify(entry.createdAt)}`);
+    if (entry.cryptoFileId !== undefined) {
+      fields.push(`"cryptoFileId":${JSON.stringify(entry.cryptoFileId)}`);
+    }
+    if (entry.cryptoVersionId !== undefined) {
+      fields.push(`"cryptoVersionId":${JSON.stringify(entry.cryptoVersionId)}`);
+    }
     fields.push(`"description":${JSON.stringify(entry.description)}`);
     fields.push(`"folderId":${JSON.stringify(entry.folderId)}`);
     fields.push(`"id":${JSON.stringify(entry.id)}`);
@@ -178,6 +191,12 @@ export function parseIndexJson(bytes: Uint8Array): IndexEntry[] {
     return {
       id: record["id"],
       name: record["name"],
+      ...(typeof record["cryptoFileId"] === "string"
+        ? { cryptoFileId: record["cryptoFileId"] }
+        : {}),
+      ...(typeof record["cryptoVersionId"] === "string"
+        ? { cryptoVersionId: record["cryptoVersionId"] }
+        : {}),
       mimeType: typeof record["mimeType"] === "string" ? record["mimeType"] : null,
       description: typeof record["description"] === "string" ? record["description"] : null,
       size: typeof record["size"] === "number" ? record["size"] : 0,

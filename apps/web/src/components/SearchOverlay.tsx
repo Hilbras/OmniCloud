@@ -1,14 +1,16 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { Folder, Search, SearchX, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import type { FileDTO, FolderDTO } from "@omnicloud/shared";
+import { filterByListQuery, parseSearchQuery } from "@omnicloud/shared";
 import { api, errorMessage } from "../api/client";
 import { formatBytes } from "../lib/format";
 import { fileVisual } from "../lib/fileIcons";
 import { fileToItem } from "../lib/drive";
 import type { DriveItem } from "../lib/drive";
+import { entryToFileDTO, useNameIndexEntries, withRealName } from "../lib/name-index-session";
 import { LoadingSpinner } from "./LoadingSpinner";
 
 interface SearchOverlayProps {
@@ -68,7 +70,26 @@ export function SearchOverlay({ query, onClose, onOpenFolder, onOpenFile }: Sear
   }, [onClose]);
 
   const folders = results.data?.folders ?? [];
-  const files = results.data?.files ?? [];
+  const nameIndex = useNameIndexEntries();
+
+  // Files the server cannot match, because it does not know their names: they
+  // are matched here, against the client's index.
+  const localFiles = useMemo(() => {
+    if (nameIndex.size === 0) return [];
+    const { query: parsed } = parseSearchQuery(query);
+    return filterByListQuery([...nameIndex.values()], parsed)
+      .filter((entry) => !entry.trashed)
+      .map(entryToFileDTO);
+  }, [nameIndex, query]);
+
+  // The server answers for the files whose names it still knows, and the index
+  // answers for the rest. A file appears once, whichever found it.
+  const files = useMemo(() => {
+    const serverFiles = (results.data?.files ?? []).map((file) => withRealName(file, nameIndex));
+    const seen = new Set(serverFiles.map((file) => file.id));
+    return [...serverFiles, ...localFiles.filter((file) => !seen.has(file.id))];
+  }, [results.data, localFiles, nameIndex]);
+
   const empty = folders.length === 0 && files.length === 0;
 
   return (

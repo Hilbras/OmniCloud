@@ -339,7 +339,10 @@ export const api = {
     deleteVersion(id: string, versionId: string): Promise<void> {
       return requestEmpty("DELETE", filePath(id, `/versions/${encodeURIComponent(versionId)}`));
     },
-    update(id: string, patch: { name?: string; starred?: boolean }): Promise<{ file: FileDTO }> {
+    update(
+      id: string,
+      patch: { name?: string; starred?: boolean; metadataBlob?: string },
+    ): Promise<{ file: FileDTO }> {
       return requestJson("PATCH", filePath(id), patch);
     },
     move(id: string, folderId: string | null): Promise<{ file: FileDTO }> {

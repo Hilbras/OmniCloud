@@ -1040,6 +1040,12 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
       if (fileIds.length === 0) return;
       await prisma.fileVersion.deleteMany({ where: { fileId: { in: fileIds } } });
     },
+    async updateVersionMetadata(versionId, metadataBlob) {
+      await prisma.fileVersion.updateMany({
+        where: { id: versionId },
+        data: { metadataBlob },
+      });
+    },
     async deleteVersion(fileId, versionId) {
       for (let attempt = 0; ; attempt += 1) {
         try {

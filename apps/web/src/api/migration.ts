@@ -1,5 +1,6 @@
 import { decryptFile, encryptFile, readHeader, sha256Hex } from "@omnicloud/crypto";
-import type { FileVersionDTO } from "@omnicloud/shared";
+import type { FileDTO, FileVersionDTO } from "@omnicloud/shared";
+import { generateOpaqueName } from "@omnicloud/shared";
 import { base64ToBytes, bytesToBase64, toArrayBuffer } from "../lib/bytes";
 import { ApiError, api, errorMessage } from "./client";
 import { fetchFileBytes } from "./download";
@@ -24,6 +25,7 @@ export interface MigrateResult {
 }
 
 const OCE1 = "OCE1";
+const OCE2 = "OCE2";
 
 function plaintextCount(versions: FileVersionDTO[]): number {
   return versions.filter((v) => (v.encryptionFormat ?? null) === null).length;
@@ -88,6 +90,7 @@ export async function migrateLegacyFile(fileId: string, urk: Uint8Array): Promis
       new Blob([toArrayBuffer(encrypted.envelope)]),
       file.name,
       {
+        format: OCE1,
         wrappedKey: bytesToBase64(encrypted.wrappedKey),
         metadataBlob: bytesToBase64(encrypted.metadataBlob),
         keyEpoch: encrypted.keyEpoch,
@@ -145,4 +148,163 @@ export async function migrateLegacyFile(fileId: string, urk: Uint8Array): Promis
     fileId,
     plaintextVersionsRemaining: remaining,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OCE1 → OCE2: hide the file's name
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type OpaqueNameStatus = "migrated" | "already_migrated" | "failed";
+
+export interface OpaqueNameResult {
+  status: OpaqueNameStatus;
+  fileId: string;
+  /** The name the user knows the file by, which the server never sees. */
+  name: string | null;
+  error: string | null;
+}
+
+/**
+ * Moves an encrypted file from OCE1 to OCE2, so the server stops seeing its
+ * name.
+ *
+ * The content's ciphertext is not re-encrypted: it is already bound to the
+ * envelope's own file and version ids, and those do not change. What changes
+ * is the name the server stores — an opaque placeholder instead of the real
+ * one — and the format recorded against the version. The metadata blob is
+ * reused too, so the real name travels in exactly one encrypted place, as
+ * before.
+ *
+ * The order is the verify-before-delete rule the legacy migration uses: the new
+ * version is downloaded and decrypted back and compared with the original
+ * before the old version's object is removed. A failure leaves the file as it
+ * was.
+ */
+export async function migrateToOpaqueName(
+  fileId: string,
+  urk: Uint8Array,
+): Promise<OpaqueNameResult> {
+  const { file } = await api.files.get(fileId);
+  if (file.encryptionFormat === OCE2) {
+    return { status: "already_migrated", fileId, name: file.name, error: null };
+  }
+  if (file.encryptionFormat !== OCE1) {
+    return {
+      status: "failed",
+      fileId,
+      name: file.name,
+      error: "Only an encrypted file can be moved to an opaque name; encrypt it first.",
+    };
+  }
+  // The fields are optional on the record, so an absent one counts as missing.
+  const wrappedKey = file.wrappedKey;
+  const metadataBlob = file.metadataBlob;
+  if (wrappedKey == null || metadataBlob == null) {
+    return {
+      status: "failed",
+      fileId,
+      name: file.name,
+      error: "The file is missing its encryption metadata, so it cannot be moved.",
+    };
+  }
+
+  const versions = (await api.files.versions(fileId)).versions;
+  const current = versions.find((v) => v.id === file.currentVersionId) ?? versions[0];
+  if (current === undefined) {
+    return { status: "failed", fileId, name: file.name, error: "The file has no versions." };
+  }
+
+  let envelope: Uint8Array;
+  let plaintext: Uint8Array;
+  let realName: string;
+  try {
+    envelope = await fetchFileBytes(fileId);
+    const header = readHeader(envelope);
+    const restored = await decryptFile({
+      urk,
+      fileId: header.fileId,
+      versionId: header.versionId,
+      keyEpoch: header.keyEpoch,
+      envelope,
+      wrappedKey: base64ToBytes(wrappedKey),
+      metadataBlob: base64ToBytes(metadataBlob),
+    });
+    plaintext = restored.plaintext;
+    realName = restored.metadata.name ?? file.name;
+  } catch (error) {
+    return {
+      status: "failed",
+      fileId,
+      name: file.name,
+      error: `Could not read the file: ${errorMessage(error, "decryption failed")}. Nothing was changed.`,
+    };
+  }
+
+  // The same ciphertext, the same wrapped key and metadata, under an opaque
+  // name and the OCE2 format.
+  const opaqueName = generateOpaqueName();
+  let uploaded: FileDTO;
+  try {
+    uploaded = await replaceEncryptedFile(fileId, new Blob([toArrayBuffer(envelope)]), opaqueName, {
+      format: OCE2,
+      wrappedKey,
+      metadataBlob,
+      keyEpoch: file.keyEpoch ?? 0,
+    });
+  } catch (error) {
+    return {
+      status: "failed",
+      fileId,
+      name: realName,
+      error: `Could not upload the opaque version: ${errorMessage(error, "upload failed")}. The original is untouched.`,
+    };
+  }
+
+  // Verify before anything is removed: download the new version back, decrypt
+  // it, and compare it with what was there before.
+  try {
+    const stored = await fetchFileBytes(fileId);
+    const header = readHeader(stored);
+    const restored = await decryptFile({
+      urk,
+      fileId: header.fileId,
+      versionId: header.versionId,
+      keyEpoch: header.keyEpoch,
+      envelope: stored,
+      // The new version carries the same wrapped key and metadata blob as the
+      // one it replaces, so the ones already read from the file are the right
+      // ones to verify against.
+      wrappedKey: base64ToBytes(wrappedKey),
+      metadataBlob: base64ToBytes(metadataBlob),
+    });
+    if (!bytesEqual(restored.plaintext, plaintext)) {
+      throw new Error("the stored content differs from the original");
+    }
+  } catch (error) {
+    return {
+      status: "failed",
+      fileId,
+      name: realName,
+      error: `Verification failed: ${errorMessage(error, "the content did not match")}. The original version was not removed.`,
+    };
+  }
+
+  // Verified: the old version's object can go.
+  if (current.id !== uploaded.currentVersionId) {
+    try {
+      await api.files.deleteVersion(fileId, current.id);
+    } catch (error) {
+      // The new version is good and current. The old object stays in the
+      // channel and the reconciliation can find it, which is better than
+      // removing a version the file still needs.
+      return {
+        status: "migrated",
+        fileId,
+        name: realName,
+        error: `The file now has an opaque name, but the old version's object could not be removed: ${errorMessage(error, "unknown error")}`,
+      };
+    }
+  }
+
+  return { status: "migrated", fileId, name: realName, error: null };
 }

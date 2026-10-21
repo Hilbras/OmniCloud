@@ -1,6 +1,7 @@
 import {
   Download,
   Eye,
+  EyeOff,
   FolderInput,
   Info,
   LockKeyhole,
@@ -24,6 +25,7 @@ export type ItemAction =
   | "unstar"
   | "replace"
   | "migrate"
+  | "hideName"
   | "details"
   | "trash"
   | "restore"
@@ -104,6 +106,15 @@ export function buildItemMenu<T extends ItemRefLike>(
         icon: <Info className="h-4 w-4" aria-hidden="true" />,
         onSelect: () => onAction("details", item),
       });
+      // An encrypted file whose name the server still knows can be moved to an
+      // opaque name, so the server stops seeing it.
+      if (item.file?.encryptionFormat === "OCE1") {
+        items.push({
+          label: "Hide the name",
+          icon: <EyeOff className="h-4 w-4" aria-hidden="true" />,
+          onSelect: () => onAction("hideName", item),
+        });
+      }
       if ((item.file?.encryptionFormat ?? null) === null) {
         items.push({
           label: "Encrypt file",

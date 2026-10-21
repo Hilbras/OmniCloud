@@ -349,6 +349,13 @@ export interface FileRepository {
   countVersions(fileId: string): Promise<number>;
   deleteVersionsByFileIds(fileIds: string[]): Promise<void>;
   /**
+   * Replaces a version's encrypted metadata blob.
+   *
+   * The blob is opaque to the server: it is written by the client, which
+   * re-encrypts the metadata when the file is renamed.
+   */
+  updateVersionMetadata(versionId: string, metadataBlob: string): Promise<void>;
+  /**
    * Removes one historical version of a file and decrements the file's version
    * count.
    *

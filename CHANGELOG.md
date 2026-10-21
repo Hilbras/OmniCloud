@@ -61,6 +61,20 @@ and there is no silent fallback to unencrypted uploads.
   and never written to disk or cached. Legacy plaintext files are deliberately
   not routed through previews, and anything above 64 MiB falls back to the
   normal streaming download.
+- **OCE2: the server can be blind to file names.** A new encrypted format
+  stores a file under an opaque placeholder, so the server — and the Telegram
+  channel — no longer learn what a file is called. The real name lives only in
+  the client's own encrypted index.
+  - The format is specified in
+    [`docs/security/encryption-protocol-v2.md`](docs/security/encryption-protocol-v2.md).
+  - The client keeps the index in IndexedDB, encrypted with a key derived from
+    the root key, and answers searches for these files locally while the server
+    still answers for the others.
+  - An existing encrypted file can be moved to an opaque name with **Hide the
+    name** in its menu. The new version is downloaded back and compared with
+    the original before the old one is removed, so a failure changes nothing.
+  - **Not enabled by default, and not independently reviewed.** New uploads stay
+    in OCE1 until the review covers the new format.
 - **Update notifications.** The server checks the npm registry once an hour for
   a newer release and the web app shows a notice under the app title in the
   sidebar when one exists. The registry is contacted at most once an hour no

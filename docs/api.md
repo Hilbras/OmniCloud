@@ -685,6 +685,30 @@ Response `201`:
 }
 ```
 
+**Encrypted uploads.** A client that encrypts before uploading adds four
+fields, all opaque to the server:
+
+| Field              | Notes                                                                  |
+| ------------------ | ---------------------------------------------------------------------- |
+| `encryptionFormat` | `OCE1` or `OCE2`. Required whenever any of the other three are present |
+| `wrappedKey`       | Base64. The key that unwraps this version's data key                   |
+| `metadataBlob`     | Base64. The encrypted metadata, which carries the file's real name     |
+| `keyEpoch`         | Integer `0`–`4294967295`                                               |
+
+All four must be present together, or all absent; a partial set is rejected
+with `400 INVALID_REQUEST`.
+
+- `OCE1` encrypts the content and the metadata. The file's **name is still
+  visible to the server**: the multipart filename is stored in `File.name`, and
+  the server derives the MIME type from it.
+- `OCE2` also hides the name. The multipart filename must then be an opaque
+  placeholder (`om_` followed by 32 lowercase hex characters), and the server
+  **rejects the upload otherwise** — a client cannot claim OCE2 and hand the
+  server the real name. The MIME type is derived from the placeholder, so the
+  server does not learn the file's type either.
+- The format is recorded on the file and on each version, and is reported in
+  `encryptionFormat`.
+
 Notes:
 
 - The multipart `files` limit is 1 and the parts limit is 10.
@@ -823,10 +847,21 @@ Renames and/or stars a file. At least one field is required.
 { "name": "renamed.pdf", "starred": true }
 ```
 
+| Field          | Notes                                                                 |
+| -------------- | --------------------------------------------------------------------- |
+| `name`         | The new name                                                          |
+| `starred`      | Whether the file is starred                                           |
+| `metadataBlob` | Base64. The re-encrypted metadata, for a file whose name is encrypted |
+
+`metadataBlob` is how an encrypted file's name is changed: the name lives
+inside the metadata blob, so the client re-encrypts it and sends the new blob
+with the rename. The server stores it without interpreting it. A file that is
+not encrypted does not need it.
+
 Response: `{ "file": FileDTO }`.
 
-Errors: `400 INVALID_REQUEST` (neither field, or invalid name), `404
-FILE_NOT_FOUND`.
+Errors: `400 INVALID_REQUEST` (neither field, or invalid name, or a malformed
+`metadataBlob`), `404 FILE_NOT_FOUND`.
 
 ### `POST /api/files/:id/move`
 

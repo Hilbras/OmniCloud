@@ -4,7 +4,10 @@ import type { RefObject } from "react";
 import { ApiError, errorMessage } from "../api/client";
 import { replaceFile, uploadFile } from "../api/upload";
 import { invalidateDriveQueries, invalidateVersionQueries } from "../lib/queries";
+import { encryptFormatPref } from "../lib/crypto-session";
 import { useToast } from "../components/Toasts";
+import { useNameIndex } from "./useNameIndex";
+import type { EncryptionFormat } from "@omnicloud/shared";
 
 export type UploadStatus = "uploading" | "done" | "error" | "cancelled";
 
@@ -26,6 +29,8 @@ interface UploadJob {
   folderId: string | null;
   /** Stable for the job's life, so a retry is recognised by the server as the same upload. */
   operationId: string;
+  /** The encrypted format to store the file in. */
+  format: EncryptionFormat;
 }
 
 let uploadIdCounter = 0;
@@ -61,6 +66,7 @@ export interface UploadsController {
 export function useUploads(): UploadsController {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const nameIndex = useNameIndex();
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const jobs = useRef(new Map<number, UploadJob>());
   const controllers = useRef(new Map<number, AbortController>());
@@ -131,11 +137,38 @@ export function useUploads(): UploadsController {
         };
         const result =
           job.replaceId === null
-            ? await uploadFile(job.file, job.folderId, { ...options, operationId: job.operationId })
+            ? await uploadFile(job.file, job.folderId, {
+                ...options,
+                operationId: job.operationId,
+                format: job.format,
+              })
             : await replaceFile(job.file, job.replaceId, {
                 ...options,
                 operationId: job.operationId,
+                format: job.format,
               });
+        // A file stored as OCE2 has an opaque name at the server, so the
+        // client is the only place that can know what it is called. Record it
+        // in the index, which is encrypted with the root key.
+        if (result.file.encryptionFormat === "OCE2") {
+          nameIndex.upsert({
+            id: result.file.id,
+            name: job.file.name,
+            mimeType: job.file.type || null,
+            description: null,
+            size: result.file.size,
+            folderId: job.folderId,
+            starred: result.file.starred,
+            trashed: result.file.trashed,
+            versionCount: result.file.versionCount,
+            createdAt: result.file.createdAt,
+            updatedAt: result.file.updatedAt,
+            ...(result.cryptoFileId !== undefined ? { cryptoFileId: result.cryptoFileId } : {}),
+            ...(result.cryptoVersionId !== undefined
+              ? { cryptoVersionId: result.cryptoVersionId }
+              : {}),
+          });
+        }
         if (!mounted.current) return;
         setUploads((prev) =>
           prev.map((entry) =>
@@ -144,11 +177,11 @@ export function useUploads(): UploadsController {
         );
         invalidateDriveQueries(queryClient);
         if (job.replaceId !== null) invalidateVersionQueries(queryClient, job.replaceId);
-        const encrypted = result.encryptionFormat === "OCE1";
+        const encrypted = result.file.encryptionFormat !== null;
         toast.success(
           job.replaceId === null
-            ? `Uploaded "${result.name}"${encrypted ? " (encrypted)" : ""}`
-            : `Replaced "${result.name}"${encrypted ? " (encrypted)" : ""}`,
+            ? `Uploaded "${job.file.name}"${encrypted ? " (encrypted)" : ""}`
+            : `Replaced "${job.file.name}"${encrypted ? " (encrypted)" : ""}`,
         );
         scheduleDismiss(job.id);
       } catch (error) {
@@ -167,7 +200,7 @@ export function useUploads(): UploadsController {
         controllers.current.delete(job.id);
       }
     },
-    [queryClient, scheduleDismiss, toast],
+    [queryClient, scheduleDismiss, toast, nameIndex],
   );
 
   const enqueueJob = useCallback(
@@ -199,6 +232,7 @@ export function useUploads(): UploadsController {
           replaceId: null,
           folderId,
           operationId: newOperationId(),
+          format: encryptFormatPref(),
         });
       }
     },
@@ -214,6 +248,7 @@ export function useUploads(): UploadsController {
         replaceId: fileId,
         folderId: null,
         operationId: newOperationId(),
+        format: encryptFormatPref(),
       });
     },
     [enqueueJob],
