@@ -7,11 +7,11 @@ a false positive, or declined with a stated reason. Nothing was left unexamined.
 
 | Outcome                                                                        | Count |
 | ------------------------------------------------------------------------------ | ----- |
-| Fixed                                                                          | 21    |
+| Fixed                                                                          | 22    |
 | Partly fixed (behaviour unchanged, limitation documented and covered by tests) | 1     |
 | Already fixed when checked                                                     | 2     |
 | False positive (the suggested change would be wrong)                           | 4     |
-| Declined with a reason                                                         | 5     |
+| Declined with a reason                                                         | 4     |
 | Coverage gaps closed                                                           | 3     |
 
 That accounts for all 33 numbered findings (1 high, 10 medium, 22 low). The
@@ -156,30 +156,58 @@ with a message that says what to use instead.
 
 ## Low
 
-| #   | Finding                                                                          | Outcome                                                                                                                                                                                                                                                    |
-| --- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L1  | `mapVersion`'s second parameter was never read                                   | **Fixed** — removed, with the query behind it                                                                                                                                                                                                              |
-| L2  | `PrismaClient` re-export unused                                                  | **Fixed** — the package is private and nothing imported it                                                                                                                                                                                                 |
-| L3  | `skipTake` could produce a negative skip                                         | **Fixed** — page and limit are floored at 1                                                                                                                                                                                                                |
-| L4  | Unvalidated casts on raw activity rows                                           | **Fixed** — an unknown action becomes `other`, an unknown resource type falls back                                                                                                                                                                         |
-| L5  | `File.currentVersionId` has no foreign key to `FileVersion.id`                   | **Declined** — adding the relation means a migration over existing rows, and the referential integrity is maintained by the application today. It is a schema change, not a defect, and it belongs with a deliberate migration rather than a bug-fix sweep |
-| L6  | `deleteVersion` ignored the delete count and did not refuse the current version  | **Fixed** under M5                                                                                                                                                                                                                                         |
-| L7  | The in-memory fake lacked the current-version refusal                            | **Fixed** under M5 — the fake now matches the database                                                                                                                                                                                                     |
-| L8  | Duplicate `sha256Hex` import in the engine                                       | **Fixed**                                                                                                                                                                                                                                                  |
-| L9  | No comparison of the stored size against the uploaded size                       | **Fixed** — the engine now fails if the provider stored a different number of bytes                                                                                                                                                                        |
-| L10 | The integrity check runs at flush, so an early-abandoned stream is never checked | **Partly fixed** — the limitation is now stated in the method's doc, and two tests cover the contract. The check itself cannot run before the whole object is read, and the SDK detects a truncated transfer from `Content-Length`                         |
-| L11 | `canTransition` and `isTerminal` are only used by tests                          | **Declined** — they are the state machine's public vocabulary; the module's own tests are a legitimate consumer                                                                                                                                            |
-| L12 | `folder-order` and `retry` missing from the core barrel                          | **Fixed** — now exported like every other util                                                                                                                                                                                                             |
-| L13 | GramJS's `_switchDC` is private by convention                                    | **Declined** — it is inside a third-party library; the alternative is forking the library or dropping DC migration. It is flagged in the code where it is used                                                                                             |
-| L14 | `client: null as unknown as TelegramClient`                                      | **Fixed** — the type is now `TelegramClient                                                                                                                                                                                                                | null`, and the three places that assumed a client always existed handle the null |
-| L15 | `client.session.save() as unknown as string`                                     | **Fixed** — the client is always built with a `StringSession`, which is now checked rather than assumed                                                                                                                                                    |
-| L16 | Untyped cast reading flood-wait `seconds`                                        | **False positive** — the cast is defensive: the value is read as `unknown` and used only after `typeof seconds === "number"`. It cannot produce a wrong value                                                                                              |
-| L17 | `decryptChunks` uses exception-based control flow (~2× AEAD work)                | **Declined** — a performance characteristic, not a defect. Rewriting the envelope format for it would be a protocol change                                                                                                                                 |
-| L18 | Unused `ListQuery` type import in the shared barrel                              | **False positive** — `export type { ListQuery } from "./query"` does not create a local binding, so the local `QueryParams = ListQuery` alias still needs the import                                                                                       |
-| L19 | The built SDK bundles lacked the new client methods                              | **Already fixed** — the bundle was rebuilt, and the declarations test now checks that the built declarations still declare every value the source exports and every method the client's sub-APIs expose                                                    |
-| L20 | `content-length: 0` collapsed the total to null                                  | **Fixed** — an absent header and a zero length are now different, so an empty download is length-checked                                                                                                                                                   |
-| L21 | `ItemActionHandler` exported with no importers                                   | **Fixed** — removed                                                                                                                                                                                                                                        |
-| L22 | A bare `export { StorageUnavailableError }` at the bottom of the file            | **Declined** — the error is defined in the core but raised by this package's provider, so it belongs on this package's surface. Removing the re-export, as the report suggests, would have removed it from the public API                                  |
+| #   | Finding                                                                          | Outcome                                                                                                                                                                                                                            |
+| --- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1  | `mapVersion`'s second parameter was never read                                   | **Fixed** — removed, with the query behind it                                                                                                                                                                                      |
+| L2  | `PrismaClient` re-export unused                                                  | **Fixed** — the package is private and nothing imported it                                                                                                                                                                         |
+| L3  | `skipTake` could produce a negative skip                                         | **Fixed** — page and limit are floored at 1                                                                                                                                                                                        |
+| L4  | Unvalidated casts on raw activity rows                                           | **Fixed** — an unknown action becomes `other`, an unknown resource type falls back                                                                                                                                                 |
+| L5  | `File.currentVersionId` has no foreign key to `FileVersion.id`                   | **Fixed** — see below                                                                                                                                                                                                              |
+| L6  | `deleteVersion` ignored the delete count and did not refuse the current version  | **Fixed** under M5                                                                                                                                                                                                                 |
+| L7  | The in-memory fake lacked the current-version refusal                            | **Fixed** under M5 — the fake now matches the database                                                                                                                                                                             |
+| L8  | Duplicate `sha256Hex` import in the engine                                       | **Fixed**                                                                                                                                                                                                                          |
+| L9  | No comparison of the stored size against the uploaded size                       | **Fixed** — the engine now fails if the provider stored a different number of bytes                                                                                                                                                |
+| L10 | The integrity check runs at flush, so an early-abandoned stream is never checked | **Partly fixed** — the limitation is now stated in the method's doc, and two tests cover the contract. The check itself cannot run before the whole object is read, and the SDK detects a truncated transfer from `Content-Length` |
+| L11 | `canTransition` and `isTerminal` are only used by tests                          | **Declined** — they are the state machine's public vocabulary; the module's own tests are a legitimate consumer                                                                                                                    |
+| L12 | `folder-order` and `retry` missing from the core barrel                          | **Fixed** — now exported like every other util                                                                                                                                                                                     |
+| L13 | GramJS's `_switchDC` is private by convention                                    | **Declined** — it is inside a third-party library; the alternative is forking the library or dropping DC migration. It is flagged in the code where it is used                                                                     |
+| L14 | `client: null as unknown as TelegramClient`                                      | **Fixed** — the type is now `TelegramClient                                                                                                                                                                                        | null`, and the three places that assumed a client always existed handle the null |
+| L15 | `client.session.save() as unknown as string`                                     | **Fixed** — the client is always built with a `StringSession`, which is now checked rather than assumed                                                                                                                            |
+| L16 | Untyped cast reading flood-wait `seconds`                                        | **False positive** — the cast is defensive: the value is read as `unknown` and used only after `typeof seconds === "number"`. It cannot produce a wrong value                                                                      |
+| L17 | `decryptChunks` uses exception-based control flow (~2× AEAD work)                | **Declined** — a performance characteristic, not a defect. Rewriting the envelope format for it would be a protocol change                                                                                                         |
+| L18 | Unused `ListQuery` type import in the shared barrel                              | **False positive** — `export type { ListQuery } from "./query"` does not create a local binding, so the local `QueryParams = ListQuery` alias still needs the import                                                               |
+| L19 | The built SDK bundles lacked the new client methods                              | **Already fixed** — the bundle was rebuilt, and the declarations test now checks that the built declarations still declare every value the source exports and every method the client's sub-APIs expose                            |
+| L20 | `content-length: 0` collapsed the total to null                                  | **Fixed** — an absent header and a zero length are now different, so an empty download is length-checked                                                                                                                           |
+| L21 | `ItemActionHandler` exported with no importers                                   | **Fixed** — removed                                                                                                                                                                                                                |
+| L22 | A bare `export { StorageUnavailableError }` at the bottom of the file            | **Declined** — the error is defined in the core but raised by this package's provider, so it belongs on this package's surface. Removing the re-export, as the report suggests, would have removed it from the public API          |
+
+### L5 — The current-version pointer had no foreign key — **fixed**
+
+`File.currentVersionId` was a bare string, so the database could not tell
+whether it referred to a real version of that file. The application checked, but
+the constraint now holds the line too.
+
+- **Schema:** `currentVersionId` is now a unique foreign key to
+  `FileVersion.id`. It is unique because a version belongs to exactly one file,
+  so at most one file can point at it.
+- **Migration** (`10_file_current_version_fk`): pointers that do not resolve —
+  a missing version, or another file's version — are cleared to null before the
+  constraint is added, because such a file has no coherent current version to
+  point at. A dangling pointer would otherwise make the migration fail to
+  apply.
+- **`onDelete: NoAction`**, deliberately. `Cascade` would remove the pointer
+  silently and `SetNull` would do the same; `NoAction` refuses the delete
+  instead. Deleting a _file_ still cascades to its versions, because the
+  constraint is checked at the end of the statement, by which time the file row
+  is gone.
+- The application already refused to delete a version a file points at; the
+  constraint now enforces the same rule underneath it.
+
+_Verified against a real PostgreSQL database:_ four tests prove that pointing a
+file at a missing version, at another file's version, or deleting the version a
+file points at are all refused, and that deleting a file still cascades to its
+versions. The migration's cleanup was verified on data that had a dangling
+pointer: the good pointer survived and the dangling one was cleared.
 
 ---
 

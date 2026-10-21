@@ -169,7 +169,10 @@ model File {
   deletedAt         DateTime?
   /// Groups everything one trash operation moved, for exact restore.
   trashBatchId      String?
-  currentVersionId  String?
+  /// The version this file currently points at. Null until versioning is
+  /// initialised, and null if that version is gone.
+  currentVersionId  String?     @unique
+  currentVersion    FileVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: NoAction, onUpdate: Cascade)
   versionCount      Int       @default(0)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -206,6 +209,9 @@ model FileVersion {
   metadataBlob      String?
   keyEpoch          Int?
   createdAt         DateTime @default(now())
+
+  /// The file, if this is the version it currently points at.
+  currentFor        File?     @relation("CurrentVersion")
 
   @@unique([fileId, versionNumber])
   @@index([fileId])

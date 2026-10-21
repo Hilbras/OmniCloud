@@ -99,6 +99,11 @@ and there is no silent fallback to unencrypted uploads.
   were keyed only by id, so a caller that knew another account's folder or file
   ids could trash or restore them. The repository now scopes those writes to
   the owner, in the database, in the in-memory fake and in the test mock.
+- **The current version pointer had no foreign key.** A file's
+  `currentVersionId` was a bare string, so the database could not tell whether
+  it referred to a real version of that file. It is now a unique foreign key
+  to `FileVersion.id`, and the database refuses a delete of a version a file
+  points at — the same rule the application already enforced.
 - **Version creation and deletion were not atomic.** A version number was
   allocated by read-then-write with no retry, the parent file was left
   describing a different version, and deleting a version could under-count the
