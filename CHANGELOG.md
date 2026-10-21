@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
+**A documentation rewrite, a package README, and a configuration fix found
+while writing it.**
+
+### Added
+
+- **The published package had no README.** `@hilbras/omnicloud` shipped without
+  a README or a LICENSE, so its npm page showed no install instructions, no
+  usage and no licence. It now has both, and npm renders the README on the
+  package page.
+- **A documentation index** (`docs/README.md`) with suggested reading paths —
+  "I want to run it", "I am writing an application against it", "I want to know
+  what it protects" — so a reader can find the right document without knowing
+  the layout.
+- **A documentation link checker** (`scripts/check-doc-links.py`), run in CI.
+  It resolves every relative markdown link and every in-page anchor in the
+  repository, so a renamed heading or a moved file fails the build instead of
+  shipping a dead link.
+
+### Changed
+
+- **Every document a user actually reads was rewritten**: the README, the API
+  reference, the SDK guide, the storage-provider interface, deployment,
+  troubleshooting, architecture, the Telegram integration, storage, security and
+  limitations. Each was reorganised around what the reader is trying to do,
+  with a table of contents, reference tables, and the same information in less
+  space.
+  - The audit reports, the protocol specifications, the architecture decision
+    records and the execution plan are **historical records** and were left
+    alone.
+  - Every claim was checked against the code, and a number of them turned out
+    to be wrong. The corrections are listed under "Fixed" below.
+  - The README now states plainly what the server and Telegram can see with a
+    plaintext upload, with an encrypted upload, and with the experimental OCE2
+    format. It is the part most storage pages leave out.
+- **`SECURITY.md` is now a complete disclosure policy**: supported versions,
+  the reporting channel, what to include, acknowledgement and fix targets, a
+  severity table, disclosure coordination, and the explicit statement that no
+  independent cryptographic review has taken place.
+
+### Fixed
+
+- **`omnicloud migrate` could not apply the database migrations.** The
+  encryption dispatcher runs first, and it claimed the bare word `migrate`, so
+  the command always failed with `usage: omnicloud migrate <fileId|all>` and
+  exit status `1`. The database-migration branch was unreachable. The
+  dispatcher now only claims `migrate` when a file id (or `all`) follows it, so
+  `omnicloud migrate` applies the migrations and `omnicloud migrate all`
+  encrypts legacy plaintext files. `omnicloud start` applied the migrations
+  anyway, so this never lost data — but the documented command did not work.
+- **`TRASH_RETENTION_DAYS=0` could not be used.** The configuration loader
+  rejected it as "not a positive integer", while `TrashService`, the
+  configuration comment and `.env.example` all treat zero as "keep the trash
+  indefinitely". The documented setting was impossible to set. The loader now
+  accepts zero and still rejects a negative value, and there is a test for
+  both.
+- **The `X-Integrity-Verified` response header was still documented.** It was
+  removed in 0.2.2 — it cannot be known before the body is sent — and the
+  download response now carries the stored hash in `X-Content-SHA256`. Every
+  document that mentioned the old header was corrected.
+- **`docs/limitations.md` said the release had no end-to-end encryption and no
+  version restore or delete.** Both shipped: OCE1 is implemented and opt-in,
+  and version restore and delete shipped in 0.4.0.
+- **`SECURITY.md` said uploads and downloads buffer in memory, and that the
+  session cookie is signed.** Uploads spool to disk and downloads stream. The
+  cookie is an opaque random token, and only a SHA-256 of it is stored.
+- **The rate limits were documented as one 10-per-minute budget.** There are
+  three: 10/min for sign-in, 120/min for the QR status poll, and 20/min on the
+  recovery-blob routes.
+- **A 200-character limit on search queries was documented.** 200 is
+  `MAX_PAGE_SIZE`, a page-size cap, not a query-length limit.
+- **Six endpoints were undocumented**: `GET` and `POST /api/tokens`,
+  `DELETE /api/tokens/:id`, `POST /api/auth/logout-all`, the three
+  `/api/auth/recovery` methods, and `GET /api/update/check`.
+- **`GET /api/health/ready` did not mention that it returns 503** when
+  `OMNICLOUD_ENCRYPTION_KEY` is missing, because the encryption check is
+  `not_configured`.
+- **The CLI's `migrate` overload was not documented.** Bare `omnicloud migrate`
+  applies database migrations; `omnicloud migrate <fileId|all>` encrypts
+  legacy plaintext files.
+- **The retry rule was described from an older implementation.** Errors are now
+  retried according to `DomainError.retryable`, and `retryAfterSeconds` is
+  honoured exactly, with jittered backoff otherwise. Flood waits are retried.
+- **`SECURITY.md` listed 0.2.x as the supported version** while the project was
+  at 0.4.0, and a table of findings read like the work of an independent
+  reviewer. It was an internal self-review; the section is retitled to say so.
+
 ## [0.4.0] - 2026-10-21
 
 **Streaming large-file encryption, legacy migration, CLI encryption, version
