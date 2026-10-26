@@ -1,0 +1,10 @@
+# Exclude source files from npm package — only publish built artifacts
+main.ts
+preload.ts
+index.html
+tsconfig.json
+*.ts
+*.map
+
+# Exclude dev dependencies from npm package (electron-builder handles this)
+# but keep them in the repo for development

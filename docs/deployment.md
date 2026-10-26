@@ -103,6 +103,8 @@ startup, before the server listens.
 | `TRASH_RETENTION_DAYS`     | no            | `30`                                | Days a trashed file or folder is kept. `0` keeps the trash indefinitely. Must be zero or a positive integer                                     |
 | `UPDATE_PACKAGE_NAME`      | no            | `@hilbras/omnicloud`                | npm package polled for newer releases                                                                                                           |
 | `UPDATE_CHECK_ENABLED`     | no            | `true`                              | Set `false` to disable the periodic npm check entirely                                                                                          |
+| `WEBDAV_PORT`              | no            | _(disabled)_                        | Port for the dedicated WebDAV server. When set, OmniCloud starts a second HTTP server bound to `HOST:WEBDAV_PORT` that speaks WebDAV       |
+| `WEBDAV_PATH_PREFIX`       | no            | `/dav`                              | URL prefix mounted on the WebDAV server (e.g. `/dav` → `http://host:WEBDAV_PORT/dav/`)                                                        |
 
 Rules the validation applies:
 
@@ -457,6 +459,77 @@ serve them from different origins and list the UI's origin in
 > startup. If the directory exists but has no `index.html`, the server fails
 > to start with an `ENOENT` error. If the directory does not exist at all, the
 > server starts normally and simply serves no UI.
+
+## WebDAV server
+
+OmniCloud can serve a subset of WebDAV on a dedicated port. When `WEBDAV_PORT`
+is set, the server starts a second HTTP listener that authenticates against the
+same sessions and API tokens as the main API and exposes the folder tree under
+`WEBDAV_PATH_PREFIX` (default `/dav`).
+
+### Supported methods
+
+| Method   | Path pattern       | Behaviour                                                       |
+| -------- | ------------------ | ---------------------------------------------------------------- |
+| `PROPFIND` | `/dav/*`          | Returns a 207 multistatus XML body listing folders and files     |
+| `GET`      | `/dav/:folder/:file` | Streams the file with `Content-Type`, `ETag` and `Last-Modified` |
+| `POST`     | `/dav/:folder/`   | Creates a new top-level folder (returns `201`)                   |
+| `DELETE`   | `/dav/:folder/:file` | Moves the file to trash (returns `204`)                        |
+| `PUT`      | `/dav/:folder/:file` | Returns `501` until raw-body uploads are implemented            |
+
+Authentication is identical to the main API: send a browser session cookie
+(`omnicloud_session`) or a `Bearer` API token. Unauthenticated requests get
+`401`.
+
+### Reverse proxy example (nginx)
+
+```nginx
+# WebDAV on its own port — no TLS here, terminate at the proxy if needed.
+server {
+  listen 80;
+  server_name dav.example;
+
+  # nginx needs to pass PROPFIND through.
+  location / {
+    proxy_pass http://127.0.0.1:8551;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # Let OPTIONS and custom methods through.
+    proxy_pass_request_headers on;
+  }
+}
+```
+
+Caddy does not need extra directives for WebDAV:
+
+```caddy
+dav.example {
+  reverse_proxy 127.0.0.1:8551
+}
+```
+
+### Filesystem mount examples
+
+Any WebDAV-capable client can mount `http://host:WEBDAV_PORT/dav/`. Examples:
+
+```bash
+# davfs2 (Linux)
+sudo mount -t davfs http://host:8551/dav/ /mnt/omnicloud
+
+# rclone (sync / mount)
+rclone config   # choose webdav, point at http://host:8551/dav/
+
+# Windows / macOS
+# Use the built-in "WebDAV" or "Network Drive" mapper and enter:
+#   http://host:8551/dav/
+```
+
+> **Note:** OmniCloud's WebDAV implementation is read/write for folder
+> browsing and file retrieval. Uploads via `PUT` return `501` until raw-body
+> handling is implemented. Folder creation is supported through `POST` on the
+> folder path.
 
 ## Database migrations
 
@@ -982,3 +1055,86 @@ Steps to attach a domain to the Vercel project:
 `apps/web/src/lib/site-url.ts` is the single runtime source of truth and
 falls back to the same default, so per-route canonical URLs produced by
 `usePageMeta` always match the static tags.
+
+## Desktop app
+
+OmniCloud is distributed as an Electron desktop application for Linux, packaged
+as a `.deb` file and published to npm as
+[`@hilbras/omnicloud-desktop`](https://www.npmjs.com/package/@hilbras/omnicloud-desktop).
+The desktop app bundles the server, the built web UI and an Electron shell into
+a single installable package.
+
+### What the desktop app bundles
+
+| Component | Source |
+| --------- | ------ |
+| Electron main process | `apps/desktop/src/main.ts` |
+| Bundled server | `packages/sdk/server/index.js` (the same server bundle as npm) |
+| Built web app | `apps/web/dist/` (served by the bundled server on the same port) |
+| PostgreSQL | **Not included** — the desktop app expects an external database |
+
+### Installing the `.deb`
+
+Download the latest release from the
+[GitHub Releases page](https://github.com/Hilbras/OmniCloud/releases):
+
+```bash
+sudo dpkg -i omnicloud_0.5.0_amd64.deb
+sudo apt-get install -f   # resolves missing runtime dependencies
+```
+
+The package name is `omnicloud` (lowercase). After installation the app appears
+in the desktop environment's application menu.
+
+### First run and configuration
+
+On first launch the app starts the bundled server on `localhost:4000` and opens
+a window pointing at it. The server reads configuration from
+`~/.config/omnicloud/.env` by default.
+
+| Variable | Required | Where to get it |
+| -------- | -------- | --------------- |
+| `DATABASE_URL` | yes | Your PostgreSQL instance (local or remote) |
+| `TELEGRAM_API_ID` | yes | [my.telegram.org](https://my.telegram.org) |
+| `TELEGRAM_API_HASH` | yes | The same page |
+| `OMNICLOUD_ENCRYPTION_KEY` | recommended | `openssl rand -hex 32` |
+
+Edit the `.env` file directly after the first run to add or change values.
+
+### Building the desktop app from source
+
+From the repository root:
+
+```bash
+pnpm install
+pnpm build:desktop
+```
+
+The output `.deb` and `.AppImage` files are written to `apps/desktop/dist/`.
+
+To build only the desktop package without the rest of the workspace:
+
+```bash
+cd apps/desktop
+pnpm install
+pnpm run dist
+```
+
+The `dist` script runs `build:web`, `build:server` and `electron-vite build`
+in sequence, then invokes `electron-builder`.
+
+### Updating the desktop app
+
+New releases are published to both GitHub Releases and npm. To update:
+
+```bash
+# From GitHub Releases:
+sudo dpkg -i omnicloud_0.5.1_amd64.deb
+
+# Or via npm:
+npm install -g @hilbras/omnicloud-desktop
+```
+
+Restart the app after updating. The server bundle and the web app are both
+replaced, so no separate database migration step is needed — the bundled server
+applies pending migrations on startup.

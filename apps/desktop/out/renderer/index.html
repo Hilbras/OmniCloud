@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OmniCloud</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .container { text-align: center; }
+      .spinner {
+        width: 48px; height: 48px;
+        border: 3px solid #1e293b;
+        border-top-color: #38bdf8;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 24px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      h1 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+      p { font-size: 14px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="spinner"></div>
+      <h1>Starting OmniCloud...</h1>
+      <p id="status">Initializing server</p>
+    </div>
+    <script>
+      const statusEl = document.getElementById("status");
+      let attempts = 0;
+      const maxAttempts = 60;
+
+      function checkServer() {
+        attempts++;
+        if (attempts > maxAttempts) {
+          statusEl.textContent = "Server did not start. Please restart the app.";
+          statusEl.style.color = "#f87171";
+          return;
+        }
+        fetch("/api/health")
+          .then(r => {
+            if (r.ok) {
+              statusEl.textContent = "Ready! Redirecting...";
+              statusEl.style.color = "#4ade80";
+              setTimeout(() => { location.replace("/"); }, 500);
+            } else {
+              setTimeout(checkServer, 500);
+            }
+          })
+          .catch(() => setTimeout(checkServer, 500));
+      }
+
+      setTimeout(checkServer, 1000);
+    </script>
+  </body>
+</html>

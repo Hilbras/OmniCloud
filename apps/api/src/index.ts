@@ -5,6 +5,8 @@ import { buildContainer } from "./container";
 import { createApp } from "./app";
 import { startUpdateChecker } from "./update-checker";
 import { APP_VERSION } from "./version";
+import { loadWebDavConfig } from "./webdav/config";
+import { startWebDavServer } from "./webdav/server";
 
 const config = loadConfig();
 const operationLogTarget: { log: OperationSink | null } = { log: null };
@@ -40,9 +42,22 @@ const app = await createApp(container, { updateChecker });
 operationLogTarget.log = app.log;
 appLogTarget.log = app.log;
 
+const webdavConfig = loadWebDavConfig(config);
+let webdavStop: (() => Promise<void>) | null = null;
+if (webdavConfig.enabled) {
+  webdavStop = await startWebDavServer(app, container, webdavConfig);
+  app.log.info(
+    { port: webdavConfig.port, write: webdavConfig.writeEnabled },
+    "WebDAV server started",
+  );
+}
+
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, "Shutting down");
   updateChecker?.stop();
+  if (webdavStop) {
+    await webdavStop();
+  }
   await app.close();
   await container.shutdown();
   process.exit(0);

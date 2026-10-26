@@ -9,6 +9,8 @@ import type { AppConfig } from "../src/config";
 import { createApp } from "../src/app";
 import type { UpdateChecker } from "../src/update-checker";
 import { FakeStorageProvider, createInMemoryRepos, type InMemoryRepos } from "./repos";
+import { startWebDavServer } from "../src/webdav/server";
+import { loadWebDavConfig } from "../src/webdav/config";
 
 export function testConfig(maxUploadBytes = 1024 * 1024, webDistDir?: string): AppConfig {
   return {
@@ -29,6 +31,9 @@ export function testConfig(maxUploadBytes = 1024 * 1024, webDistDir?: string): A
     updatePackageName: "@hilbras/omnicloud",
     updateCheckEnabled: false,
     trashRetentionDays: 30,
+    webDavEnabled: false,
+    webDavPort: 8551,
+    webDavWriteEnabled: false,
   };
 }
 
@@ -152,6 +157,8 @@ export interface TestHarness {
   login(phone?: string): Promise<string>;
   /** The Telegram double, for tests that approve login flows. */
   connectionDouble: FakeTelegramConnection;
+  /** Base URL for the WebDAV server when `webDavEnabled` is true. */
+  webDavUrl?: string;
 }
 
 /** Builds the Fastify app wired to in-memory repos, a fake provider and a fake Telegram connection. */
@@ -162,6 +169,7 @@ export async function createTestHarness(
   webDistDir?: string,
   engineFor?: (userId: string) => Promise<StorageEngine>,
   updateChecker?: UpdateChecker | null,
+  webDavEnabled = false,
 ): Promise<TestHarness> {
   const repos = createInMemoryRepos();
 
@@ -176,12 +184,22 @@ export async function createTestHarness(
   const app = await createApp(container, { updateChecker: updateChecker ?? null });
   await app.ready();
 
+  let webDavStop: (() => Promise<void>) | null = null;
+  let webDavUrl: string | undefined;
+  if (webDavEnabled) {
+    const webdavConfig = loadWebDavConfig(testConfig(maxUploadBytes, webDistDir));
+    webDavStop = await startWebDavServer(app, container, webdavConfig);
+    webDavUrl = `http://127.0.0.1:${webdavConfig.port}`;
+  }
+
   return {
     app,
     container,
     provider,
     repos,
     connectionDouble,
+    webDavUrl,
+    webDavStop,
     async login(phone = "+15551234567") {
       const response = await app.inject({
         method: "POST",

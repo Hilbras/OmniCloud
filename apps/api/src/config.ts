@@ -25,6 +25,9 @@ export interface AppConfig {
    * Zero or less keeps everything in the trash indefinitely.
    */
   trashRetentionDays: number;
+  webDavEnabled: boolean;
+  webDavPort: number;
+  webDavWriteEnabled: boolean;
 }
 
 function optional(env: NodeJS.ProcessEnv, name: string, fallback: string): string {
@@ -100,5 +103,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // Zero keeps the trash indefinitely, which is what TrashService does with
     // a retention of zero or less.
     trashRetentionDays: nonNegativeInt(env, "TRASH_RETENTION_DAYS", 30),
+    webDavEnabled: bool(env, "WEBDAV_ENABLED", false),
+    webDavPort: int(env, "WEBDAV_PORT", 8551),
+    webDavWriteEnabled: bool(env, "WEBDAV_WRITE", false),
   };
 }

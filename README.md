@@ -44,6 +44,7 @@ That applies the schema, starts the server and opens <http://localhost:4000>.
 - [Limitations](#limitations)
 - [Documentation](#documentation)
 - [Roadmap](#roadmap)
+- [Desktop app](#desktop-app)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -253,6 +254,67 @@ Starred and Recent views sit alongside the drive.
   strings are never written
 - A `omnicloud` command that applies migrations and starts the server, so
   deployment is one process under systemd, pm2 or Docker
+- **WebDAV server** (optional, opt-in via `WEBDAV_PORT`): a dedicated HTTP
+  server exposing the folder tree at `WEBDAV_PATH_PREFIX` (default `/dav`) for
+  mounting with any WebDAV-capable client
+
+---
+
+## Desktop app
+
+OmniCloud is also available as a desktop application for Linux, built with
+Electron. It bundles the server, the web app and a native window into a single
+package — no separate Node.js install or browser needed.
+
+### Install the `.deb`
+
+Download the latest `.deb` from the
+[GitHub Releases page](https://github.com/Hilbras/OmniCloud/releases) and
+install it:
+
+```bash
+sudo dpkg -i omnicloud-0.5.0-amd64.deb
+sudo apt-get install -f   # resolves any missing dependencies
+```
+
+The package name is `omnicloud` (all lowercase). The app appears in your desktop
+environment's application menu as **OmniCloud**.
+
+### First run
+
+On first launch the app opens a window pointing at `http://localhost:4000` and
+runs the bundled server in the background. Complete the setup in the browser
+window: enter your `DATABASE_URL`, Telegram credentials and encryption key when
+prompted.
+
+> **Note:** the desktop app stores its environment in `~/.config/omnicloud/.env`
+> by default. Edit that file directly if you need to change the configuration
+> after the first run.
+
+### What the desktop app contains
+
+| Component | Role |
+| --------- | ---- |
+| Electron main process | Spawns and monitors the bundled server, manages the tray icon |
+| Bundled server | The same `@hilbras/omnicloud` server bundle, running on `localhost:4000` |
+| Built web app | Served by the bundled server from the same port |
+| PostgreSQL | Not included — point `DATABASE_URL` at your own instance |
+
+The desktop package is published to npm as
+[`@hilbras/omnicloud-desktop`](https://www.npmjs.com/package/@hilbras/omnicloud-desktop).
+
+### Updating the desktop app
+
+```bash
+# From GitHub Releases — download the new .deb and reinstall:
+sudo dpkg -i omnicloud-0.5.1-amd64.deb
+```
+
+Or via npm (for development or manual builds):
+
+```bash
+npm install -g @hilbras/omnicloud-desktop
+```
 
 ---
 
@@ -294,6 +356,8 @@ shell always win.
 | `UPDATE_PACKAGE_NAME`      | no                | `@hilbras/omnicloud` | Package to check for updates                                                                                                                           |
 | `VITE_SITE_URL`            | no                | Vercel URL           | Canonical origin for the landing page, `robots.txt` and `sitemap.xml`                                                                                  |
 | `SESSION_SECRET`           | no                | —                    | Reserved. Browser sessions are server-side tokens and do not use it                                                                                    |
+| `WEBDAV_PORT`              | no                | _(disabled)_         | Port for the dedicated WebDAV server. When set, OmniCloud starts a second HTTP server bound to `HOST:WEBDAV_PORT` that speaks WebDAV       |
+| `WEBDAV_PATH_PREFIX`       | no                | `/dav`               | URL prefix mounted on the WebDAV server (e.g. `/dav` → `http://host:WEBDAV_PORT/dav/`)                                                        |
 
 The repository ships a commented template at [`.env.example`](.env.example).
 
@@ -541,6 +605,9 @@ structure. The restore order, and a restore drill, are in
   multi-user collaboration.
 - **Restoring a version replaces the content in place.** It does not create a
   new version, and there is no scheduled version retention.
+- **WebDAV `PUT` uploads are not yet implemented.** The endpoint returns `501`
+  until raw-body handling is added. Folder creation via `POST` and file deletion
+  via `DELETE` work; `PROPFIND` and `GET` are fully functional.
 - The live Telegram path is verified against a real account; the evidence is in
   [`docs/limitations.md`](docs/limitations.md) and
   [`docs/audits/live-e2ee-smoke.md`](docs/audits/live-e2ee-smoke.md).
@@ -604,8 +671,13 @@ structure. The restore order, and a restore drill, are in
 - **v0.4** — shipped: streaming large-file encryption, legacy migration, CLI
   encryption commands, version restore and delete, trash retention, the npm
   update check, and the first publish of `@hilbras/omnicloud` on npm.
-- **Next** — alternative storage providers (S3, WebDAV, local disk), an
-  independent cryptographic review, and trusted-device enrollment.
+- **v0.5** — shipped: WebDAV server (`WEBDAV_PORT`, `WEBDAV_PATH_PREFIX`),
+  alternative storage providers design, and the deep comparison with Telegram-Drive.
+- **v0.5.x** — Electron desktop app for Linux (`.deb` and `.AppImage`), published
+  as `@hilbras/omnicloud-desktop` on npm and GitHub Releases.
+- **Next** — raw-body `PUT` uploads via WebDAV, alternative storage providers
+  (S3, local disk), an independent cryptographic review, and trusted-device
+  enrollment.
 - **Later** — sharing and public links, sync clients, an Android client,
   collaboration.
 

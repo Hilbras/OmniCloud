@@ -33,12 +33,15 @@ export function registerAuthHook(
     // Public routes: the auth endpoints, the health probes, and the update
     // check. The update check exposes only the running version and the newest
     // published version of an open-source package — no user data.
-    if (
-      !url.startsWith("/api/") ||
-      url.startsWith("/api/auth/") ||
-      url.startsWith("/api/health") ||
-      url.startsWith("/api/update/")
-    ) {
+    const isApiRoute = url.startsWith("/api/");
+    const isDavRoute = url.startsWith("/dav/");
+    const isPublicApi =
+      isApiRoute &&
+      (url.startsWith("/api/auth/") ||
+        url.startsWith("/api/health") ||
+        url.startsWith("/api/update/"));
+
+    if ((!isApiRoute && !isDavRoute) || isPublicApi) {
       return;
     }
 

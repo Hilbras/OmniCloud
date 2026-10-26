@@ -22,7 +22,8 @@
     "typecheck": "pnpm build:types && pnpm -r typecheck",
     "db:generate": "pnpm --filter @omnicloud/database generate",
     "db:migrate": "pnpm --filter @omnicloud/database migrate",
-    "db:seed": "pnpm --filter @omnicloud/database seed"
+    "db:seed": "pnpm --filter @omnicloud/database seed",
+    "build:desktop": "pnpm build:web && pnpm --filter @hilbras/omnicloud bundle:server && pnpm --filter @hilbras/omnicloud-desktop dist"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
