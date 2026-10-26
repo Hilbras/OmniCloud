@@ -15,8 +15,8 @@
   "dependencies": {
     "@omnicloud/crypto": "workspace:*",
     "@omnicloud/shared": "workspace:*",
-    "@tanstack/react-query": "^5.62.0",
-    "lucide-react": "^1.47.0",
+    "@tanstack/react-query": "^5.104.5",
+    "lucide-react": "^1.61.0",
     "motion": "^13.4.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -32,7 +32,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
-    "vite": "^6.0.0",
-    "vitest": "^4.1.11"
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12"
   }
 }
