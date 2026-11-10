@@ -15,6 +15,12 @@ import { clearOfflineFiles } from "./lib/offline-files";
 const DrivePage = lazy(() => import("./pages/DrivePage"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const DownloadPage = lazy(() => import("./pages/DownloadPage"));
+const AboutPage = lazy(() => import("./pages/InfoPages").then((m) => ({ default: m.AboutPage })));
+const PrivacyPage = lazy(() =>
+  import("./pages/InfoPages").then((m) => ({ default: m.PrivacyPage })),
+);
+const TermsPage = lazy(() => import("./pages/InfoPages").then((m) => ({ default: m.TermsPage })));
+const FaqPage = lazy(() => import("./pages/InfoPages").then((m) => ({ default: m.FaqPage })));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RecentPage = lazy(() => import("./pages/RecentPage"));
 const StarredPage = lazy(() => import("./pages/StarredPage"));
@@ -84,6 +90,10 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/download" element={<DownloadPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/faq" element={<FaqPage />} />
         <Route path="/welcome" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/s/:token" element={<ShareRoute />} />

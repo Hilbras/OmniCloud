@@ -6,7 +6,7 @@
  * fallback here means the build works with no environment configured, while a
  * custom domain is one variable change plus a rebuild.
  */
-const FALLBACK_SITE_URL = "https://omnicloud-chi.vercel.app";
+const FALLBACK_SITE_URL = "https://omnicloud.hilbras.com";
 
 function normalizeSiteUrl(raw: string | undefined): string {
   const value = (raw ?? "").trim();

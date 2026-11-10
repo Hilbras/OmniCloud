@@ -10,8 +10,9 @@ import {
   Terminal,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { ThemeToggle } from "../components/ThemeToggle";
-import { LANGS, setLang, useLang, type Lang } from "../i18n";
+import { useEffect, useState } from "react";
+import { SiteFooter, SiteHeader } from "../components/SiteShell";
+import { useLang } from "../i18n";
 import { usePageMeta } from "../lib/seo";
 
 const RELEASE_URL = "https://github.com/Hilbras/OmniCloud/releases/latest";
@@ -22,32 +23,76 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 const PLATFORM_ICONS = [Terminal, Laptop, Monitor] as const;
 const PLATFORM_KEYS = ["linux", "macos", "windows"] as const;
 
-function Brand({ href = "/" }: { href?: string }) {
-  return (
-    <a href={href} className="flex items-center gap-3" aria-label="OmniCloud">
-      <span className="relative h-9 w-9 shrink-0">
-        <img
-          src="/brand/logo-mark.svg"
-          alt=""
-          className="brand-mark-dark absolute inset-0 h-9 w-9"
-        />
-        <img
-          src="/brand/logo-mark-light.svg"
-          alt=""
-          className="brand-mark-light absolute inset-0 h-9 w-9"
-        />
-      </span>
-      <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">
-        Omni<span className="muted font-normal">Cloud</span>
-      </span>
-    </a>
+interface DownloadAsset {
+  name: string;
+  url: string;
+  size: number;
+  kind: string;
+}
+
+interface ReleaseInfo {
+  version: string | null;
+  page: string;
+  assets: DownloadAsset[];
+}
+
+function hasArch(name: string, arch: "x64" | "arm64"): boolean {
+  const lower = name.toLowerCase();
+  if (arch === "x64") return lower.includes("x64") || lower.includes("amd64");
+  return lower.includes("arm64") || lower.includes("aarch64");
+}
+
+function findAsset(
+  assets: DownloadAsset[],
+  kind: string,
+  arch?: "x64" | "arm64",
+): DownloadAsset | undefined {
+  return assets.find(
+    (asset) => asset.kind === kind && (arch === undefined || hasArch(asset.name, arch)),
   );
 }
 
 export default function DownloadPage() {
   const [lang, t] = useLang();
   const reduceMotion = useReducedMotion();
+  const [release, setRelease] = useState<ReleaseInfo | null>(null);
   usePageMeta({ title: t.download.seoTitle, description: t.download.seoDescription });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/downloads")
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("failed"))))
+      .then((data: ReleaseInfo) => {
+        if (!cancelled) setRelease(data);
+      })
+      .catch(() => {
+        if (!cancelled) setRelease({ version: null, page: RELEASE_URL, assets: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const assets = release?.assets ?? [];
+  const version = release?.version ?? null;
+
+  const platformLinks = (key: (typeof PLATFORM_KEYS)[number]) => {
+    if (key === "linux") {
+      const appImage = findAsset(assets, "appimage", "x64") ?? findAsset(assets, "appimage");
+      const deb = findAsset(assets, "deb", "x64") ?? findAsset(assets, "deb");
+      return { primary: appImage, alternates: deb ? [deb] : [] };
+    }
+    if (key === "macos") {
+      const dmg = findAsset(assets, "dmg", "arm64") ?? findAsset(assets, "dmg");
+      const other =
+        findAsset(assets, "dmg", "x64") ??
+        findAsset(assets, "zip", "arm64") ??
+        findAsset(assets, "zip");
+      return { primary: dmg, alternates: other && other !== dmg ? [other] : [] };
+    }
+    const exe = findAsset(assets, "exe", "x64") ?? findAsset(assets, "exe");
+    return { primary: exe, alternates: [] };
+  };
 
   const reveal = (delay = 0) =>
     reduceMotion
@@ -70,51 +115,7 @@ export default function DownloadPage() {
         <div className="absolute top-[38%] -left-40 h-[26rem] w-[26rem] rounded-full bg-gold/5 blur-3xl" />
       </div>
 
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          <Brand />
-          <nav className="hidden items-center gap-7 text-sm muted md:flex" aria-label="Primary">
-            <a href="/#features" className="transition-colors hover:text-text">
-              {t.nav.features}
-            </a>
-            <a href="/#security" className="transition-colors hover:text-text">
-              {t.nav.security}
-            </a>
-            <a href="/#open-source" className="transition-colors hover:text-text">
-              {t.nav.openSource}
-            </a>
-            <span className="font-medium text-text">{t.nav.download}</span>
-          </nav>
-          <div className="flex items-center gap-2.5">
-            <label className="sr-only" htmlFor="download-lang">
-              {t.langSwitcher.label}
-            </label>
-            <select
-              id="download-lang"
-              value={lang}
-              onChange={(event) => setLang(event.target.value as Lang)}
-              className="h-9 rounded-xl border border-line bg-surface/70 px-2 text-sm font-medium uppercase hover:bg-surface"
-            >
-              {LANGS.map((code) => (
-                <option key={code} value={code}>
-                  {t.langSwitcher[code]}
-                </option>
-              ))}
-            </select>
-            <ThemeToggle />
-            <a
-              href="/login"
-              className="hidden rounded-xl border border-line bg-surface/70 px-3.5 py-2 text-sm font-medium hover:bg-surface sm:block"
-            >
-              {t.nav.signIn}
-            </a>
-            <a href="/login" className="btn-gold px-3.5 py-2 text-sm">
-              {t.nav.getStarted}
-              <ArrowRight className="h-3.5 w-3.5 rtl:-scale-x-100" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader active="download" />
 
       <main id="main" className="relative z-10">
         <section className="mx-auto w-full max-w-6xl px-5 pb-10 pt-12 sm:px-8 lg:pt-16">
@@ -150,6 +151,7 @@ export default function DownloadPage() {
             {PLATFORM_KEYS.map((key, index) => {
               const Icon = PLATFORM_ICONS[index] ?? Monitor;
               const platform = t.download.platforms[key];
+              const links = platformLinks(key);
               return (
                 <motion.article
                   key={key}
@@ -165,12 +167,27 @@ export default function DownloadPage() {
                     {platform.formats}
                   </p>
                   <a
-                    href={RELEASE_URL}
-                    className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-bg/60 px-4 py-2.5 text-sm font-medium hover:bg-surface"
+                    href={links.primary?.url ?? release?.page ?? RELEASE_URL}
+                    className="btn-gold mt-4 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm"
+                    download
                   >
                     <Download className="h-4 w-4" aria-hidden="true" />
-                    {t.download.latest}
+                    {version !== null ? `${t.download.latest} · ${version}` : t.download.latest}
                   </a>
+                  {links.alternates.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[12px]">
+                      {links.alternates.map((asset) => (
+                        <a
+                          key={asset.url}
+                          href={asset.url}
+                          download
+                          className="muted underline-offset-2 hover:text-text hover:underline"
+                        >
+                          {asset.name}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
                 </motion.article>
               );
             })}
@@ -239,29 +256,7 @@ export default function DownloadPage() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-line">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 sm:flex-row sm:px-8">
-          <Brand />
-          <nav className="flex items-center gap-5 text-xs muted" aria-label="Footer">
-            <a href="/#features" className="transition-colors hover:text-text">
-              {t.footer.features}
-            </a>
-            <a
-              href="https://github.com/Hilbras/OmniCloud/blob/main/SECURITY.md"
-              className="transition-colors hover:text-text"
-            >
-              {t.footer.security}
-            </a>
-            <a href={SOURCE_URL} className="transition-colors hover:text-text">
-              {t.footer.github}
-            </a>
-            <a href="/login" className="transition-colors hover:text-text">
-              {t.footer.signIn}
-            </a>
-          </nav>
-          <p className="text-xs muted">{t.footer.license}</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

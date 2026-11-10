@@ -157,6 +157,8 @@ const en = {
   footer: {
     features: "Features",
     security: "Security",
+    privacy: "Privacy",
+    terms: "Terms",
     github: "GitHub",
     signIn: "Sign in",
     license: "MIT licensed · Self-hosted",
@@ -325,6 +327,8 @@ const ar: Translation = {
   footer: {
     features: "المزايا",
     security: "الأمان",
+    privacy: "الخصوصية",
+    terms: "الشروط",
     github: "GitHub",
     signIn: "تسجيل الدخول",
     license: "مرخّص برخصة MIT · مستضاف ذاتيًا",
@@ -495,6 +499,8 @@ const ru: Translation = {
   footer: {
     features: "Возможности",
     security: "Безопасность",
+    privacy: "Конфиденциальность",
+    terms: "Условия",
     github: "GitHub",
     signIn: "Войти",
     license: "Под лицензией MIT · Самохостинг",

@@ -6,5 +6,7 @@ Disallow: /starred
 Disallow: /trash
 Disallow: /storage
 Disallow: /settings
+Disallow: /pair/
+Disallow: /s/
 
-Sitemap: https://omnicloud-chi.vercel.app/sitemap.xml
+Sitemap: https://omnicloud.hilbras.com/sitemap.xml

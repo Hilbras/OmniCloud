@@ -42,8 +42,17 @@ export function usePageMeta({ title, description, noindex = false, path }: PageM
     setMeta("name", "description", description);
     setMeta("property", "og:title", title);
     setMeta("property", "og:description", description);
+    setMeta("property", "og:type", "website");
+    setMeta("property", "og:site_name", "OmniCloud");
     const url = `${SITE_URL}${route === "/" ? "/" : route}`;
     setMeta("property", "og:url", url);
+    const image = `${SITE_URL}/og.png`;
+    setMeta("property", "og:image", image);
+    setMeta("property", "og:image:alt", title);
+    setMeta("name", "twitter:card", "summary_large_image");
+    setMeta("name", "twitter:title", title);
+    setMeta("name", "twitter:description", description);
+    setMeta("name", "twitter:image", image);
     setCanonical(url);
     setMeta("name", "robots", noindex ? "noindex, nofollow" : "index, follow");
   }, [title, description, noindex, route]);

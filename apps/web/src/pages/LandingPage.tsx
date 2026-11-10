@@ -574,6 +574,18 @@ export default function LandingPage() {
             >
               {t.footer.security}
             </a>
+            <a href="/about" className="transition-colors hover:text-text">
+              {t.nav.openSource}
+            </a>
+            <a href="/privacy" className="transition-colors hover:text-text">
+              {t.footer.privacy}
+            </a>
+            <a href="/terms" className="transition-colors hover:text-text">
+              {t.footer.terms}
+            </a>
+            <a href="/faq" className="transition-colors hover:text-text">
+              FAQ
+            </a>
             <a
               href="https://github.com/Hilbras/OmniCloud"
               className="transition-colors hover:text-text"
