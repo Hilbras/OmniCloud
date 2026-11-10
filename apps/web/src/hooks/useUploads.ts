@@ -2,14 +2,27 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { ApiError, errorMessage } from "../api/client";
-import { replaceFile, uploadFile } from "../api/upload";
+import { replaceFile, uploadFile, type UploadResult } from "../api/upload";
 import { invalidateDriveQueries, invalidateVersionQueries } from "../lib/queries";
 import { encryptFormatPref } from "../lib/crypto-session";
+import { notify, requestNotificationPermission } from "../lib/notifications";
+import {
+  createUploadJobStore,
+  fileFromPersistedJob,
+  toPersistedJob,
+  type UploadJobStore,
+} from "../lib/upload-queue-store";
+import {
+  MAX_UPLOAD_ATTEMPTS,
+  isRetryableUploadError,
+  sleepUnlessAborted,
+  uploadRetryDelay,
+} from "../lib/upload-retry";
 import { useToast } from "../components/Toasts";
 import { useNameIndex } from "./useNameIndex";
 import type { EncryptionFormat } from "@omnicloud/shared";
 
-export type UploadStatus = "uploading" | "done" | "error" | "cancelled";
+export type UploadStatus = "queued" | "uploading" | "paused" | "done" | "error" | "cancelled";
 
 export interface UploadItem {
   id: number;
@@ -29,8 +42,8 @@ interface UploadJob {
   folderId: string | null;
   /** Stable for the job's life, so a retry is recognised by the server as the same upload. */
   operationId: string;
-  /** The encrypted format to store the file in. */
-  format: EncryptionFormat;
+  /** The encrypted format to store the file in; null keeps a replacement plaintext. */
+  format: EncryptionFormat | null;
 }
 
 let uploadIdCounter = 0;
@@ -46,8 +59,12 @@ function newOperationId(): string {
 export interface UploadsController {
   uploads: UploadItem[];
   enqueue: (files: File[], folderId: string | null) => void;
-  replace: (file: File, fileId: string) => void;
+  replace: (file: File, fileId: string, format: EncryptionFormat | null) => void;
   cancel: (id: number) => void;
+  /** Stops the current transfer but keeps the job (and its bytes) for later. */
+  pause: (id: number) => void;
+  /** Restarts a paused job from the beginning, reusing its operation id. */
+  resume: (id: number) => void;
   retry: (id: number) => void;
   dismiss: (id: number) => void;
   clearFinished: () => void;
@@ -61,7 +78,15 @@ export interface UploadsController {
 
 /**
  * Owns the upload queue: sequential processing, per-item progress, cancel via
- * AbortController/XHR.abort, and retry of failed or cancelled uploads.
+ * AbortController/XHR.abort, pause/resume, and retry of failed or cancelled
+ * uploads.
+ *
+ * Unfinished jobs are mirrored into IndexedDB so a reload, a renderer crash or
+ * a closed window does not lose the user's file. A resumed job keeps its
+ * operation id, which the server treats as the same upload — so retrying after
+ * a restart cannot create a duplicate object. Telegram has no resumable
+ * server-side upload session, so a resumed transfer starts from byte 0; what
+ * survives is the job, not the byte offset.
  */
 export function useUploads(): UploadsController {
   const queryClient = useQueryClient();
@@ -70,11 +95,17 @@ export function useUploads(): UploadsController {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const jobs = useRef(new Map<number, UploadJob>());
   const controllers = useRef(new Map<number, AbortController>());
+  const cancelledJobs = useRef(new Set<number>());
+  const pausedJobs = useRef(new Set<number>());
   const queue = useRef<Promise<void>>(Promise.resolve());
   const timers = useRef(new Map<number, number>());
   const mounted = useRef(true);
+  const restored = useRef(false);
+  const store = useRef<UploadJobStore | null>(null);
   const pickerInputRef = useRef<HTMLInputElement | null>(null);
   const pickerFolder = useRef<string | null>(null);
+
+  if (store.current === null) store.current = createUploadJobStore();
 
   useEffect(() => {
     mounted.current = true;
@@ -112,8 +143,26 @@ export function useUploads(): UploadsController {
 
   const run = useCallback(
     async (job: UploadJob): Promise<void> => {
+      // A queued job can be cancelled before it ever gets a controller.
+      if (cancelledJobs.current.delete(job.id)) {
+        jobs.current.delete(job.id);
+        setUploads((prev) =>
+          prev.map((entry) => (entry.id === job.id ? { ...entry, status: "cancelled" } : entry)),
+        );
+        return;
+      }
+      // A paused job must not start just because the queue reached it.
+      if (pausedJobs.current.has(job.id)) {
+        setUploads((prev) =>
+          prev.map((entry) => (entry.id === job.id ? { ...entry, status: "paused" } : entry)),
+        );
+        return;
+      }
       const controller = new AbortController();
       controllers.current.set(job.id, controller);
+      setUploads((prev) =>
+        prev.map((entry) => (entry.id === job.id ? { ...entry, status: "uploading" } : entry)),
+      );
       try {
         const options = {
           signal: controller.signal,
@@ -135,29 +184,61 @@ export function useUploads(): UploadsController {
             );
           },
         };
-        const result =
+        const attemptUpload = () =>
           job.replaceId === null
-            ? await uploadFile(job.file, job.folderId, {
+            ? uploadFile(job.file, job.folderId, {
                 ...options,
                 operationId: job.operationId,
                 format: job.format,
               })
-            : await replaceFile(job.file, job.replaceId, {
+            : replaceFile(job.file, job.replaceId, {
                 ...options,
                 operationId: job.operationId,
                 format: job.format,
+                requireEncryption: job.format !== null,
               });
+        // Transient failures are retried in place with the same operation id,
+        // so a request that did reach the server cannot commit twice.
+        let result: UploadResult;
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            result = await attemptUpload();
+            break;
+          } catch (error) {
+            const interrupted = pausedJobs.current.has(job.id) || controller.signal.aborted;
+            if (interrupted || attempt >= MAX_UPLOAD_ATTEMPTS || !isRetryableUploadError(error)) {
+              throw error;
+            }
+            setUploads((prev) =>
+              prev.map((entry) =>
+                entry.id === job.id
+                  ? {
+                      ...entry,
+                      message: `Connection problem — retrying (${attempt + 1}/${MAX_UPLOAD_ATTEMPTS})`,
+                    }
+                  : entry,
+              ),
+            );
+            await sleepUnlessAborted(uploadRetryDelay(attempt), controller.signal);
+          }
+        }
         // A file stored as OCE2 has an opaque name at the server, so the
         // client is the only place that can know what it is called. Record it
         // in the index, which is encrypted with the root key.
-        if (result.file.encryptionFormat === "OCE2") {
+        // OCE2 needs an entry for its hidden name; OCE1 needs the crypto ids so
+        // a later rename can re-encrypt the metadata blob.
+        if (
+          result.file.encryptionFormat === "OCE2" ||
+          result.cryptoFileId !== undefined ||
+          result.cryptoVersionId !== undefined
+        ) {
           nameIndex.upsert({
             id: result.file.id,
             name: job.file.name,
             mimeType: job.file.type || null,
             description: null,
             size: result.file.size,
-            folderId: job.folderId,
+            folderId: result.file.folderId,
             starred: result.file.starred,
             trashed: result.file.trashed,
             versionCount: result.file.versionCount,
@@ -170,6 +251,7 @@ export function useUploads(): UploadsController {
           });
         }
         if (!mounted.current) return;
+        void store.current?.delete(job.id);
         setUploads((prev) =>
           prev.map((entry) =>
             entry.id === job.id ? { ...entry, status: "done", percent: 100 } : entry,
@@ -178,16 +260,29 @@ export function useUploads(): UploadsController {
         invalidateDriveQueries(queryClient);
         if (job.replaceId !== null) invalidateVersionQueries(queryClient, job.replaceId);
         const encrypted = result.file.encryptionFormat !== null;
-        toast.success(
+        const successMessage =
           job.replaceId === null
             ? `Uploaded "${job.file.name}"${encrypted ? " (encrypted)" : ""}`
-            : `Replaced "${job.file.name}"${encrypted ? " (encrypted)" : ""}`,
-        );
+            : `Replaced "${job.file.name}"${encrypted ? " (encrypted)" : ""}`;
+        toast.success(successMessage);
+        notify("OmniCloud upload complete", successMessage, `upload-${job.id}`);
         scheduleDismiss(job.id);
       } catch (error) {
         if (!mounted.current) return;
         const message = errorMessage(error, "Upload failed");
         const cancelled = error instanceof ApiError && error.code === "ABORTED";
+        const paused = pausedJobs.current.has(job.id);
+        if (paused) {
+          setUploads((prev) =>
+            prev.map((entry) =>
+              entry.id === job.id ? { ...entry, status: "paused", message: undefined } : entry,
+            ),
+          );
+          return;
+        }
+        // A terminal failure is not resumed automatically on the next load;
+        // the job stays in the panel so the user can retry it deliberately.
+        void store.current?.delete(job.id);
         setUploads((prev) =>
           prev.map((entry) =>
             entry.id === job.id
@@ -195,7 +290,14 @@ export function useUploads(): UploadsController {
               : entry,
           ),
         );
-        if (!cancelled) toast.error(`Could not upload "${job.file.name}": ${message}`);
+        if (!cancelled) {
+          toast.error(`Could not upload "${job.file.name}": ${message}`);
+          notify(
+            "OmniCloud upload failed",
+            `Could not upload "${job.file.name}": ${message}`,
+            `upload-${job.id}`,
+          );
+        }
       } finally {
         controllers.current.delete(job.id);
       }
@@ -203,9 +305,53 @@ export function useUploads(): UploadsController {
     [queryClient, scheduleDismiss, toast, nameIndex],
   );
 
+  // Restore jobs that were still pending when the renderer last went away.
+  // Runs once per mount: `run` changes identity with the hooks above, so the
+  // guard is a ref rather than a dependency.
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    let cancelled = false;
+    void (async () => {
+      const records = await store.current!.list();
+      if (cancelled) return;
+      records.sort((a, b) => a.createdAt - b.createdAt);
+      for (const record of records) {
+        const file = fileFromPersistedJob(record);
+        const job: UploadJob = {
+          id: record.id,
+          file,
+          replaceId: record.replaceId,
+          folderId: record.folderId,
+          operationId: record.operationId,
+          format: record.format,
+        };
+        uploadIdCounter = Math.max(uploadIdCounter, record.id);
+        jobs.current.set(job.id, job);
+        if (record.paused) pausedJobs.current.add(job.id);
+        setUploads((prev) => [
+          ...prev,
+          {
+            id: job.id,
+            name: file.name,
+            size: file.size,
+            loaded: 0,
+            percent: 0,
+            status: record.paused ? "paused" : "queued",
+          },
+        ]);
+        if (!record.paused) queue.current = queue.current.then(() => run(job));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [run]);
+
   const enqueueJob = useCallback(
     (job: UploadJob) => {
       jobs.current.set(job.id, job);
+      void store.current?.put(toPersistedJob(job.id, { ...job, paused: false }));
       setUploads((prev) => [
         ...prev,
         {
@@ -214,7 +360,7 @@ export function useUploads(): UploadsController {
           size: job.file.size,
           loaded: 0,
           percent: 0,
-          status: "uploading",
+          status: "queued",
         },
       ]);
       queue.current = queue.current.then(() => run(job));
@@ -224,6 +370,7 @@ export function useUploads(): UploadsController {
 
   const enqueue = useCallback(
     (files: File[], folderId: string | null) => {
+      requestNotificationPermission();
       for (const file of files) {
         uploadIdCounter += 1;
         enqueueJob({
@@ -240,7 +387,7 @@ export function useUploads(): UploadsController {
   );
 
   const replace = useCallback(
-    (file: File, fileId: string) => {
+    (file: File, fileId: string, format: EncryptionFormat | null) => {
       uploadIdCounter += 1;
       enqueueJob({
         id: uploadIdCounter,
@@ -248,25 +395,80 @@ export function useUploads(): UploadsController {
         replaceId: fileId,
         folderId: null,
         operationId: newOperationId(),
-        format: encryptFormatPref(),
+        // Preserve the target's format: a plaintext file stays plaintext, and
+        // an encrypted file must not silently lose encryption.
+        format,
       });
     },
     [enqueueJob],
   );
 
   const cancel = useCallback((id: number) => {
-    controllers.current.get(id)?.abort();
+    const wasPaused = pausedJobs.current.delete(id);
+    void store.current?.delete(id);
+    const controller = controllers.current.get(id);
+    if (controller) {
+      controller.abort();
+    } else if (wasPaused) {
+      // The paused job already left the queue, so nothing will dequeue it.
+      setUploads((prev) =>
+        prev.map((entry) =>
+          entry.id === id ? { ...entry, status: "cancelled", message: undefined } : entry,
+        ),
+      );
+    } else {
+      // Not started yet: mark it so `run` skips it when dequeued.
+      cancelledJobs.current.add(id);
+    }
   }, []);
+
+  const pause = useCallback((id: number) => {
+    const job = jobs.current.get(id);
+    if (job === undefined) return;
+    pausedJobs.current.add(id);
+    void store.current?.put(toPersistedJob(id, { ...job, paused: true }));
+    const controller = controllers.current.get(id);
+    if (controller) {
+      // The abort surfaces as an ABORTED error; `run` sees the paused flag and
+      // keeps the job instead of treating it as cancelled.
+      controller.abort();
+    } else {
+      setUploads((prev) =>
+        prev.map((entry) => (entry.id === id ? { ...entry, status: "paused" } : entry)),
+      );
+    }
+  }, []);
+
+  const resume = useCallback(
+    (id: number) => {
+      const job = jobs.current.get(id);
+      if (job === undefined) return;
+      pausedJobs.current.delete(id);
+      void store.current?.put(toPersistedJob(id, { ...job, paused: false }));
+      setUploads((prev) =>
+        prev.map((entry) =>
+          entry.id === id
+            ? { ...entry, status: "queued", percent: 0, loaded: 0, message: undefined }
+            : entry,
+        ),
+      );
+      queue.current = queue.current.then(() => run(job));
+    },
+    [run],
+  );
 
   const retry = useCallback(
     (id: number) => {
       const job = jobs.current.get(id);
       if (job === undefined) return;
+      cancelledJobs.current.delete(id);
+      pausedJobs.current.delete(id);
       clearDismissTimer(id);
+      void store.current?.put(toPersistedJob(id, { ...job, paused: false }));
       setUploads((prev) =>
         prev.map((entry) =>
           entry.id === id
-            ? { ...entry, status: "uploading", percent: 0, loaded: 0, message: undefined }
+            ? { ...entry, status: "queued", percent: 0, loaded: 0, message: undefined }
             : entry,
         ),
       );
@@ -279,7 +481,10 @@ export function useUploads(): UploadsController {
     (id: number) => {
       clearDismissTimer(id);
       controllers.current.get(id)?.abort();
+      cancelledJobs.current.add(id);
+      pausedJobs.current.delete(id);
       jobs.current.delete(id);
+      void store.current?.delete(id);
       setUploads((prev) => prev.filter((entry) => entry.id !== id));
     },
     [clearDismissTimer],
@@ -287,8 +492,12 @@ export function useUploads(): UploadsController {
 
   const clearFinished = useCallback(() => {
     setUploads((prev) => {
-      for (const entry of prev) if (entry.status !== "uploading") jobs.current.delete(entry.id);
-      return prev.filter((entry) => entry.status === "uploading");
+      for (const entry of prev) {
+        if (entry.status === "uploading" || entry.status === "queued") continue;
+        jobs.current.delete(entry.id);
+        void store.current?.delete(entry.id);
+      }
+      return prev.filter((entry) => entry.status === "uploading" || entry.status === "queued");
     });
   }, []);
 
@@ -310,6 +519,8 @@ export function useUploads(): UploadsController {
     enqueue,
     replace,
     cancel,
+    pause,
+    resume,
     retry,
     dismiss,
     clearFinished,

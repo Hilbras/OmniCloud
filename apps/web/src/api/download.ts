@@ -5,9 +5,21 @@ import {
   deriveMek,
   readHeader,
 } from "@omnicloud/crypto";
-import type { FileDTO } from "@omnicloud/shared";
+import { isEncryptedFormat, type FileDTO } from "@omnicloud/shared";
 import { base64ToBytes } from "../lib/bytes";
 import { getUrk } from "../lib/crypto-session";
+import {
+  createThumbnailCache,
+  isCacheableThumbnail,
+  thumbnailCacheKey,
+  type ThumbnailCacheBackend,
+} from "../lib/thumbnail-cache";
+import {
+  createOfflineFileStore,
+  isOfflineCopyEligible,
+  offlineFileKey,
+  type OfflineFileBackend,
+} from "../lib/offline-files";
 import {
   api,
   ApiError,
@@ -19,6 +31,56 @@ import {
 
 function downloadPath(id: string): string {
   return `/api/files/${encodeURIComponent(id)}/download`;
+}
+
+let thumbnailCache: ThumbnailCacheBackend | null = null;
+
+/** Created lazily so environments without IndexedDB never touch it. */
+function getThumbnailCache(): ThumbnailCacheBackend {
+  thumbnailCache ??= createThumbnailCache();
+  return thumbnailCache;
+}
+
+let offlineFileStore: OfflineFileBackend | null = null;
+
+function getOfflineFileStore(): OfflineFileBackend {
+  offlineFileStore ??= createOfflineFileStore();
+  return offlineFileStore;
+}
+
+/** Whether this device already keeps a copy of a plaintext file. */
+export async function hasOfflineCopy(file: FileDTO): Promise<boolean> {
+  if (!isOfflineCopyEligible(file)) return false;
+  return getOfflineFileStore().has(offlineFileKey(file));
+}
+
+/** Reads the saved copy, if any. Only plaintext files are ever stored. */
+export async function readOfflineCopy(file: FileDTO): Promise<Blob | undefined> {
+  if (!isOfflineCopyEligible(file)) return undefined;
+  return getOfflineFileStore().get(offlineFileKey(file));
+}
+
+/**
+ * Downloads and stores a plaintext file on this device. The bytes are fetched
+ * once and reused by later downloads, including while offline.
+ */
+export async function saveOfflineCopy(file: FileDTO): Promise<void> {
+  if (!isOfflineCopyEligible(file)) {
+    throw new ApiError(
+      0,
+      "OFFLINE_NOT_ELIGIBLE",
+      "Only plaintext files up to 64 MB can be kept offline.",
+    );
+  }
+  const bytes = await fetchFileBytes(file.id);
+  const blob = new Blob([bytes as BlobPart], {
+    type: file.mimeType || "application/octet-stream",
+  });
+  await getOfflineFileStore().put(offlineFileKey(file), blob);
+}
+
+export async function removeOfflineCopy(file: FileDTO): Promise<void> {
+  await getOfflineFileStore().delete(offlineFileKey(file));
 }
 
 /**
@@ -128,12 +190,7 @@ async function splitHeader(
 }
 
 /**
- * Downloads a file. Plaintext files use the server's attachment response
- * exactly as before. OCE1 files are streamed and decrypted chunk-by-chunk;
- * the save only happens after the authenticated manifest verifies, so a failed
- * or truncated decryption produces an error and never a partial file.
- *
- * Pass `knownFile` when the caller already has the DTO to avoid a GET.
+ * A decrypted file held in memory for preview. The caller must not persist it.
  */
 export interface DecryptedPreview {
   /** Decrypted bytes; the caller must not cache or persist them. */
@@ -161,7 +218,7 @@ export async function fetchDecryptedPreview(
   knownFile?: FileDTO | null,
 ): Promise<DecryptedPreview> {
   const file = knownFile ?? (await api.files.get(id)).file;
-  if (file.encryptionFormat !== "OCE1") {
+  if (!isEncryptedFormat(file.encryptionFormat)) {
     throw new ApiError(
       0,
       "NOT_ENCRYPTED",
@@ -252,23 +309,54 @@ export async function fetchDecryptedPreview(
  * Loads the decrypted bytes of a small image for use as a drive thumbnail.
  *
  * Encrypted files go through the same chunked decrypt as the preview, so the
- * authenticated manifest is verified before any bytes are shown. Legacy
- * plaintext files are fetched as-is. The result is never written to disk or
- * cached by the browser — the caller holds it as an object URL.
+ * authenticated manifest is verified before any bytes are shown; their result
+ * is never written to disk. Legacy plaintext files are fetched as-is and may be
+ * served from (and stored in) the bounded on-disk thumbnail cache.
  */
 export async function fetchThumbnailBlob(id: string, knownFile?: FileDTO | null): Promise<Blob> {
   const file = knownFile ?? (await api.files.get(id)).file;
-  if (file.encryptionFormat === "OCE1") {
+  if (isEncryptedFormat(file.encryptionFormat)) {
     const preview = await fetchDecryptedPreview(id, file);
     return preview.blob;
+  }
+  // Plaintext thumbnails may be cached on disk; encrypted ones never are,
+  // because their bytes are decrypted in the tab and must not be persisted.
+  if (isCacheableThumbnail(file)) {
+    const cache = getThumbnailCache();
+    const key = thumbnailCacheKey(file);
+    const cached = await cache.get(key);
+    if (cached !== undefined) return cached;
+    const bytes = await fetchFileBytes(file.id);
+    const blob = new Blob([bytes as BlobPart], {
+      type: file.mimeType || "application/octet-stream",
+    });
+    void cache.put(key, blob, Date.now());
+    return blob;
   }
   const bytes = await fetchFileBytes(file.id);
   return new Blob([bytes as BlobPart], { type: file.mimeType || "application/octet-stream" });
 }
 
+/**
+ * Downloads a file. Plaintext files use an explicit offline copy when one
+ * exists, otherwise the server's attachment response. OCE1 files are streamed
+ * and decrypted chunk-by-chunk; the save only happens after the authenticated
+ * manifest verifies, so a failed or truncated decryption produces an error and
+ * never a partial file.
+ *
+ * Pass `knownFile` when the caller already has the DTO to avoid a GET.
+ */
 export async function downloadFile(id: string, knownFile?: FileDTO | null): Promise<void> {
   const file = knownFile ?? (await api.files.get(id)).file;
-  if (file.encryptionFormat !== "OCE1") {
+  if (!isEncryptedFormat(file.encryptionFormat)) {
+    // Prefer an explicit offline copy: it also works when the server is gone.
+    if (isOfflineCopyEligible(file)) {
+      const cached = await readOfflineCopy(file);
+      if (cached !== undefined) {
+        saveBlob(cached, file.name);
+        return;
+      }
+    }
     api.files.download(file.id);
     return;
   }

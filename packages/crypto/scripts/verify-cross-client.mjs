@@ -24,9 +24,15 @@ const pkgRoot = join(here, "..");
 const { build } = createRequire(join(pkgRoot, "package.json"))("esbuild");
 
 function fail(message) {
-  console.error(`FAIL ${message}`);
-  process.exit(1);
+  // Throwing lets the surrounding finally blocks kill geckodriver and remove
+  // the temporary bundle instead of leaking both.
+  throw new Error(message);
 }
+
+process.on("uncaughtException", (error) => {
+  console.error(`FAIL ${error.message}`);
+  process.exit(1);
+});
 
 // --- 1. Node side -----------------------------------------------------------
 
@@ -50,17 +56,23 @@ if (!nodeReport.pass) fail("node verifier reported failures");
 // harness lives inside the workspace where the browser process can read it.
 const cacheDir = join(pkgRoot, "node_modules", ".cache");
 mkdirSync(cacheDir, { recursive: true });
-const outfile = join(mkdtempSync(join(cacheDir, "ocl-vectors-")), "verifier.js");
-await build({
-  entryPoints: [join(here, "browser-entry.ts")],
-  bundle: true,
-  format: "iife",
-  platform: "browser",
-  target: "es2022",
-  outfile,
-  absWorkingDir: pkgRoot,
-  logLevel: "silent",
-});
+const tempDir = mkdtempSync(join(cacheDir, "ocl-vectors-"));
+const outfile = join(tempDir, "verifier.js");
+try {
+  await build({
+    entryPoints: [join(here, "browser-entry.ts")],
+    bundle: true,
+    format: "iife",
+    platform: "browser",
+    target: "es2022",
+    outfile,
+    absWorkingDir: pkgRoot,
+    logLevel: "silent",
+  });
+} catch (error) {
+  rmSync(tempDir, { recursive: true, force: true });
+  throw error;
+}
 const bundle = readFileSync(outfile, "utf8");
 const htmlPath = join(dirname(outfile), "verifier.html");
 writeFileSync(

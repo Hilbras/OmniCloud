@@ -1,9 +1,10 @@
 import { paginationMeta, parseSearchQuery } from "@omnicloud/shared";
-import type { ListQuery, PaginationDTO, SearchResultDTO } from "@omnicloud/shared";
+import type { ListQuery, PaginationDTO } from "@omnicloud/shared";
 import { ValidationError } from "../errors";
 import type { FileRecord, FolderRecord, PageRequest } from "../types";
 import type { FileRepository, FolderRepository } from "../repos";
 import { resolveItemQuery } from "./query-resolver";
+import { mergePagedResults } from "../utils/paginate-merged";
 
 const MAX_QUERY_LENGTH = 200;
 
@@ -58,29 +59,25 @@ export class SearchService {
     // query ignores extension, type and size, so every folder would match.
     const filesOnly = hasFileOnlyFilter(query);
 
-    const [filePage, folderPage] = await Promise.all([
-      this.files.query(userId, itemQuery, page),
-      filesOnly
-        ? Promise.resolve({ items: [], total: 0 })
-        : this.folders.query(userId, itemQuery, page),
-    ]);
+    if (filesOnly) {
+      const filePage = await this.files.query(userId, itemQuery, page);
+      return {
+        files: filePage.items,
+        folders: [],
+        pagination: paginationMeta(page.page, page.limit, filePage.total),
+      };
+    }
 
-    // The pagination envelope describes the combined result count so the UI
-    // can render a single "load more" affordance.
-    const total = filePage.total + folderPage.total;
+    const merged = await mergePagedResults(
+      (request) => this.files.query(userId, itemQuery, request),
+      (request) => this.folders.query(userId, itemQuery, request),
+      itemQuery,
+      page,
+    );
     return {
-      files: filePage.items,
-      folders: folderPage.items,
-      pagination: paginationMeta(page.page, page.limit, total),
+      files: merged.items.filter((item): item is FileRecord => "parentId" in item === false),
+      folders: merged.items.filter((item): item is FolderRecord => "parentId" in item),
+      pagination: merged.pagination,
     };
-  }
-
-  /** Convenience wrapper returning the shared DTO shape. */
-  async searchDTO(
-    userId: string,
-    rawQuery: string,
-    page: PageRequest,
-  ): Promise<Omit<SearchResultDTO, "files" | "folders"> & SearchResult> {
-    return this.search(userId, rawQuery, page);
   }
 }

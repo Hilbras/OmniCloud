@@ -254,67 +254,67 @@ Starred and Recent views sit alongside the drive.
   strings are never written
 - A `omnicloud` command that applies migrations and starts the server, so
   deployment is one process under systemd, pm2 or Docker
-- **WebDAV server** (optional, opt-in via `WEBDAV_PORT`): a dedicated HTTP
-  server exposing the folder tree at `WEBDAV_PATH_PREFIX` (default `/dav`) for
-  mounting with any WebDAV-capable client
+- **WebDAV server** (optional, opt-in via `WEBDAV_ENABLED=true`): a dedicated
+  HTTP server exposing the folder tree under `/dav` for mounting with WebDAV
+  clients that support Bearer, Basic or cookie authentication
 
 ---
 
 ## Desktop app
 
-OmniCloud is also available as a desktop application for Linux, built with
-Electron. It bundles the server, the web app and a native window into a single
-package — no separate Node.js install or browser needed.
+OmniCloud is available as a desktop application for Linux, macOS and Windows,
+built with Electron. It bundles the server, the web app and a native window
+into a single package — no separate Node.js install or browser needed.
 
-### Install the `.deb`
+Download the artifact for your system from the
+[GitHub Releases page](https://github.com/Hilbras/OmniCloud/releases):
 
-Download the latest `.deb` from the
-[GitHub Releases page](https://github.com/Hilbras/OmniCloud/releases) and
-install it:
+| System                        | File                                               | Install                                              |
+| ----------------------------- | -------------------------------------------------- | ---------------------------------------------------- |
+| Linux (Debian/Ubuntu)         | `OmniCloud-<version>-linux-x64.deb` / `-arm64.deb` | `sudo dpkg -i <file>` then `sudo apt-get install -f` |
+| Linux (portable)              | `OmniCloud-<version>-linux-x64.AppImage`           | `chmod +x <file>` and run it                         |
+| macOS (Intel / Apple silicon) | `OmniCloud-<version>-mac-x64.dmg` / `-arm64.dmg`   | Open the `.dmg`, drag OmniCloud to Applications      |
+| Windows (x64)                 | `OmniCloud-<version>-win-x64.exe`                  | Run the installer                                    |
 
-```bash
-sudo dpkg -i omnicloud-0.5.0-amd64.deb
-sudo apt-get install -f   # resolves any missing dependencies
-```
+The artifacts are unsigned. macOS Gatekeeper and Windows SmartScreen will warn
+on first launch; allow the app in System Settings / More info if you trust the
+build.
 
-The package name is `omnicloud` (all lowercase). The app appears in your desktop
-environment's application menu as **OmniCloud**.
+The Linux package name is `omnicloud`; the app appears in your application menu
+as **OmniCloud**.
 
 ### First run
 
-On first launch the app opens a window pointing at `http://localhost:4000` and
-runs the bundled server in the background. Complete the setup in the browser
-window: enter your `DATABASE_URL`, Telegram credentials and encryption key when
-prompted.
+On first launch the app opens a setup window. Enter the Telegram API ID/hash,
+the PostgreSQL URL, and generate an encryption key there; **Save and continue**
+writes the config file (Linux: `~/.config/omnicloud/.env`, macOS:
+`~/Library/Application Support/OmniCloud/.env`, Windows:
+`%APPDATA%\OmniCloud\.env`; mode 600 on Unix), applies the bundled database
+migrations, starts the server on `http://127.0.0.1:4000` and opens the app
+window. No file editing is required.
 
-> **Note:** the desktop app stores its environment in `~/.config/omnicloud/.env`
-> by default. Edit that file directly if you need to change the configuration
-> after the first run.
+The setup window also opens when the saved configuration is incomplete or the
+database cannot be reached, prefilled with the current values. For automation,
+`OMNICLOUD_ENV_FILE` can point at a preseeded file instead.
 
 ### What the desktop app contains
 
-| Component | Role |
-| --------- | ---- |
-| Electron main process | Spawns and monitors the bundled server, manages the tray icon |
-| Bundled server | The same `@hilbras/omnicloud` server bundle, running on `localhost:4000` |
-| Built web app | Served by the bundled server from the same port |
-| PostgreSQL | Not included — point `DATABASE_URL` at your own instance |
+| Component             | Role                                                                     |
+| --------------------- | ------------------------------------------------------------------------ |
+| Electron main process | Spawns and monitors the bundled server, manages the tray icon            |
+| Bundled server        | The same `@hilbras/omnicloud` server bundle, running on `localhost:4000` |
+| Built web app         | Served by the bundled server from the same port                          |
+| PostgreSQL            | Not included — point `DATABASE_URL` at your own instance                 |
 
-The desktop package is published to npm as
-[`@hilbras/omnicloud-desktop`](https://www.npmjs.com/package/@hilbras/omnicloud-desktop).
+The desktop app is distributed as `.deb`/AppImage, `.dmg`/`.zip` and NSIS
+`.exe` artifacts from GitHub Releases. It is not published to npm: the npm
+package would contain only the Electron shell, not the server, web assets or
+Prisma engine it needs to run.
 
 ### Updating the desktop app
 
-```bash
-# From GitHub Releases — download the new .deb and reinstall:
-sudo dpkg -i omnicloud-0.5.1-amd64.deb
-```
-
-Or via npm (for development or manual builds):
-
-```bash
-npm install -g @hilbras/omnicloud-desktop
-```
+Download the installer for your platform from GitHub Releases and run it again
+(`.deb`/AppImage, `.dmg`/`.zip`, or `.exe`). The app is not published to npm.
 
 ---
 
@@ -335,29 +335,31 @@ Configuration comes from environment variables. The `omnicloud` command also
 reads a `.env` file in the current directory; variables already set in your
 shell always win.
 
-| Variable                   | Required          | Default              | Purpose                                                                                                                                                |
-| -------------------------- | ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`             | yes               | —                    | PostgreSQL connection string                                                                                                                           |
-| `TELEGRAM_API_ID`          | yes               | —                    | Your Telegram application id                                                                                                                           |
-| `TELEGRAM_API_HASH`        | yes               | —                    | Your Telegram application hash                                                                                                                         |
-| `OMNICLOUD_ENCRYPTION_KEY` | yes in production | —                    | 64 hex characters. Seals Telegram sessions at rest. **Back it up separately from the database.**                                                       |
-| `HOST`                     | no                | `0.0.0.0`            | Address to listen on                                                                                                                                   |
-| `PORT`                     | no                | `4000`               | Port to listen on                                                                                                                                      |
-| `NODE_ENV`                 | no                | `production`         | The `omnicloud` command defaults to `production`; running the API directly defaults to `development`. `production` requires `OMNICLOUD_ENCRYPTION_KEY` |
-| `LOG_LEVEL`                | no                | `info`               | `fatal`, `error`, `warn`, `info`, `debug` or `trace`                                                                                                   |
-| `COOKIE_SECURE`            | no                | `false`              | Set `true` when served over HTTPS                                                                                                                      |
-| `ALLOWED_ORIGINS`          | no                | same-origin          | Comma-separated origins allowed to make state-changing requests                                                                                        |
-| `TRUST_PROXY`              | no                | `false`              | Trust `X-Forwarded-*` headers. Enable only behind a reverse proxy you control                                                                          |
-| `MAX_UPLOAD_MB`            | no                | `256`                | Largest accepted upload, in megabytes                                                                                                                  |
-| `STORAGE_QUOTA_GB`         | no                | `0` (none)           | Optional quota shown on the Storage dashboard                                                                                                          |
-| `TRASH_RETENTION_DAYS`     | no                | `30`                 | Days before trashed items are purged. `0` keeps them indefinitely                                                                                      |
-| `WEB_DIST_DIR`             | no                | bundled copy         | Directory the built web app is served from. Defaults to the copy inside the package                                                                    |
-| `UPDATE_CHECK_ENABLED`     | no                | `true`               | Check npm hourly for a newer release                                                                                                                   |
-| `UPDATE_PACKAGE_NAME`      | no                | `@hilbras/omnicloud` | Package to check for updates                                                                                                                           |
-| `VITE_SITE_URL`            | no                | Vercel URL           | Canonical origin for the landing page, `robots.txt` and `sitemap.xml`                                                                                  |
-| `SESSION_SECRET`           | no                | —                    | Reserved. Browser sessions are server-side tokens and do not use it                                                                                    |
-| `WEBDAV_PORT`              | no                | _(disabled)_         | Port for the dedicated WebDAV server. When set, OmniCloud starts a second HTTP server bound to `HOST:WEBDAV_PORT` that speaks WebDAV       |
-| `WEBDAV_PATH_PREFIX`       | no                | `/dav`               | URL prefix mounted on the WebDAV server (e.g. `/dav` → `http://host:WEBDAV_PORT/dav/`)                                                        |
+| Variable                          | Required          | Default              | Purpose                                                                                                                                                |
+| --------------------------------- | ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                    | yes               | —                    | PostgreSQL connection string                                                                                                                           |
+| `TELEGRAM_API_ID`                 | yes               | —                    | Your Telegram application id                                                                                                                           |
+| `TELEGRAM_API_HASH`               | yes               | —                    | Your Telegram application hash                                                                                                                         |
+| `OMNICLOUD_ENCRYPTION_KEY`        | yes in production | —                    | 64 hex characters. Seals Telegram sessions at rest. **Back it up separately from the database.**                                                       |
+| `HOST`                            | no                | `0.0.0.0`            | Address to listen on                                                                                                                                   |
+| `PORT`                            | no                | `4000`               | Port to listen on                                                                                                                                      |
+| `NODE_ENV`                        | no                | `production`         | The `omnicloud` command defaults to `production`; running the API directly defaults to `development`. `production` requires `OMNICLOUD_ENCRYPTION_KEY` |
+| `LOG_LEVEL`                       | no                | `info`               | `fatal`, `error`, `warn`, `info`, `debug` or `trace`                                                                                                   |
+| `COOKIE_SECURE`                   | no                | `true` in production | Set `false` only for a plain-HTTP deployment                                                                                                           |
+| `ALLOWED_ORIGINS`                 | no                | same-origin          | Comma-separated origins allowed to make state-changing requests and credentialed CORS calls                                                            |
+| `TRUST_PROXY`                     | no                | `false`              | Trust `X-Forwarded-*` headers. Enable only behind a reverse proxy you control                                                                          |
+| `MAX_UPLOAD_MB`                   | no                | `256`                | Largest accepted upload, in megabytes                                                                                                                  |
+| `STORAGE_QUOTA_GB`                | no                | `0` (none)           | Optional quota shown on the Storage dashboard                                                                                                          |
+| `TRASH_RETENTION_DAYS`            | no                | `30`                 | Days before trashed items are purged. `0` keeps them indefinitely                                                                                      |
+| `UPLOAD_OPERATION_RETENTION_DAYS` | no                | `7`                  | Days terminal upload replay records are kept for retries. `0` keeps them forever                                                                       |
+| `WEB_DIST_DIR`                    | no                | bundled copy         | Directory the built web app is served from. Defaults to the copy inside the package                                                                    |
+| `UPDATE_CHECK_ENABLED`            | no                | `true`               | Check npm hourly for a newer release                                                                                                                   |
+| `UPDATE_PACKAGE_NAME`             | no                | `@hilbras/omnicloud` | Package to check for updates                                                                                                                           |
+| `VITE_SITE_URL`                   | no                | Vercel URL           | Canonical origin for the landing page, `robots.txt` and `sitemap.xml`                                                                                  |
+| `WEBDAV_ENABLED`                  | no                | `false`              | Set `true` to start the dedicated WebDAV listener                                                                                                      |
+| `WEBDAV_HOST`                     | no                | `127.0.0.1`          | Interface the WebDAV listener binds to. Change only behind a trusted proxy                                                                             |
+| `WEBDAV_PORT`                     | no                | `8551`               | Port for the dedicated WebDAV listener. The path is always `/dav`                                                                                      |
+| `WEBDAV_WRITE`                    | no                | `false`              | Set `true` to allow `POST`/`MKCOL`/`DELETE`. Read-only mode rejects them with `403`                                                                    |
 
 The repository ships a commented template at [`.env.example`](.env.example).
 
@@ -597,17 +599,18 @@ structure. The restore order, and a restore drill, are in
   uploaded before you enabled it stay plaintext until you migrate them.
 - **Key recovery depends on your recovery code.** Losing both your key and your
   recovery code means losing the file contents. A password reset restores
-  account access only. Trusted-device enrollment is designed but not
-  implemented.
+  account access only. Device pairing transfers the key, but key-epoch
+  rotation and revocation are not implemented yet.
 - **Telegram is the storage backend.** Telegram's own rate limits, file-size
   rules and availability apply to you.
-- **Single user per deployment.** There is no sharing, public links or
-  multi-user collaboration.
+- **Single account per deployment.** Public share links for plaintext and OCE1
+  files exist; there is no multi-user collaboration, folder sharing or OCE2
+  sharing.
 - **Restoring a version replaces the content in place.** It does not create a
   new version, and there is no scheduled version retention.
-- **WebDAV `PUT` uploads are not yet implemented.** The endpoint returns `501`
-  until raw-body handling is added. Folder creation via `POST` and file deletion
-  via `DELETE` work; `PROPFIND` and `GET` are fully functional.
+- **WebDAV has no locks or property updates.** `PUT`, `MOVE` and `COPY` work;
+  `PROPPATCH`, `LOCK` and `UNLOCK` return `501`. Uploads are plaintext, and a
+  `PUT` over an encrypted file is refused.
 - The live Telegram path is verified against a real account; the evidence is in
   [`docs/limitations.md`](docs/limitations.md) and
   [`docs/audits/live-e2ee-smoke.md`](docs/audits/live-e2ee-smoke.md).
@@ -671,15 +674,16 @@ structure. The restore order, and a restore drill, are in
 - **v0.4** — shipped: streaming large-file encryption, legacy migration, CLI
   encryption commands, version restore and delete, trash retention, the npm
   update check, and the first publish of `@hilbras/omnicloud` on npm.
-- **v0.5** — shipped: WebDAV server (`WEBDAV_PORT`, `WEBDAV_PATH_PREFIX`),
-  alternative storage providers design, and the deep comparison with Telegram-Drive.
-- **v0.5.x** — Electron desktop app for Linux (`.deb` and `.AppImage`), published
-  as `@hilbras/omnicloud-desktop` on npm and GitHub Releases.
-- **Next** — raw-body `PUT` uploads via WebDAV, alternative storage providers
-  (S3, local disk), an independent cryptographic review, and trusted-device
-  enrollment.
-- **Later** — sharing and public links, sync clients, an Android client,
-  collaboration.
+- **v0.5** — shipped: WebDAV server (`WEBDAV_ENABLED`, `WEBDAV_HOST`,
+  `WEBDAV_PORT`, `WEBDAV_WRITE`), alternative storage providers design, and the
+  deep comparison with Telegram-Drive.
+- **v0.5.x** — Electron desktop app for Linux, macOS and Windows, published as
+  `.deb`/AppImage, `.dmg`/`.zip` and NSIS `.exe` artifacts on GitHub Releases
+  (not npm).
+- **Next** — folder and OCE2 sharing, multi-device key pairing, resumable
+  desktop uploads, alternative storage providers (S3, local disk), and an
+  independent cryptographic review.
+- **Later** — sync clients, an Android client, team spaces, collaboration.
 
 Open work is tracked in [`docs/execution-plan.md`](docs/execution-plan.md).
 

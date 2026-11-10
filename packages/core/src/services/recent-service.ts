@@ -25,25 +25,19 @@ export class RecentService {
   ) {}
 
   async list(userId: string, page: PageRequest): Promise<RecentPageDTO> {
-    // Pull a bounded window of recent *meaningful* events (the repository
-    // dedups by file), then resolve the distinct files.
-    const window = Math.min(page.page * page.limit * 3, 500);
-    const events = await this.activity.recentFiles(userId, RECENT_ACTIONS, window);
-
-    const seen = new Set<string>();
-    for (const event of events) {
-      seen.add(event.resourceId);
-    }
-
-    const fileIds = [...seen];
+    // The repository deduplicates before LIMIT/OFFSET and returns a stable
+    // distinct-file total, so pages do not shrink or repeat.
+    const recent = await this.activity.recentFiles(userId, RECENT_ACTIONS, page);
+    const fileIds = recent.items.map((event) => event.resourceId);
     const records = fileIds.length > 0 ? await this.files.listByIds(userId, fileIds) : [];
     const byId = new Map(records.map((record) => [record.id, record]));
+    const eventByFileId = new Map(recent.items.map((event) => [event.resourceId, event]));
 
     const items: RecentItemDTO[] = [];
     for (const fileId of fileIds) {
       const record = byId.get(fileId);
       if (!record || record.deletedAt !== null) continue;
-      const event = events.find((candidate) => candidate.resourceId === fileId)!;
+      const event = eventByFileId.get(fileId)!;
       items.push({
         file: {
           id: record.id,
@@ -52,11 +46,16 @@ export class RecentService {
           mimeType: record.mimeType,
           sha256: record.sha256,
           folderId: record.folderId,
+          storageId: record.storageId,
           starred: record.starred,
           trashed: false,
           deletedAt: null,
           versionCount: record.versionCount,
           currentVersionId: record.currentVersionId,
+          encryptionFormat: record.encryptionFormat ?? null,
+          wrappedKey: record.wrappedKey ?? null,
+          metadataBlob: record.metadataBlob ?? null,
+          keyEpoch: record.keyEpoch ?? null,
           createdAt: record.createdAt.toISOString(),
           updatedAt: record.updatedAt.toISOString(),
         },
@@ -65,12 +64,9 @@ export class RecentService {
       });
     }
 
-    const start = (page.page - 1) * page.limit;
-    const pageItems = items.slice(start, start + page.limit);
-
     return {
-      items: pageItems,
-      pagination: paginationMeta(page.page, page.limit, items.length),
+      items,
+      pagination: paginationMeta(page.page, page.limit, recent.total),
     };
   }
 }

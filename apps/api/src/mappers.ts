@@ -46,6 +46,7 @@ export function toFileDTO(file: FileRecord): FileDTO {
     mimeType: file.mimeType,
     sha256: file.sha256,
     folderId: file.folderId,
+    storageId: file.storageId,
     starred: file.starred,
     trashed: file.deletedAt !== null,
     deletedAt: file.deletedAt ? file.deletedAt.toISOString() : null,
@@ -65,6 +66,7 @@ export function toFolderDTO(folder: FolderRecord): FolderDTO {
     id: folder.id,
     name: folder.name,
     parentId: folder.parentId,
+    storageId: folder.storageId,
     starred: folder.starred,
     trashed: folder.deletedAt !== null,
     deletedAt: folder.deletedAt ? folder.deletedAt.toISOString() : null,
@@ -116,6 +118,8 @@ export function toStatsDTO(stats: StorageStats): StorageStatsDTO {
     starredCount: stats.starredCount,
     byType: stats.byType,
     largestFiles: stats.largestFiles.map(toFileDTO),
+    folderUsage: stats.folderUsage,
+    duplicateGroups: stats.duplicateGroups,
     quotaBytes: stats.quotaBytes,
   };
 }

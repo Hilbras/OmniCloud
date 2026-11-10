@@ -5,6 +5,7 @@ import type { SelectionController } from "../hooks/useSelection";
 import { DriveItems } from "./DriveItems";
 import type { ContextMenuState } from "./ContextMenu";
 import type { ItemAction, MenuContext } from "./itemActions";
+import type { DraggedItem } from "../lib/drag-move";
 
 interface ItemCollectionProps {
   items: DriveItem[];
@@ -22,6 +23,7 @@ interface ItemCollectionProps {
   loadingMore?: boolean;
   onLoadMore?: () => void;
   transitionKey?: string;
+  onMoveInto?: (targetFolderId: string, dragged: DraggedItem) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function ItemCollection({
   loadingMore = false,
   onLoadMore,
   transitionKey = view,
+  onMoveInto,
 }: ItemCollectionProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const previousTransitionKey = useRef(transitionKey);
@@ -72,6 +75,26 @@ export function ItemCollection({
     );
   }
 
+  // The skeleton must win over the empty state during the first fetch, or a
+  // slow load looks like an empty drive.
+  if (loading && items.length === 0) {
+    return (
+      <div ref={contentRef} className="drive-view-enter">
+        <DriveItems
+          items={items}
+          view={view}
+          selection={selection}
+          onOpen={onOpen}
+          onAction={onAction}
+          onContextMenu={onContextMenu}
+          {...(menuContext !== undefined ? { menuContext } : {})}
+          {...(onMoveInto !== undefined ? { onMoveInto } : {})}
+          loading
+        />
+      </div>
+    );
+  }
+
   if (items.length === 0 && emptyState !== undefined) return <>{emptyState}</>;
 
   return (
@@ -84,6 +107,7 @@ export function ItemCollection({
         onAction={onAction}
         onContextMenu={onContextMenu}
         {...(menuContext !== undefined ? { menuContext } : {})}
+        {...(onMoveInto !== undefined ? { onMoveInto } : {})}
         loading={loading}
       />
       {hasMore && onLoadMore !== undefined ? (

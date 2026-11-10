@@ -117,9 +117,6 @@ looked up, then checked for revocation and expiry. Three consequences:
   own after 30 days. Expired rows are pruned hourly, seven days after they
   lapse.
 
-`SESSION_SECRET` is reserved. It does not sign browser sessions and changing it
-does not invalidate them.
-
 **API token.** Personal access tokens for scripts and the SDK are sent as
 `Authorization: Bearer <token>`. They are 32 random bytes, the server stores
 only their SHA-256 hash (`ApiToken.tokenHash`), and the raw value is shown once
@@ -240,7 +237,7 @@ endpoints, keyed by client IP:
 | Endpoint group                                                                       | Limit          |
 | ------------------------------------------------------------------------------------ | -------------- |
 | `POST /api/auth/telegram/start`, `/verify`, `/password`, `/qr/start`, `/qr/password` | 10 per minute  |
-| `GET /api/auth/telegram/qr/status`                                                   | 120 per minute |
+| `POST /api/auth/telegram/qr/status`                                                  | 120 per minute |
 | `PUT`/`DELETE /api/auth/recovery`                                                    | 20 per minute  |
 
 Exceeding a limit returns `429 RATE_LIMITED`. Phone numbers are validated
@@ -319,8 +316,8 @@ with `[Redacted]` before anything is written, both at the top level of a log
 object and one level down:
 
 `stringSession`, `session`, `cookie`, `password`, `code`, `token`,
-`tokenHash`, `encryptionKey`, `sessionSecret`, `OMNICLOUD_ENCRYPTION_KEY`,
-`SESSION_SECRET`, `TELEGRAM_API_HASH`, plus `req.headers.cookie`,
+`tokenHash`, `encryptionKey`, `OMNICLOUD_ENCRYPTION_KEY`, `TELEGRAM_API_HASH`,
+plus `req.headers.cookie`,
 `req.headers.authorization` and `res.headers['set-cookie']`.
 
 This is a backstop. Code still must not log those values in the first place.

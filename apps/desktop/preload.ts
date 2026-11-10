@@ -5,6 +5,41 @@ contextBridge.exposeInMainWorld("omnicloudDesktop", {
   getUserDataPath: () => ipcRenderer.invoke("omnicloud:getUserDataPath"),
   getPlatform: () => ipcRenderer.invoke("omnicloud:getPlatform"),
   openExternal: (url: string) => ipcRenderer.invoke("omnicloud:openExternal", url),
+  desktopUpload: {
+    onPaths: (listener: (paths: string[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, paths: string[]): void => listener(paths);
+      ipcRenderer.on("omnicloud:upload-paths", handler);
+      return () => ipcRenderer.removeListener("omnicloud:upload-paths", handler);
+    },
+    read: (path: string) => ipcRenderer.invoke("omnicloud:read-upload-path", path),
+  },
+  desktopSettings: {
+    getLaunchAtLogin: () => ipcRenderer.invoke("omnicloud:get-login-item"),
+    setLaunchAtLogin: (enabled: boolean) => ipcRenderer.invoke("omnicloud:set-login-item", enabled),
+  },
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("omnicloud:window-control", "minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("omnicloud:window-control", "maximize"),
+    close: () => ipcRenderer.invoke("omnicloud:window-control", "close"),
+    isMaximized: () => ipcRenderer.invoke("omnicloud:window-is-maximized"),
+    onStateChange: (listener: (maximized: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, maximized: boolean): void =>
+        listener(maximized);
+      ipcRenderer.on("omnicloud:window-state", handler);
+      return () => ipcRenderer.removeListener("omnicloud:window-state", handler);
+    },
+  },
+});
+
+// Let the web UI reserve room for the window controls and expose a drag region.
+window.addEventListener("DOMContentLoaded", () => {
+  const mac = navigator.platform.toLowerCase().includes("mac");
+  document.documentElement.classList.add("electron-shell");
+  if (mac) {
+    document.documentElement.classList.add("electron-mac");
+  } else {
+    document.documentElement.classList.add("electron-custom-controls");
+  }
 });
 
 export type OmniCloudDesktop = {
@@ -12,6 +47,21 @@ export type OmniCloudDesktop = {
   getUserDataPath: () => Promise<string>;
   getPlatform: () => Promise<NodeJS.Platform>;
   openExternal: (url: string) => Promise<void>;
+  desktopUpload: {
+    onPaths: (listener: (paths: string[]) => void) => () => void;
+    read: (path: string) => Promise<{ name: string; data: ArrayBuffer } | null>;
+  };
+  desktopSettings: {
+    getLaunchAtLogin: () => Promise<boolean>;
+    setLaunchAtLogin: (enabled: boolean) => Promise<void>;
+  };
+  windowControls: {
+    minimize: () => Promise<void>;
+    toggleMaximize: () => Promise<void>;
+    close: () => Promise<void>;
+    isMaximized: () => Promise<boolean>;
+    onStateChange: (listener: (maximized: boolean) => void) => () => void;
+  };
 };
 
 declare global {

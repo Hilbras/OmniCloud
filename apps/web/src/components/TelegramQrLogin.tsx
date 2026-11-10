@@ -21,6 +21,7 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [expired, setExpired] = useState(false);
   const approvedRef = useRef(false);
 
   useEffect(() => {
@@ -79,6 +80,8 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
         if (result.status === "expired") {
           setFlow(null);
           setToken(null);
+          setImage(null);
+          setExpired(true);
           return;
         }
         setToken(result.token);
@@ -108,6 +111,7 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
     setImage(null);
     setFlow(null);
     setToken(null);
+    setExpired(false);
     api.auth
       .startQrLogin()
       .then((started) => {
@@ -136,6 +140,13 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
           <div role="status" className="flex items-center gap-2.5 text-sm">
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-gold-text" aria-hidden="true" />
             <span>Approved. Preparing your private storage...</span>
+          </div>
+        ) : expired ? (
+          <div role="status" className="text-center text-sm">
+            <p className="font-medium">This QR code expired.</p>
+            <button type="button" className="btn-secondary mt-3" onClick={restart}>
+              Show a new code
+            </button>
           </div>
         ) : image !== null ? (
           <img

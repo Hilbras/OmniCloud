@@ -2,9 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api, errorMessage } from "../api/client";
-import type { ApiTokenCreatedDTO } from "../api/client";
+import type { ApiTokenCreatedDTO, ApiTokenScope } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EncryptionSettings } from "../components/EncryptionSettings";
+import { DevicePairing } from "../components/DevicePairing";
+import { DesktopSettings } from "../components/DesktopSettings";
+import { NameIndexBackup } from "../components/NameIndexBackup";
+import { IndexConsistency } from "../components/IndexConsistency";
+import { ActivityLog } from "../components/ActivityLog";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { NameDialog } from "../components/NameDialog";
 import { PageHeader, PageTitle } from "../components/PageHeader";
@@ -19,6 +24,7 @@ export function TokensPage() {
   const [creating, setCreating] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [created, setCreated] = useState<ApiTokenCreatedDTO | null>(null);
+  const [scope, setScope] = useState<ApiTokenScope>("full");
 
   const tokens = useQuery({
     queryKey: TOKENS_QUERY_KEY,
@@ -26,7 +32,7 @@ export function TokensPage() {
   });
 
   const create = useMutation({
-    mutationFn: (name: string) => api.tokens.create(name),
+    mutationFn: (name: string) => api.tokens.create(name, { scope }),
     onSuccess: (token) => {
       setCreating(false);
       setCreated(token);
@@ -64,16 +70,39 @@ export function TokensPage() {
       <PageHeader
         title={<PageTitle>API tokens</PageTitle>}
         actions={
-          <button type="button" className="btn-gold" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" /> New token
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="muted flex items-center gap-1.5 text-xs">
+              Scope
+              <select
+                className="field px-2 py-1.5 text-sm"
+                value={scope}
+                onChange={(event) => setScope(event.target.value as ApiTokenScope)}
+                aria-label="Token scope"
+              >
+                <option value="full">Full access</option>
+                <option value="upload">Uploads only</option>
+                <option value="webdav">WebDAV only</option>
+              </select>
+            </label>
+            <button type="button" className="btn-gold" onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" /> New token
+            </button>
+          </div>
         }
       >
         <p className="muted text-sm">
-          Tokens let scripts and the SDK use your account. Each token has full access, the same as
-          your signed-in browser, so revoke any token you no longer use.
+          Tokens let scripts and the SDK use your account. <strong>Full access</strong> works like
+          your signed-in browser; <strong>uploads only</strong> can create files and versions;
+          <strong> WebDAV only</strong> is rejected on the JSON API. Revoke any token you no longer
+          use.
         </p>
       </PageHeader>
+
+      <DevicePairing />
+      <DesktopSettings />
+      <NameIndexBackup />
+      <IndexConsistency />
+      <ActivityLog />
 
       {created && (
         <div className="card space-y-3 p-5">
@@ -124,6 +153,10 @@ export function TokensPage() {
               <p className="muted text-xs">
                 Created {formatDateTime(t.createdAt)}
                 {t.lastUsedAt ? ` · last used ${formatRelative(t.lastUsedAt)}` : " · not used yet"}
+                {t.readOnly ? " · read-only" : ""}
+                {t.scope === "upload" ? " · uploads only" : ""}
+                {t.scope === "webdav" ? " · WebDAV only" : ""}
+                {t.expiresAt ? ` · expires ${formatDateTime(t.expiresAt)}` : ""}
               </p>
             </div>
             <button

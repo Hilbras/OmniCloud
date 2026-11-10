@@ -13,7 +13,7 @@ export function propFindXml(responses: PropFindResponse[]): string {
     <D:propstat>
       <D:prop>
         <D:displayname>${escapeXml(response.displayName)}</D:displayname>
-        ${response.isDir ? '<D:resourcetype><D:collection/></D:resourcetype>' : "<D:resourcetype/>"}
+        ${response.isDir ? "<D:resourcetype><D:collection/></D:resourcetype>" : "<D:resourcetype/>"}
         ${response.size !== undefined ? `<D:getcontentlength>${response.size}</D:getcontentlength>` : ""}
         <D:getlastmodified>${formatDate(response.modified)}</D:getlastmodified>
         ${response.etag ? `<D:getetag>${escapeXml(response.etag)}</D:getetag>` : ""}

@@ -47,17 +47,21 @@ export class ActivityService implements ActivityRecorder {
     }
   }
 
-  async list(userId: string, page: PageRequest): Promise<Paged<ActivityEventRecord>> {
-    return this.activity.list(userId, page);
+  async list(
+    userId: string,
+    page: PageRequest,
+    filters?: { action?: ActivityAction; from?: Date; to?: Date },
+  ): Promise<Paged<ActivityEventRecord>> {
+    return this.activity.list(userId, page, filters);
   }
 
   /** Most recent distinct files for the given actions, for the Recent view. */
   async recentFiles(
     userId: string,
     actions: readonly ActivityAction[],
-    limit: number,
-  ): Promise<ActivityEventRecord[]> {
-    return this.activity.recentFiles(userId, actions, limit);
+    page: PageRequest,
+  ): Promise<Paged<ActivityEventRecord>> {
+    return this.activity.recentFiles(userId, actions, page);
   }
 
   async prune(): Promise<number> {

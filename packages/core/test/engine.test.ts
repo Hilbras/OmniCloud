@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { StorageEngine } from "../src/storage/engine";
-import { OperationCancelledError, UploadFailedError } from "../src/errors";
+import {
+  DownloadFailedError,
+  OperationCancelledError,
+  StorageUnavailableError,
+  TelegramConnectionError,
+  UploadFailedError,
+} from "../src/errors";
 import { sha256Hex } from "../src/utils/hash";
 import { FakeStorageProvider } from "./fakes";
 
@@ -19,6 +25,51 @@ describe("StorageEngine upload", () => {
     expect(result.sha256).toBe(sha256Hex(data));
     expect(result.size).toBe(data.byteLength);
     expect(result.stored.messageId).toMatch(/^\d+$/);
+  });
+
+  it("preserves cancellation instead of reporting an upload failure", async () => {
+    const provider = new FakeStorageProvider();
+    provider.put = async () => {
+      throw new OperationCancelledError();
+    };
+    const engine = new StorageEngine(provider, { attempts: 1, baseDelayMs: 0 });
+
+    await expect(
+      engine.upload({ name: "a.bin", mimeType: "x", data: Buffer.from("a") }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+  });
+
+  it("still reports an ordinary provider failure as an upload failure", async () => {
+    const provider = new FakeStorageProvider();
+    provider.put = async () => {
+      throw new Error("nope");
+    };
+    const engine = new StorageEngine(provider, { attempts: 1, baseDelayMs: 0 });
+
+    await expect(
+      engine.upload({ name: "a.bin", mimeType: "x", data: Buffer.from("a") }),
+    ).rejects.toBeInstanceOf(UploadFailedError);
+  });
+
+  it("maps download failures to DownloadFailedError, not UploadFailedError", async () => {
+    const provider = new FakeStorageProvider();
+    provider.get = async () => {
+      throw new Error("read failed");
+    };
+    const engine = new StorageEngine(provider, { attempts: 1, baseDelayMs: 0 });
+
+    const failure = await engine.download({ messageId: "1" }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(DownloadFailedError);
+  });
+
+  it("maps delete and listing failures to StorageUnavailableError", async () => {
+    const provider = new FakeStorageProvider();
+    provider.delete = async () => {
+      throw new Error("delete failed");
+    };
+    const engine = new StorageEngine(provider, { attempts: 1, baseDelayMs: 0 });
+
+    await expect(engine.remove({ messageId: "1" })).rejects.toBeInstanceOf(StorageUnavailableError);
   });
 
   it("reports progress reaching 100%", async () => {
@@ -50,9 +101,11 @@ describe("StorageEngine upload", () => {
     provider.transientPutFailures = 10;
     const engine = new StorageEngine(provider, { attempts: 3, baseDelayMs: 1 });
 
+    // The domain error is preserved so file-service can classify the operation
+    // as UNKNOWN; wrapping it as UploadFailedError would hide that.
     await expect(
       engine.upload({ name: "a.bin", mimeType: "x", data: Buffer.from("x") }),
-    ).rejects.toThrow(UploadFailedError);
+    ).rejects.toBeInstanceOf(TelegramConnectionError);
     expect(provider.putCalls).toBe(3);
   });
 

@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { BrowserSessionRecord, BrowserSessionRepository } from "../repos";
-import { UnauthorizedError } from "../errors";
 
 /**
  * Browser sessions: opaque random tokens held in an HttpOnly cookie. The
@@ -97,9 +96,4 @@ export class AuthSessionService {
 
 function truncate(value: string | null, max: number): string | null {
   return value === null ? null : value.slice(0, max);
-}
-
-export function requireSession(session: BrowserSessionRecord | null): BrowserSessionRecord {
-  if (!session) throw new UnauthorizedError();
-  return session;
 }

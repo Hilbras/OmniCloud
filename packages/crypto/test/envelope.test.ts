@@ -7,6 +7,7 @@ import {
   UnsupportedFormatError,
   ValidationError,
   decryptBytes,
+  decryptChunks,
   decryptFile,
   decryptMetadata,
   deriveKek,
@@ -221,6 +222,61 @@ async function expectDecryptFailure(envelope: Uint8Array, wrappedKey: Uint8Array
   await expect(
     decryptBytes({ urk: URK, fileId: FILE_ID, versionId: VERSION_ID, envelope, wrappedKey }),
   ).rejects.toThrow(error as new (...args: never[]) => Error);
+}
+
+describe("streamed decryption", () => {
+  test("decrypts from a source that yields one byte at a time", async () => {
+    const p = await prepared();
+    const source = (async function* () {
+      for (const byte of p.envelope) yield new Uint8Array([byte]);
+    })();
+    const parts: Uint8Array[] = [];
+    for await (const chunk of decryptChunks({
+      urk: URK,
+      fileId: FILE_ID,
+      versionId: VERSION_ID,
+      envelope: source,
+      wrappedKey: p.wrappedKey,
+    })) {
+      parts.push(chunk);
+    }
+    expect(dec(concatParts(parts))).toBe(dec(p.plaintext));
+  });
+
+  test("closes the source when the consumer stops early", async () => {
+    const p = await prepared();
+    let returned = false;
+    const source = {
+      async *[Symbol.asyncIterator]() {
+        try {
+          for (const byte of p.envelope) yield new Uint8Array([byte]);
+        } finally {
+          returned = true;
+        }
+      },
+    };
+    const stream = decryptChunks({
+      urk: URK,
+      fileId: FILE_ID,
+      versionId: VERSION_ID,
+      envelope: source,
+      wrappedKey: p.wrappedKey,
+    });
+    await stream.next();
+    await stream.return(undefined);
+    expect(returned).toBe(true);
+  });
+});
+
+function concatParts(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }
 
 describe("negative cases", () => {

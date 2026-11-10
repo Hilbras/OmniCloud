@@ -8,6 +8,7 @@ const TelegramQrLogin = lazy(() =>
   import("../components/TelegramQrLogin").then((module) => ({ default: module.TelegramQrLogin })),
 );
 import { ThemeToggle } from "../components/ThemeToggle";
+import { WindowControls } from "../components/WindowControls";
 import { useMe } from "../hooks/useMe";
 import { ME_QUERY_KEY } from "../lib/queries";
 import { usePageMeta } from "../lib/seo";
@@ -153,7 +154,8 @@ export default function LoginPage() {
         <div className="absolute -bottom-48 -left-48 h-[30rem] w-[30rem] rounded-full bg-gold/5 blur-3xl" />
       </div>
 
-      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-6 sm:px-8 lg:px-12">
+      <header className="login-header relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-6 sm:px-8 lg:px-12">
+        <WindowControls />
         <a href="/" className="flex items-center gap-3" aria-label="OmniCloud home">
           <span className="relative h-10 w-10 shrink-0">
             <img
@@ -287,7 +289,8 @@ export default function LoginPage() {
                       Sign in with Telegram
                     </h2>
                     <p className="muted mt-1.5 text-sm">
-                      We’ll send a one-time login code to your number.
+                      We’ll send a one-time login code to your Telegram app. If Telegram asks you to
+                      confirm the new login, approve it there.
                     </p>
                   </div>
                   <label htmlFor="login-phone" className="grid gap-1.5">

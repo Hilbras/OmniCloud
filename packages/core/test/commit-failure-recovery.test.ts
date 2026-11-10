@@ -37,7 +37,7 @@ function failNextCommit(message = "simulated commit failure"): void {
 }
 
 describe("an upload whose commit fails, with the object removed", () => {
-  it("is FAILED, because nothing was left behind and a retry may re-upload", async () => {
+  it("is UNKNOWN, because the object may outlive a failed cleanup", async () => {
     failNextCommit();
 
     const operationId = "commit_failure_op_1";
@@ -51,9 +51,11 @@ describe("an upload whose commit fails, with the object removed", () => {
     ).rejects.toThrow(/simulated commit failure/);
 
     const op = repos._uploadOperations.find((o) => o.operationId === operationId);
-    // The stored object was removed along with the failed commit, so there is
-    // nothing to recover and the operation may be retried from scratch.
-    expect(op?.status).toBe("FAILED");
+    // The commit failed after the object was stored. Even when cleanup removed
+    // it, the operation is UNKNOWN: a retry searches by caption first, finds
+    // nothing, and only then uploads again. Recording FAILED would skip that
+    // check and duplicate the object if cleanup had failed.
+    expect(op?.status).toBe("UNKNOWN");
     expect(provider.objects.size).toBe(0);
     expect(await repos.files.listByUser(user.id)).toHaveLength(0);
   });

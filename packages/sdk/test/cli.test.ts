@@ -7,6 +7,10 @@ describe("parseArgs", () => {
   });
 
   it("treats a bare option as start", () => {
+    expect(parseArgs(["--help"]).command).toBe("help");
+    expect(parseArgs(["-h"]).command).toBe("help");
+    expect(parseArgs(["--version"]).command).toBe("version");
+    expect(parseArgs(["-v"]).command).toBe("version");
     expect(parseArgs(["--no-open"])).toEqual({
       command: "start",
       migrate: false,

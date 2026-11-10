@@ -173,13 +173,6 @@ export class OperationCancelledError extends DomainError {
   }
 }
 
-/** @deprecated Use the specific storage errors. Kept for provider compatibility. */
-export class StorageProviderError extends DomainError {
-  constructor(message: string, details?: unknown) {
-    super(ERROR_CODES.TELEGRAM_CONNECTION_FAILED, 502, message, details);
-  }
-}
-
 /** True when the value is one of our structured domain errors. */
 export function isDomainError(error: unknown): error is DomainError {
   return error instanceof DomainError;
@@ -189,8 +182,12 @@ export function isDomainError(error: unknown): error is DomainError {
  * Wraps an arbitrary provider failure as an UploadFailedError (the default
  * storage-operation error), preserving domain errors untouched.
  */
-export function mapProviderError(message: string, error: unknown): DomainError {
+export function mapProviderError(
+  message: string,
+  error: unknown,
+  Wrap: new (message: string, details?: unknown) => DomainError = UploadFailedError,
+): DomainError {
   if (error instanceof DomainError) return error;
   const detail = error instanceof Error ? error.message : String(error);
-  return new UploadFailedError(detail ? `${message}: ${detail}` : message, error);
+  return new Wrap(detail ? `${message}: ${detail}` : message, error);
 }

@@ -24,6 +24,8 @@ describe("parseSize", () => {
     expect(parseSize("abc")).toBeNull();
     expect(parseSize("1 lightyear")).toBeNull();
     expect(parseSize("-5mb")).toBeNull();
+    expect(parseSize("1toString")).toBeNull();
+    expect(parseSize("1constructor")).toBeNull();
   });
 });
 
@@ -67,6 +69,10 @@ describe("parseSearchQuery", () => {
   });
 
   it("keeps invalid structured values as literal terms", () => {
+    const repeated = parseSearchQuery("size:>10mb size:<5mb").query;
+    expect(repeated.minSize).toBeUndefined();
+    expect(repeated.maxSize).toBe(5 * 1024 ** 2 - 1);
+
     const { query, freeText } = parseSearchQuery("size:huge starred:maybe");
     expect(query.minSize).toBeUndefined();
     expect(query.starred).toBeUndefined();
@@ -92,6 +98,9 @@ describe("pagination helpers", () => {
     expect(normalizePage("0")).toBe(1);
     expect(normalizePage("-3")).toBe(1);
     expect(normalizePage("4")).toBe(4);
+    expect(normalizePage("1e308")).toBe(1);
+    expect(normalizePage("999999999999999999999")).toBe(1);
+    expect(normalizePage("9007199254740992")).toBe(1);
     expect(normalizeLimit(undefined)).toBe(50);
     expect(normalizeLimit("0")).toBe(50);
     expect(normalizeLimit("10")).toBe(10);

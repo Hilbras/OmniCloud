@@ -1,4 +1,4 @@
-import { fileExtension, mimeMatchersForType } from "./mime";
+import { KNOWN_MIME_MATCHERS, fileExtension, mimeMatchersForType } from "./mime";
 import type { ListQuery } from "./query";
 
 /**
@@ -76,9 +76,14 @@ export function matchesListQuery(
 
   // Type: a coarse category or an exact MIME type.
   if (query.type !== undefined && query.type !== "") {
-    const matchers = mimeMatchersForType(query.type);
-    if (matchers === null) return false;
-    if (!matchers.some((matcher) => matchesMime(item.mimeType, matcher))) return false;
+    if (query.type.toLowerCase() === "other") {
+      // "other" means no known category, matching the server's exclusion.
+      if (KNOWN_MIME_MATCHERS.some((matcher) => matchesMime(item.mimeType, matcher))) return false;
+    } else {
+      const matchers = mimeMatchersForType(query.type);
+      if (matchers === null) return false;
+      if (!matchers.some((matcher) => matchesMime(item.mimeType, matcher))) return false;
+    }
   }
 
   if (query.minSize !== undefined && item.size < query.minSize) return false;

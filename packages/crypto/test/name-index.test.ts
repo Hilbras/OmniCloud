@@ -67,6 +67,31 @@ describe("the canonical index form", () => {
     expect(json).toContain('"folderId":null');
     expect(json).toContain('"description":null');
   });
+
+  it("omits a null mimeType rather than writing it as null", () => {
+    const json = new TextDecoder().decode(canonicalIndexJson([entry({ mimeType: null })]));
+    expect(json).not.toContain('"mimeType"');
+    expect(parseIndexJson(new TextEncoder().encode(json))[0]!.mimeType).toBeNull();
+  });
+
+  it("rejects unknown fields and invalid types instead of silently coercing them", () => {
+    expect(() =>
+      parseIndexJson(new TextEncoder().encode('{"entries":[{"id":"a","name":"n","extra":1}]}')),
+    ).toThrow(/unknown field/i);
+    expect(() =>
+      parseIndexJson(
+        new TextEncoder().encode(
+          '{"entries":[{"id":"a","name":"n","size":"big","description":null,"folderId":null,"starred":false,"trashed":false,"versionCount":0,"createdAt":"","updatedAt":""}]}',
+        ),
+      ),
+    ).toThrow(/invalid size/i);
+  });
+
+  it("rejects a keyEpoch that would silently truncate", () => {
+    const urk = generateUrk();
+    expect(() => createIndexContainer(urk, [], -1)).toThrow(/32-bit/i);
+    expect(() => createIndexContainer(urk, [], 2 ** 32 + 1)).toThrow(/32-bit/i);
+  });
 });
 
 describe("the index container", () => {

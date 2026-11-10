@@ -5,7 +5,7 @@
  * be logged from here.
  */
 export interface OperationRecord {
-  operation: "upload" | "download" | "delete" | "replace";
+  operation: "upload" | "download" | "delete" | "replace" | "migrate";
   userId: string;
   resourceId: string | null;
   sizeBytes: number | null;

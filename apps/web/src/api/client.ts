@@ -18,8 +18,12 @@ import type {
   FoldersPageDTO,
   IntegrityReportDTO,
   ItemStatus,
+  KeyPairingCreatedDTO,
+  KeyPairingPayloadDTO,
   RecentPageDTO,
+  CreateShareResponse,
   SearchResultDTO,
+  ShareLinkDTO,
   SessionInfo,
   SortField,
   SortOrder,
@@ -216,7 +220,7 @@ export interface QrStartResponse {
   token: QrToken;
 }
 
-/** Result of GET /api/auth/telegram/qr/status. */
+/** Result of POST /api/auth/telegram/qr/status. */
 export type QrPollResponse =
   | { status: "waiting"; token: QrToken }
   | { status: "ok"; user: UserDTO }
@@ -224,9 +228,14 @@ export type QrPollResponse =
   | { status: "expired" };
 
 /** Typed wrappers around every endpoint of the OmniCloud v0.2 API. */
+export type ApiTokenScope = "full" | "upload" | "webdav";
+
 export interface ApiTokenDTO {
   id: string;
   name: string;
+  readOnly: boolean;
+  scope: ApiTokenScope;
+  expiresAt: string | null;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -236,6 +245,9 @@ export interface ApiTokenDTO {
 export interface ApiTokenCreatedDTO {
   id: string;
   name: string;
+  readOnly: boolean;
+  scope: ApiTokenScope;
+  expiresAt: string | null;
   createdAt: string;
   token: string;
 }
@@ -258,10 +270,7 @@ export const api = {
       return requestJson("POST", "/api/auth/telegram/qr/start", {});
     },
     pollQrLogin(flowId: string): Promise<QrPollResponse> {
-      return requestJson(
-        "GET",
-        `/api/auth/telegram/qr/status?flowId=${encodeURIComponent(flowId)}`,
-      );
+      return requestJson("POST", "/api/auth/telegram/qr/status", { flowId });
     },
     submitQrPassword(flowId: string, password: string): Promise<{ status: "ok"; user: UserDTO }> {
       return requestJson("POST", "/api/auth/telegram/qr/password", { flowId, password });
@@ -287,16 +296,56 @@ export const api = {
     list(): Promise<{ tokens: ApiTokenDTO[] }> {
       return requestJson("GET", "/api/tokens");
     },
-    create(name: string): Promise<ApiTokenCreatedDTO> {
-      return requestJson("POST", "/api/tokens", { name });
+    create(
+      name: string,
+      options: { readOnly?: boolean; scope?: ApiTokenScope; expiresAt?: string } = {},
+    ): Promise<ApiTokenCreatedDTO> {
+      return requestJson("POST", "/api/tokens", { name, ...options });
     },
     revoke(id: string): Promise<void> {
       return requestEmpty("DELETE", `/api/tokens/${encodeURIComponent(id)}`);
     },
   },
+  keyPairing: {
+    create(payload: {
+      wrappedUrk: string;
+      fileId: string;
+      versionId: string;
+      keyEpoch: number;
+    }): Promise<KeyPairingCreatedDTO> {
+      return requestJson("POST", "/api/key-pairing", payload);
+    },
+    claim(id: string): Promise<KeyPairingPayloadDTO> {
+      return requestJson("GET", `/api/key-pairing/${encodeURIComponent(id)}`);
+    },
+  },
+  shares: {
+    create(
+      fileId: string,
+      options: {
+        expiresAt?: string;
+        maxDownloads?: number | null;
+        password?: string | null;
+      } = {},
+    ): Promise<CreateShareResponse> {
+      return requestJson("POST", "/api/shares", { fileId, ...options });
+    },
+    list(): Promise<{ shares: ShareLinkDTO[] }> {
+      return requestJson("GET", "/api/shares");
+    },
+    revoke(id: string): Promise<void> {
+      return requestEmpty("DELETE", `/api/shares/${encodeURIComponent(id)}`);
+    },
+  },
   storage: {
     ensure(): Promise<{ storage: StorageDTO }> {
       return requestJson("POST", "/api/storage/ensure");
+    },
+    listStorages(): Promise<{ storages: StorageDTO[] }> {
+      return requestJson("GET", "/api/storages");
+    },
+    createStorage(title?: string): Promise<{ storage: StorageDTO }> {
+      return requestJson("POST", "/api/storages", title ? { title } : {});
     },
     health(): Promise<{ health: StorageHealthDTO | null; stats: StorageStatsDTO }> {
       return requestJson("GET", "/api/storage/health");
@@ -348,6 +397,9 @@ export const api = {
     move(id: string, folderId: string | null): Promise<{ file: FileDTO }> {
       return requestJson("POST", filePath(id, "/move"), { folderId });
     },
+    migrate(id: string, storageId: string): Promise<{ file: FileDTO }> {
+      return requestJson("POST", filePath(id, "/migrate"), { storageId });
+    },
     trash(id: string): Promise<{ file: FileDTO }> {
       return requestJson("POST", filePath(id, "/trash"));
     },
@@ -377,6 +429,11 @@ export const api = {
      * there is none, so it says so plainly rather than failing with
      * "document is not defined".
      */
+    /** First 48 bytes of an encrypted envelope, for index rebuild. */
+    async header(id: string): Promise<Uint8Array> {
+      const response = await send("GET", filePath(id, "/header"));
+      return new Uint8Array(await response.arrayBuffer());
+    },
     download(id: string): void {
       if (typeof document === "undefined") {
         throw new ApiError(
@@ -406,7 +463,7 @@ export const api = {
     },
     update(
       id: string,
-      patch: { name?: string; starred?: boolean },
+      patch: { name?: string; starred?: boolean; storageId?: string | null },
     ): Promise<{ folder: FolderDTO }> {
       return requestJson("PATCH", folderPath(id), patch);
     },
@@ -472,7 +529,13 @@ export const api = {
   },
 
   activity: {
-    list(params: { page?: number; limit?: number }): Promise<ActivityPageDTO> {
+    list(params: {
+      page?: number;
+      limit?: number;
+      action?: string;
+      from?: string;
+      to?: string;
+    }): Promise<ActivityPageDTO> {
       return requestJson("GET", `/api/activity${buildQuery({ ...params })}`);
     },
   },

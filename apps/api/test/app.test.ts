@@ -579,4 +579,38 @@ describe("uploads & validation", () => {
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe("NOT_FOUND");
   });
+
+  it("rejects a numeric folderId instead of silently moving to root", async () => {
+    const uploaded = await upload("move-me.txt", "data");
+    const id = uploaded.json().file.id as string;
+    const response = await post(`/api/files/${id}/move`, { folderId: 5 });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_REQUEST");
+  });
+
+  it("answers a CORS preflight for an allowlisted origin only", async () => {
+    h.container.config.allowedOrigins.push("https://ui.example");
+    try {
+      const allowed = await h.app.inject({
+        method: "OPTIONS",
+        url: "/api/files",
+        headers: {
+          origin: "https://ui.example",
+          "access-control-request-method": "GET",
+        },
+      });
+      expect(allowed.statusCode).toBe(204);
+      expect(allowed.headers["access-control-allow-origin"]).toBe("https://ui.example");
+      expect(allowed.headers["access-control-allow-credentials"]).toBe("true");
+
+      const denied = await h.app.inject({
+        method: "OPTIONS",
+        url: "/api/files",
+        headers: { origin: "https://evil.example" },
+      });
+      expect(denied.headers["access-control-allow-origin"]).toBeUndefined();
+    } finally {
+      h.container.config.allowedOrigins.pop();
+    }
+  });
 });

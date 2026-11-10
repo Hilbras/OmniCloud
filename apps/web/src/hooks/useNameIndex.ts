@@ -60,10 +60,15 @@ export function useNameIndex(): NameIndexController {
     }
     // Several components use this hook; only the first one reads the stored
     // index, so a later component cannot overwrite an entry that was just
-    // added in memory.
-    if (loadedFor.current === accountId || !shouldLoadIndex(accountId)) return;
+    // added in memory. A different key object means the entries are stale even
+    // for the same account.
+    if (!shouldLoadIndex(accountId, urk)) {
+      loadedFor.current = accountId;
+      return;
+    }
     loadedFor.current = accountId;
-    markIndexLoaded(accountId);
+    markIndexLoaded(accountId, urk);
+    clearNameIndex();
     setReady(false);
     void (async () => {
       const bytes = await readIndexBytes(accountId);

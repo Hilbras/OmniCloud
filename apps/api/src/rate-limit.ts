@@ -23,10 +23,19 @@ export function createRateLimiter({ windowMs, max }: RateLimiterOptions) {
     recent.push(now);
     hits.set(key, recent);
 
-    // Periodic compaction so the map cannot grow without bound.
+    // Periodic compaction so the map cannot grow without bound. Prune expired
+    // windows first; if spoofed keys still exceed the hard cap, evict the
+    // oldest entries (insertion order) rather than growing forever.
     if (hits.size > 10_000) {
       for (const [k, times] of hits) {
         if (times.every((t) => now - t >= windowMs)) hits.delete(k);
+      }
+    }
+    const MAX_KEYS = 20_000;
+    if (hits.size > MAX_KEYS) {
+      for (const key of hits.keys()) {
+        if (hits.size <= 10_000) break;
+        hits.delete(key);
       }
     }
   };

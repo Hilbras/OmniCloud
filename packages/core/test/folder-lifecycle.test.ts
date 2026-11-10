@@ -162,10 +162,25 @@ describe("folder permanent delete", () => {
 
     const result = await folders.deletePermanently(user.id, root.id);
 
-    // Nothing could be deleted, so no folder is removed either.
+    // Nothing could be deleted, so no folder holding a file is removed. A
+    // leaf with no files may go, but a parent whose child stays must stay.
     expect(result.affectedFiles).toBe(0);
     expect(repos._files.some((f) => f.id === inRoot.id)).toBe(true);
     expect(repos._folders.some((f) => f.id === root.id)).toBe(true);
+    expect(repos._folders.some((f) => f.name === "Child")).toBe(true);
+  });
+
+  it("deletes an empty folder without requiring a storage channel", async () => {
+    const noStorage = new FolderService(repos.folders, repos.files, async () => {
+      throw new Error("storage is not initialized");
+    });
+    const empty = await noStorage.create(user.id, { name: "Empty", parentId: null });
+
+    await expect(noStorage.deletePermanently(user.id, empty.id)).resolves.toMatchObject({
+      affectedFolders: 1,
+      affectedFiles: 0,
+    });
+    expect(repos._folders.some((folder) => folder.id === empty.id)).toBe(false);
   });
 
   it("does not touch another user's data", async () => {
@@ -184,6 +199,18 @@ describe("folder permanent delete", () => {
 });
 
 describe("trash service", () => {
+  it("keeps a trashed parent while its child still holds an undeletable file", async () => {
+    const { root, child } = await tree();
+    await folders.trash(user.id, root.id);
+    provider.failAllDeletes = true;
+
+    await trash.empty(user.id);
+
+    // The file could not be removed, so its folder and every ancestor stay.
+    expect(repos._folders.some((folder) => folder.id === child.id)).toBe(true);
+    expect(repos._folders.some((folder) => folder.id === root.id)).toBe(true);
+  });
+
   it("lists only trashed items", async () => {
     const { root, inOther } = await tree();
     await folders.trash(user.id, root.id);

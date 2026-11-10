@@ -1,9 +1,10 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Copy,
   FileStack,
   HardDrive,
   KeyRound,
@@ -42,12 +43,27 @@ function StatCard({ icon, label, value }: { icon: ReactNode; label: string; valu
 
 export default function StoragePage() {
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [detailsItem, setDetailsItem] = useState<DriveItem | null>(null);
   const [deep, setDeep] = useState(false);
 
   const stats = useQuery({
     queryKey: STORAGE_STATS_QUERY_KEY,
     queryFn: api.storage.stats,
+  });
+
+  const storages = useQuery({
+    queryKey: ["storages"],
+    queryFn: api.storage.listStorages,
+  });
+
+  const addStorage = useMutation({
+    mutationFn: () => api.storage.createStorage(),
+    onSuccess: () => {
+      toast.success("Storage channel created");
+      void queryClient.invalidateQueries({ queryKey: ["storages"] });
+    },
+    onError: (error) => toast.error(errorMessage(error, "Could not create a storage channel")),
   });
 
   const integrity = useMutation({
@@ -136,6 +152,54 @@ export default function StoragePage() {
         ) : (
           <p className="muted mt-2 text-[12px]">No quota set on this account.</p>
         )}
+        {usedPercent !== null && usedPercent >= 90 ? (
+          <p role="alert" className="notice notice-error mt-3">
+            Storage is {Math.round(usedPercent)}% full. Delete files or raise the quota before
+            uploads start failing.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="card mt-6 p-5" aria-label="Storage channels">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <HardDrive className="h-4 w-4 text-gold" aria-hidden="true" />
+            Storage channels
+          </h2>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={addStorage.isPending || (storages.data?.storages.length ?? 0) >= 5}
+            onClick={() => addStorage.mutate()}
+          >
+            {addStorage.isPending ? "Creating…" : "Add channel"}
+          </button>
+        </div>
+        <p className="muted mt-2 text-[12.5px]">
+          The first channel is the default for new uploads. Extra channels are private Telegram
+          channels that folders can target.
+        </p>
+        {storages.isPending ? (
+          <p className="muted mt-3 text-[13px]">Loading channels…</p>
+        ) : storages.isError ? (
+          <p className="mt-3 text-[13px] text-bad">
+            {errorMessage(storages.error, "Could not load storage channels")}
+          </p>
+        ) : (
+          <ul className="mt-3 grid gap-2">
+            {(storages.data?.storages ?? []).map((channel, index) => (
+              <li
+                key={channel.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-[13px]"
+              >
+                <span className="min-w-0 truncate font-medium">{channel.title}</span>
+                <span className="muted shrink-0 text-[12px]">
+                  {index === 0 ? "Default" : "Target"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -187,6 +251,35 @@ export default function StoragePage() {
         )}
       </section>
 
+      <section className="card mt-6 p-5" aria-label="Largest folders">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <HardDrive className="h-4 w-4 text-gold" aria-hidden="true" />
+          Largest folders
+        </h2>
+        {data.folderUsage.length === 0 ? (
+          <p className="muted mt-3 text-[13px]">No files yet.</p>
+        ) : (
+          <ul className="mt-4 grid gap-3">
+            {data.folderUsage.map((row) => {
+              const percent = data.totalBytes > 0 ? (row.bytes / data.totalBytes) * 100 : 0;
+              return (
+                <li key={row.folderId ?? "root"}>
+                  <div className="flex items-center justify-between gap-3 text-[13px]">
+                    <span className="truncate font-medium">{row.name}</span>
+                    <span className="muted shrink-0 tabular-nums">
+                      {formatBytes(row.bytes)} · {plural(row.fileCount, "file")}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2">
+                    <div className="progress-fill" style={{ width: `${percent}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <section className="card mt-6 p-5" aria-label="Largest files">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <FileStack className="h-4 w-4 text-gold" aria-hidden="true" />
@@ -217,6 +310,45 @@ export default function StoragePage() {
               );
             })}
           </ul>
+        )}
+      </section>
+
+      <section className="card mt-6 p-5" aria-label="Duplicate files">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Copy className="h-4 w-4 text-gold" aria-hidden="true" />
+          Duplicate files
+        </h2>
+        {data.duplicateGroups.length === 0 ? (
+          <p className="muted mt-3 text-[13px]">
+            No duplicate content found across your active files.
+          </p>
+        ) : (
+          <>
+            <p className="muted mt-2 text-[12.5px]">
+              {plural(data.duplicateGroups.length, "group")} of files with identical content ·{" "}
+              {formatBytes(data.duplicateGroups.reduce((sum, group) => sum + group.wastedBytes, 0))}{" "}
+              recoverable by deleting extra copies.
+            </p>
+            <ul className="mt-3 grid gap-2">
+              {data.duplicateGroups.map((group) => (
+                <li
+                  key={group.sha256}
+                  className="rounded-xl border border-line bg-surface px-3 py-2.5"
+                >
+                  <div className="flex items-center justify-between gap-3 text-[13px]">
+                    <span className="min-w-0 truncate font-medium" title={group.names.join(", ")}>
+                      {group.names.join(" · ")}
+                    </span>
+                    <span className="muted shrink-0 tabular-nums">
+                      {group.fileCount} {group.fileCount === 1 ? "copy" : "copies"} ·{" "}
+                      {formatBytes(group.size)} each
+                    </span>
+                  </div>
+                  <p className="muted mt-1 font-mono text-[11px] break-all">{group.sha256}</p>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
 
@@ -269,6 +401,7 @@ export default function StoragePage() {
         item={detailsItem}
         onClose={() => setDetailsItem(null)}
         onAction={() => undefined}
+        showActions={false}
       />
     </div>
   );

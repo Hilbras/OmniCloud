@@ -51,6 +51,13 @@ describe("recovery blob", () => {
     expect(openRecoveryBlob(blob, code)).toEqual(urk);
   });
 
+  test("rejects a keyEpoch outside the uint32 range", () => {
+    const urk = generateUrk();
+    const { bytes: code } = generateRecoveryCode();
+    expect(() => createRecoveryBlob(urk, code, -1)).toThrow(/32-bit/i);
+    expect(() => createRecoveryBlob(urk, code, 2 ** 32 + 1)).toThrow(/32-bit/i);
+  });
+
   test("wrong code fails to open", () => {
     const urk = generateUrk();
     const { bytes: code } = generateRecoveryCode();

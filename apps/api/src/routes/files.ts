@@ -1,11 +1,11 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   PayloadTooLargeError,
   ValidationError,
   isValidOperationId,
   spoolToFile,
 } from "@omnicloud/core";
-import type { MultipartFields, MultipartFile } from "@fastify/multipart";
+import type { MultipartFields } from "@fastify/multipart";
 import type { Container } from "../container";
 import {
   optionalBase64Field,
@@ -22,7 +22,17 @@ import { toFileDTO, toVersionDTO } from "../mappers";
 import { parseRetentionPolicy } from "../validation";
 import { BATCH_FILE_OPERATIONS, type BatchFileOperation } from "@omnicloud/shared";
 
-/** Client-supplied idempotency key: the Idempotency-Key header, or an operationId field. */
+/** Validates a base64 field and its decoded size before it reaches storage. */
+function requireBase64(value: unknown, field: string, maxBytes: number): string {
+  if (typeof value !== "string" || value === "") {
+    throw new ValidationError(`Field "${field}" must be a base64 string`);
+  }
+  const bytes = Buffer.from(value, "base64");
+  if (bytes.byteLength === 0 || bytes.byteLength > maxBytes) {
+    throw new ValidationError(`Field "${field}" has an invalid size`);
+  }
+  return value;
+}
 function operationIdFrom(
   headers: Record<string, unknown>,
   fields: MultipartFields,
@@ -44,25 +54,55 @@ function folderIdFromFields(fields: MultipartFields): string | null {
 }
 
 /**
- * Streams a multipart file to disk, enforcing the cap, and hands its spooled
- * copy to `use`. The spool is removed whether `use` succeeds or fails, so a
- * rejected or failed upload never leaves bytes behind.
+ * Reads every multipart part, spooling the file and collecting fields in any
+ * order. `request.file()` only exposes fields parsed before the file, so a
+ * documented `file`-first request silently lost `folderId` and encryption
+ * metadata. The spool is removed whether `use` succeeds or fails.
  */
 async function withSpooledUpload<T>(
-  part: MultipartFile,
+  request: FastifyRequest,
   maxUploadBytes: number,
-  use: (spooled: { path: string; size: number; sha256: string }) => Promise<T>,
+  use: (input: {
+    filename: string;
+    fields: MultipartFields;
+    spooled: { path: string; size: number; sha256: string };
+  }) => Promise<T>,
 ): Promise<T> {
-  const spool = await spoolToFile(part.file, maxUploadBytes);
+  const fields: MultipartFields = {};
+  let filename: string | null = null;
+  let spool: Awaited<ReturnType<typeof spoolToFile>> | null = null;
+  let truncated = false;
+
   try {
-    if (part.file.truncated) {
+    for await (const part of request.parts()) {
+      if (part.type === "field") {
+        fields[part.fieldname] = part;
+        continue;
+      }
+      if (spool !== null) {
+        throw new ValidationError('A multipart body may contain only one "file" field');
+      }
+      if (!part.filename) throw new ValidationError("The uploaded file has no filename");
+      filename = part.filename;
+      spool = await spoolToFile(part.file, maxUploadBytes);
+      truncated = part.file.truncated;
+    }
+
+    if (spool === null || filename === null) {
+      throw new ValidationError('A multipart body with a "file" field is required');
+    }
+    if (truncated) {
       throw new PayloadTooLargeError(
         `Files larger than ${Math.floor(maxUploadBytes / (1024 * 1024))} MB are not supported`,
       );
     }
-    return await use({ path: spool.path, size: spool.size, sha256: spool.sha256 });
+    return await use({
+      filename,
+      fields,
+      spooled: { path: spool.path, size: spool.size, sha256: spool.sha256 },
+    });
   } finally {
-    await spool.discard();
+    await spool?.discard();
   }
 }
 
@@ -75,21 +115,19 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
 
   // ── Upload ────────────────────────────────────────────────────────────────
   app.post("/api/files", async (request, reply) => {
-    const part = await request.file();
-    if (!part) throw new ValidationError('A multipart body with a "file" field is required');
-    if (!part.filename) throw new ValidationError("The uploaded file has no filename");
-
-    const folderId = folderIdFromFields(part.fields);
-    const operationId = operationIdFrom(request.headers, part.fields);
-    const encryption = parseEncryptionFields(part.fields);
-    const record = await withSpooledUpload(part, maxUploadBytes, (spooled) =>
-      container.files.upload(request.user.id, {
-        folderId,
-        name: part.filename,
-        spooled,
-        operationId,
-        ...(encryption ? { encryption } : {}),
-      }),
+    const record = await withSpooledUpload(
+      request,
+      maxUploadBytes,
+      ({ filename, fields, spooled }) => {
+        const encryption = parseEncryptionFields(fields);
+        return container.files.upload(request.user.id, {
+          folderId: folderIdFromFields(fields),
+          name: filename,
+          spooled,
+          operationId: operationIdFrom(request.headers, fields),
+          ...(encryption ? { encryption } : {}),
+        });
+      },
     );
     return reply.status(201).send({ file: toFileDTO(record) });
   });
@@ -173,21 +211,20 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
   // ── Replace (upload a new version) ────────────────────────────────────────
   app.post("/api/files/:id/replace", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const part = await request.file();
-    if (!part) throw new ValidationError('A multipart body with a "file" field is required');
-    if (!part.filename) throw new ValidationError("The uploaded file has no filename");
-
-    const operationId = operationIdFrom(request.headers, part.fields);
-    const encryption = parseEncryptionFields(part.fields);
-    const record = await withSpooledUpload(part, maxUploadBytes, (spooled) =>
-      container.files.upload(request.user.id, {
-        folderId: null,
-        name: part.filename,
-        spooled,
-        replaceFileId: id,
-        operationId,
-        ...(encryption ? { encryption } : {}),
-      }),
+    const record = await withSpooledUpload(
+      request,
+      maxUploadBytes,
+      ({ filename, fields, spooled }) => {
+        const encryption = parseEncryptionFields(fields);
+        return container.files.upload(request.user.id, {
+          folderId: null,
+          name: filename,
+          spooled,
+          replaceFileId: id,
+          operationId: operationIdFrom(request.headers, fields),
+          ...(encryption ? { encryption } : {}),
+        });
+      },
     );
     return reply.send({ file: toFileDTO(record) });
   });
@@ -198,22 +235,84 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
   // so a corrupt object fails the transfer rather than completing with bad data.
   app.get("/api/files/:id/download", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { record, stream } = await container.files.downloadStreamed(request.user.id, id);
+    const record = await container.files.get(request.user.id, id);
 
     const asciiName = record.name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+    const disposition = `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(record.name)}`;
     reply
       .header("Content-Type", record.mimeType)
-      .header("Content-Length", record.size)
       .header("X-Content-SHA256", record.sha256)
-      .header(
-        "Content-Disposition",
-        `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(record.name)}`,
-      );
+      .header("Accept-Ranges", "bytes")
+      .header("Content-Disposition", disposition);
 
+    // Byte ranges are only safe for plaintext: an encrypted envelope must be
+    // decrypted as a whole, and a partial read cannot be checksum-verified.
+    const rangeHeader = request.headers.range;
+    const match =
+      rangeHeader !== undefined && record.encryptionFormat == null
+        ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
+        : null;
+    if (match !== null) {
+      const start = match[1] === "" ? 0 : Number(match[1]);
+      const end = match[2] === "" ? record.size - 1 : Math.min(Number(match[2]), record.size - 1);
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start > end ||
+        start >= record.size
+      ) {
+        return reply.code(416).header("Content-Range", `bytes */${record.size}`).send();
+      }
+      const { stream } = await container.files.downloadRange(
+        request.user.id,
+        id,
+        start,
+        end - start + 1,
+      );
+      reply
+        .code(206)
+        .header("Content-Length", String(end - start + 1))
+        .header("Content-Range", `bytes ${start}-${end}/${record.size}`);
+      stream.once("error", (error) => {
+        request.log.error({ fileId: record.id, err: error }, "range download failed");
+      });
+      return reply.send(stream);
+    }
+
+    const { stream } = await container.files.downloadStreamed(request.user.id, id);
+    reply.header("Content-Length", String(record.size));
     stream.once("error", (error) => {
       request.log.error({ fileId: record.id, err: error }, "download stream failed");
     });
     return reply.send(stream);
+  });
+
+  // The first bytes of an encrypted envelope contain the crypto file/version
+  // ids and key epoch. The index rebuild needs only those, not the whole file.
+  app.get("/api/files/:id/header", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { stream } = await container.files.downloadStreamed(request.user.id, id);
+    const chunks: Buffer[] = [];
+    let total = 0;
+    try {
+      for await (const chunk of stream) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+        const take = Math.min(buffer.length, 48 - total);
+        if (take > 0) {
+          chunks.push(buffer.subarray(0, take));
+          total += take;
+        }
+        if (total >= 48) break;
+      }
+    } finally {
+      stream.destroy();
+    }
+    stream.once("error", () => undefined);
+    return reply
+      .header("Content-Type", "application/octet-stream")
+      .header("Content-Length", String(total))
+      .header("Cache-Control", "no-store")
+      .send(Buffer.concat(chunks));
   });
 
   // ── Rename / star ─────────────────────────────────────────────────────────
@@ -251,6 +350,68 @@ export function registerFileRoutes(app: FastifyInstance, container: Container): 
     const body = requireBody(request);
     const folderId = stringOrNull(body, "folderId");
     const record = await container.files.move(request.user.id, id, folderId);
+    return { file: toFileDTO(record) };
+  });
+
+  // ── Move the stored objects to another channel ───────────────────────────
+  app.post("/api/files/:id/migrate", async (request) => {
+    const { id } = request.params as { id: string };
+    const body = requireBody(request);
+    const storageId = optionalString(body, "storageId");
+    if (storageId === undefined) throw new ValidationError('Field "storageId" is required');
+    const storage = await container.repos.storages.findByIdForUser(request.user.id, storageId);
+    if (!storage) throw new ValidationError("Unknown storage target");
+    const record = await container.files.migrateStorage(request.user.id, id, storageId);
+    return { file: toFileDTO(record) };
+  });
+
+  // ── Store re-wrapped encryption metadata after a key rotation ────────────
+  app.post("/api/files/:id/rotate", async (request) => {
+    const { id } = request.params as { id: string };
+    const body = requireBody(request);
+    const keyEpoch = (body as Record<string, unknown>).keyEpoch;
+    if (!Number.isInteger(keyEpoch) || (keyEpoch as number) < 1) {
+      throw new ValidationError('Field "keyEpoch" must be a positive integer');
+    }
+    const wrappedKey = requireBase64(
+      (body as Record<string, unknown>).wrappedKey,
+      "wrappedKey",
+      1024,
+    );
+    const metadataBlob = requireBase64(
+      (body as Record<string, unknown>).metadataBlob,
+      "metadataBlob",
+      65536,
+    );
+    const rawVersions = (body as Record<string, unknown>).versions;
+    if (!Array.isArray(rawVersions)) {
+      throw new ValidationError('Field "versions" must be an array');
+    }
+    const versions = rawVersions.map((entry, index) => {
+      if (entry === null || typeof entry !== "object") {
+        throw new ValidationError(`versions[${index}] must be an object`);
+      }
+      const raw = entry as Record<string, unknown>;
+      if (typeof raw.id !== "string" || raw.id === "") {
+        throw new ValidationError(`versions[${index}].id is required`);
+      }
+      const versionEpoch = raw.keyEpoch;
+      if (!Number.isInteger(versionEpoch) || versionEpoch !== keyEpoch) {
+        throw new ValidationError(`versions[${index}].keyEpoch must match the file epoch`);
+      }
+      return {
+        id: raw.id,
+        wrappedKey: requireBase64(raw.wrappedKey, `versions[${index}].wrappedKey`, 1024),
+        metadataBlob: requireBase64(raw.metadataBlob, `versions[${index}].metadataBlob`, 65536),
+        keyEpoch: versionEpoch as number,
+      };
+    });
+    const record = await container.files.rotateEncryption(request.user.id, id, {
+      wrappedKey,
+      metadataBlob,
+      keyEpoch: keyEpoch as number,
+      versions,
+    });
     return { file: toFileDTO(record) };
   });
 

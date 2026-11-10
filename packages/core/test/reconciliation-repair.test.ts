@@ -35,6 +35,44 @@ describe("reconciliation repair planning", () => {
     expect(selected.map((a) => a.id)).toEqual(["adopt-9"]);
   });
 
+  it("offers no detach action for a truncated scan", () => {
+    const plan = planRepairs({
+      scannedMessages: 1,
+      referencedMessages: 1,
+      limit: 1,
+      truncated: true,
+      unknown: [],
+      dangling: [],
+    });
+    expect(plan.actions).toEqual([]);
+  });
+
+  it("offers a version removal for a dangling historical version, not a file detach", () => {
+    const plan = planRepairs({
+      scannedMessages: 0,
+      referencedMessages: 0,
+      limit: 5000,
+      truncated: false,
+      unknown: [],
+      dangling: [
+        {
+          kind: "dangling",
+          messageId: 7,
+          recordedBy: "version",
+          fileId: "f1",
+          versionId: "v2",
+        },
+        { kind: "dangling", messageId: 8, recordedBy: "upload" },
+      ],
+    });
+    expect(plan.actions).toHaveLength(1);
+    expect(plan.actions[0]).toMatchObject({
+      kind: "remove-dangling-version",
+      fileId: "f1",
+      versionId: "v2",
+    });
+  });
+
   it("an empty report produces an empty plan", () => {
     const plan = planRepairs({
       scannedMessages: 0,

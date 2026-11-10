@@ -128,7 +128,7 @@ describe("OmniCloudClient request building", () => {
     );
   });
 
-  it("exposes integrity metadata on downloads", async () => {
+  it("exposes the content checksum on downloads", async () => {
     const client = clientWith(
       () =>
         new Response("content", {
@@ -137,7 +137,6 @@ describe("OmniCloudClient request building", () => {
             "content-type": "text/plain",
             "content-length": "7",
             "x-content-sha256": "abc123",
-            "x-integrity-verified": "true",
           },
         }),
     );
@@ -145,7 +144,6 @@ describe("OmniCloudClient request building", () => {
     const result = await client.files.download("f1");
     expect(result.size).toBe(7);
     expect(result.sha256).toBe("abc123");
-    expect(result.integrityVerified).toBe(true);
   });
 
   it("runs integrity checks through the storage namespace", async () => {

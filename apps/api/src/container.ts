@@ -4,8 +4,10 @@ import {
   FileService,
   FolderService,
   IntegrityService,
+  KeyPairingService,
   RecentService,
   SearchService,
+  ShareService,
   StatsService,
   StorageEngine,
   StorageNotInitializedError,
@@ -65,6 +67,8 @@ export interface ConnectionService {
     password: string,
   ): Promise<{ status: "approved"; user: UserRecord }>;
   ensureStorage(userId: string): Promise<StorageRecord>;
+  /** Creates an extra private channel; the oldest registration stays default. */
+  createStorage(userId: string, title?: string): Promise<StorageRecord>;
 }
 
 export interface StorageHealthService {
@@ -93,6 +97,8 @@ export interface Container {
   /** Browser sign-in sessions: issue, resolve and revoke. */
   authSessions: AuthSessionService;
   apiTokens: ApiTokenService;
+  shares: ShareService;
+  keyPairings: KeyPairingService;
   /** Resolves the StorageEngine for a user (their own Telegram channel). */
   engineFor: EngineResolver;
   shutdown(): Promise<void>;
@@ -135,18 +141,28 @@ export function buildContainerFromRepos(
     overrides.connection ?? new TelegramConnectionService(repos, clientManager, credentials);
 
   const engineCache = new Map<string, Promise<StorageEngine>>();
+  // A cached engine holds the client it was built with. Drop it whenever the
+  // manager installs or disconnects a client, so logout/re-login/reconnect
+  // cannot leave requests talking to a dead connection.
+  clientManager.onClientChanged((userId) => {
+    engineCache.delete(userId);
+  });
 
-  const defaultEngineFor: EngineResolver = async (userId) => {
-    const cached = engineCache.get(userId);
+  const defaultEngineFor: EngineResolver = async (userId, storageId = null) => {
+    const cacheKey = `${userId}:${storageId ?? "default"}`;
+    const cached = engineCache.get(cacheKey);
     if (cached) {
       try {
         return await cached;
       } catch {
-        engineCache.delete(userId);
+        engineCache.delete(cacheKey);
       }
     }
     const promise = (async () => {
-      const storage = await repos.storages.findByUserAndProvider(userId, TELEGRAM_PROVIDER);
+      const storage =
+        storageId === null
+          ? await repos.storages.findByUserAndProvider(userId, TELEGRAM_PROVIDER)
+          : await repos.storages.findByIdForUser(userId, storageId);
       if (!storage) throw new StorageNotInitializedError();
       const client = await clientManager.getForUser(userId);
       return new StorageEngine(
@@ -157,11 +173,11 @@ export function buildContainerFromRepos(
         }),
       );
     })();
-    engineCache.set(userId, promise);
+    engineCache.set(cacheKey, promise);
     try {
       return await promise;
     } catch (error) {
-      engineCache.delete(userId);
+      engineCache.delete(cacheKey);
       throw error;
     }
   };
@@ -219,6 +235,8 @@ export function buildContainerFromRepos(
     reconciliationFlow: new ReconciliationFlow(repos, engineFor),
     authSessions: new AuthSessionService(repos.browserSessions),
     apiTokens: new ApiTokenService(repos.apiTokens),
+    shares: new ShareService(repos.shareLinks, repos.files),
+    keyPairings: new KeyPairingService(repos.keyPairings),
     engineFor,
     shutdown: async () => {
       await clientManager.disconnectAll();

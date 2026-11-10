@@ -54,12 +54,6 @@ export interface StorageUploadInput {
   caption?: string;
 }
 
-export interface StorageDownloadInput {
-  ref: StoredRef;
-  /** Stream the result instead of buffering it. */
-  stream?: boolean;
-}
-
 export interface StorageHealth {
   /** Reachable and usable. */
   healthy: boolean;
@@ -83,7 +77,11 @@ export interface StorageProvider {
   get(ref: StoredRef, control?: TransferControl): Promise<Buffer>;
 
   /** Opens a stream for the object (large-file friendly). */
-  getStream(ref: StoredRef, control?: TransferControl): Promise<Readable>;
+  getStream(
+    ref: StoredRef,
+    control?: TransferControl,
+    range?: { start: number; length: number },
+  ): Promise<Readable>;
 
   /** Deletes the object. Deleting an already-missing object must not throw. */
   delete(ref: StoredRef): Promise<void>;

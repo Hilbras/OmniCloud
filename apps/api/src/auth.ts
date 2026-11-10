@@ -3,7 +3,9 @@ import {
   ApiTokenService,
   AuthInvalidError,
   DEFAULT_SESSION_TTL_DAYS,
+  ForbiddenError,
   UnauthorizedError,
+  type ApiTokenScope,
   type AuthSessionService,
   type Repos,
 } from "@omnicloud/core";
@@ -39,7 +41,8 @@ export function registerAuthHook(
       isApiRoute &&
       (url.startsWith("/api/auth/") ||
         url.startsWith("/api/health") ||
-        url.startsWith("/api/update/"));
+        url.startsWith("/api/update/") ||
+        url.startsWith("/api/shares/download/"));
 
     if ((!isApiRoute && !isDavRoute) || isPublicApi) {
       return;
@@ -51,6 +54,16 @@ export function registerAuthHook(
       if (!token) throw new UnauthorizedError();
       const owner = await repos.users.findById(token.userId);
       if (!owner) throw new AuthInvalidError("Account no longer exists");
+      if (token.readOnly && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+        throw new ForbiddenError("This API token is read-only");
+      }
+      if (!tokenScopeAllows(token.scope, request.method, url)) {
+        throw new ForbiddenError(
+          token.scope === "webdav"
+            ? "This API token is limited to WebDAV"
+            : "This API token is limited to uploads",
+        );
+      }
       request.user = { id: owner.id };
       request.authSessionId = undefined;
       return;
@@ -70,6 +83,24 @@ function bearerToken(header: string | undefined): string | undefined {
   if (!header) return undefined;
   const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
   return match ? match[1] : undefined;
+}
+
+/** Routes an upload-only token may call: create a file, or add a version. */
+const UPLOAD_TOKEN_ROUTES = new Set(["/api/files", "/api/files/:id/versions"]);
+
+/**
+ * Scope check for token-authenticated API requests. WebDAV tokens are handled
+ * by the WebDAV listener and never allowed here.
+ */
+function tokenScopeAllows(
+  scope: ApiTokenScope,
+  method: string | undefined,
+  route: string,
+): boolean {
+  if (scope === "full") return true;
+  if (scope === "webdav") return false;
+  if (scope === "upload") return method === "POST" && UPLOAD_TOKEN_ROUTES.has(route);
+  return false;
 }
 
 /** Starts a browser session for a user and sets its HttpOnly cookie. */

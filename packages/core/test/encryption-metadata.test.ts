@@ -67,7 +67,7 @@ describe("an encrypted upload persists its metadata", () => {
     expect(versions[0]!.encryptionFormat ?? null).toBeNull();
   });
 
-  it("clears a file's encryption when it is replaced with plaintext", async () => {
+  it("refuses to replace an encrypted file with plaintext", async () => {
     const first = await files.upload(user.id, {
       folderId: null,
       name: "secret.bin",
@@ -75,24 +75,53 @@ describe("an encrypted upload persists its metadata", () => {
       encryption,
     });
 
-    const replaced = await files.upload(user.id, {
+    await expect(
+      files.upload(user.id, {
+        folderId: null,
+        name: "secret.bin",
+        data: Buffer.from("now plaintext"),
+        replaceFileId: first.id,
+      }),
+    ).rejects.toThrow(/remove its encryption/i);
+
+    // The encrypted version is still current; nothing was written.
+    const versions = await repos.files.listVersions(first.id);
+    expect(versions).toHaveLength(1);
+    expect(versions[0]!.encryptionFormat).toBe("OCE1");
+    const stored = await repos.files.findById(first.id);
+    expect(stored?.encryptionFormat).toBe("OCE1");
+  });
+
+  it("refuses to rename an OCE2 file back to a readable name", async () => {
+    const opaque = "om_0123456789abcdef0123456789abcdef";
+    const record = await files.upload(user.id, {
       folderId: null,
-      name: "secret.bin",
-      data: Buffer.from("now plaintext"),
-      replaceFileId: first.id,
+      name: opaque,
+      data: Buffer.from("ciphertext"),
+      encryption: { ...encryption, format: "OCE2" },
     });
 
-    expect(replaced.encryptionFormat ?? null).toBeNull();
-    expect(replaced.wrappedKey ?? null).toBeNull();
-    expect(replaced.metadataBlob ?? null).toBeNull();
-    expect(replaced.keyEpoch ?? null).toBeNull();
+    await expect(files.rename(user.id, record.id, "real-name.pdf")).rejects.toThrow(/opaque/i);
+    const nextOpaque = "om_fedcba9876543210fedcba9876543210";
+    const renamed = await files.rename(user.id, record.id, nextOpaque);
+    expect(renamed.name).toBe(nextOpaque);
+  });
 
-    const versions = await repos.files.listVersions(first.id);
-    expect(versions).toHaveLength(2);
-    // The current version is plaintext; the old encrypted version keeps its fields.
-    expect(versions[0]!.encryptionFormat ?? null).toBeNull();
-    expect(versions[1]!.encryptionFormat).toBe("OCE1");
-    expect(versions[1]!.wrappedKey).toBe(encryption.wrappedKey);
+  it("updates both the current version and the file row on rename", async () => {
+    const record = await files.upload(user.id, {
+      folderId: null,
+      name: "secret.bin",
+      data: Buffer.from("ciphertext"),
+      encryption,
+    });
+
+    const renamedBlob = "E".repeat(120);
+    const renamed = await files.rename(user.id, record.id, "renamed.bin", renamedBlob);
+
+    expect(renamed.name).toBe("renamed.bin");
+    expect(renamed.metadataBlob).toBe(renamedBlob);
+    const versions = await repos.files.listVersions(record.id);
+    expect(versions[0]!.metadataBlob).toBe(renamedBlob);
   });
 
   it("updates the file-level fields when replaced with new encryption", async () => {

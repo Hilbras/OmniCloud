@@ -38,10 +38,12 @@ The security controls that _are_ in place are described in
   names, sizes, MIME types, timestamps and hashes stay visible to the server
   for OCE1 files, and the Telegram document still carries the real file name in
   its filename attribute.
-- **The OCE2 "server-blind filename" format is implemented but not enabled by
-  default**, and it is unreviewed. New uploads stay in OCE1 until the review
-  covers the new format. The server checks that an OCE2 upload really carries
-  an opaque name, so a client cannot claim OCE2 while sending a plaintext name.
+- **The OCE2 "server-blind filename" format is opt-in per file and unreviewed.**
+  New uploads stay in OCE1; the web app's "Hide name" action migrates a file to
+  OCE2 by storing an opaque placeholder and keeping the real name only in the
+  encrypted local index. There is no UI or SDK path back to OCE1, and a file
+  hidden on one device is only searchable by real name on devices that have the
+  index. The server rejects a non-opaque name sent to an OCE2 file.
 - **The client artifact is trusted with your key.** The protocol assumes the
   web, SDK and CLI code that holds the root key is the code you intended to
   run. A compromised release, a compromised build pipeline or malware on the
@@ -49,6 +51,16 @@ The security controls that _are_ in place are described in
 - **Search does not reach into encrypted content.** The server searches
   metadata only; OCE2 files are answered from the client's own encrypted local
   index instead.
+- **Key rotation is not available as a user action yet.** The crypto helper and
+  the server endpoint that stores re-wrapped blobs exist and are tested, but the
+  client flow (re-wrapping the recovery blob, invalidating device pairings,
+  re-encrypting the name index, resuming an interrupted rotation) is not
+  implemented, so no UI offers it.
+- **Team spaces are design-only.** Shared folders with per-member keys, roles and
+  audit are not implemented. The model, the OCE2 name-hiding conflict and the
+  re-wrap requirement are recorded in
+  [`team-spaces-design.md`](team-spaces-design.md); no server-side code exists
+  yet.
 
 ## Accounts, keys and recovery
 
@@ -119,6 +131,24 @@ The security controls that _are_ in place are described in
 - **The client's encryption memory is bounded by a chunk, not by the file.** In
   the browser the chunk is 4 MiB and the ciphertext is spooled to OPFS when the
   browser provides it. The CLI and SDK stream to a spool file as well.
+- **Browser uploads survive a reload, not a killed Telegram transfer.** Pending
+  jobs (bytes included) are stored in IndexedDB and resumed on the next load with
+  the same operation id, so the server cannot commit a duplicate. Telegram has
+  no resumable server-side upload session, so the bytes are sent again from the
+  start; only the job survives. Private windows and browsers without IndexedDB
+  keep the queue in memory for the session only.
+- **Offline mode shows the last listing, not the files.** The first page of each
+  listing is cached in IndexedDB (server-visible metadata only, for up to 7
+  days). Offline you can see names, sizes and dates, but opening a file,
+  uploading, moving or paging further fails until the connection returns.
+  Thumbnails of **plaintext** images are cached (newest 120); thumbnails of
+  encrypted files are never written to disk, because they are decrypted in the
+  tab.
+- **Offline copies are explicit and plaintext-only.** “Keep offline” in a file's
+  details panel stores the server's bytes for plaintext files up to 64 MB (total
+  budget 512 MB, oldest dropped first). Encrypted files are not offered, because
+  their stored bytes are ciphertext and reading them offline needs the root key;
+  bulk “keep this folder offline” is not implemented.
 
 ## Consistency
 

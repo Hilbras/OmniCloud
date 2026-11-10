@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import type { ApiTokenRecord, ApiTokenRepository } from "../repos";
+import {
+  isApiTokenScope,
+  type ApiTokenRecord,
+  type ApiTokenRepository,
+  type ApiTokenScope,
+} from "../repos";
 import { hashToken } from "./auth-session-service";
 import { NotFoundError, ValidationError } from "../errors";
 
@@ -22,13 +27,34 @@ export class ApiTokenService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async issue(userId: string, name: string): Promise<IssuedApiToken> {
+  async issue(
+    userId: string,
+    name: string,
+    options: { readOnly?: boolean; scope?: ApiTokenScope; expiresAt?: Date | null } = {},
+  ): Promise<IssuedApiToken> {
     const label = name.trim();
     if (label.length === 0 || label.length > MAX_NAME_LENGTH) {
       throw new ValidationError(`Token name must be 1 to ${MAX_NAME_LENGTH} characters`);
     }
+    if (options.expiresAt && options.expiresAt.getTime() <= this.now().getTime()) {
+      throw new ValidationError("Token expiry must be in the future");
+    }
+    if (options.scope !== undefined && !isApiTokenScope(options.scope)) {
+      throw new ValidationError("Token scope must be full, upload or webdav");
+    }
+    const scope = options.scope ?? "full";
+    if (scope !== "full" && options.readOnly === true) {
+      throw new ValidationError("readOnly only applies to a full-scope token");
+    }
     const token = randomBytes(32).toString("base64url");
-    const record = await this.repo.create({ userId, name: label, tokenHash: hashToken(token) });
+    const record = await this.repo.create({
+      userId,
+      name: label,
+      tokenHash: hashToken(token),
+      readOnly: options.readOnly === true,
+      scope,
+      expiresAt: options.expiresAt ?? null,
+    });
     return { token, record };
   }
 
@@ -41,6 +67,8 @@ export class ApiTokenService {
     if (!token || token.length < 32 || token.length > 128) return null;
     const record = await this.repo.findByTokenHash(hashToken(token));
     if (!record || record.revokedAt !== null) return null;
+    if (record.expiresAt !== null && record.expiresAt.getTime() <= this.now().getTime())
+      return null;
     await this.repo.touch(record.id, this.now());
     return record;
   }

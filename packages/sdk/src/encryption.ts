@@ -16,7 +16,7 @@ import {
   wrapDek,
 } from "@omnicloud/crypto";
 import type { FileMetadata } from "@omnicloud/crypto";
-import type { FileDTO, FileVersionDTO } from "@omnicloud/shared";
+import { isEncryptedFormat, type FileDTO, type FileVersionDTO } from "@omnicloud/shared";
 import {
   OmniCloudError,
   isRetryableStatus,
@@ -35,8 +35,9 @@ import type { OmniCloudClient } from "./client";
  * reads them as the multipart body arrives). Retries replay the very same
  * envelope and idempotency key, so a lost response never re-encrypts.
  *
- * `downloadEncrypted` refuses anything that is not OCE1: there is no silent
- * fallback to plaintext anywhere in this module.
+ * `downloadEncrypted` opens both OCE1 and OCE2 files: OCE2 hides the name but
+ * stores the same OCE1 content envelope. There is no silent fallback to
+ * plaintext anywhere in this module.
  */
 
 /** Plaintext source for an encrypted upload: bytes in memory, or a file path (Node). */
@@ -232,8 +233,8 @@ export async function uploadEncrypted(
 }
 
 /**
- * Downloads an OCE1-encrypted file and decrypts it with the caller's URK.
- * Throws when the stored file is plaintext or not OCE1 — never falls back.
+ * Downloads an OCE1 or OCE2 encrypted file and decrypts it with the caller's URK.
+ * Throws when the stored file is plaintext — never falls back.
  */
 export async function downloadEncrypted(
   client: OmniCloudClient,
@@ -241,21 +242,21 @@ export async function downloadEncrypted(
   options: EncryptedDownloadOptions,
 ): Promise<EncryptedDownloadResult> {
   const file = await client.files.get(id);
-  if (file.encryptionFormat !== OCE1) {
+  if (!isEncryptedFormat(file.encryptionFormat)) {
     const seen = file.encryptionFormat ?? null;
     throw new OmniCloudError(
       0,
       "NOT_ENCRYPTED",
       seen === null
-        ? `File ${id} is not encrypted (stored as plaintext); downloadEncrypted only opens OCE1-encrypted files`
-        : `File ${id} has unsupported encryptionFormat "${seen}"; downloadEncrypted only opens OCE1-encrypted files`,
+        ? `File ${id} is not encrypted (stored as plaintext); downloadEncrypted only opens OCE1/OCE2-encrypted files`
+        : `File ${id} has unsupported encryptionFormat "${seen}"; downloadEncrypted only opens OCE1/OCE2-encrypted files`,
     );
   }
   if (!file.wrappedKey || !file.metadataBlob) {
     throw new OmniCloudError(
       0,
       "INVALID_ENCRYPTION_METADATA",
-      `File ${id} is marked OCE1 but its wrappedKey/metadataBlob is missing`,
+      `File ${id} is encrypted but its wrappedKey/metadataBlob is missing`,
     );
   }
 
@@ -538,7 +539,14 @@ export async function encryptFileToSpool(
       dek,
       ...(options.chunkSize !== undefined ? { chunkSize: options.chunkSize } : {}),
     })) {
-      await handle.write(part);
+      // FileHandle.write may write fewer bytes than requested. Ignoring the
+      // result silently truncates the spool into an undecryptable upload.
+      let remaining = part;
+      while (remaining.length > 0) {
+        const { bytesWritten } = await handle.write(remaining);
+        if (bytesWritten <= 0) throw new Error("the encrypted spool write made no progress");
+        remaining = remaining.subarray(bytesWritten);
+      }
     }
     await handle.sync();
   } catch (error) {
@@ -671,13 +679,20 @@ async function* streamToAsyncIterable(
   stream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
+  let completed = false;
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) return;
+      if (done) {
+        completed = true;
+        return;
+      }
       if (value) yield value;
     }
   } finally {
+    // An early return (decrypt error, write failure) must cancel the HTTP body,
+    // not only release the lock, or the socket stays open until GC.
+    if (!completed) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

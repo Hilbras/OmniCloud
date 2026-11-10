@@ -132,6 +132,64 @@
 }
 
 @layer components {
+  /* Electron chrome: the window controls float over the app. Reserve their
+     space and turn the header background into the drag handle. */
+  html.electron-shell .nav-blur,
+  html.electron-shell .login-header {
+    -webkit-app-region: drag;
+    /* Utilities (`h-16`, `py-6`) live in a later cascade layer, so a normal
+       rule would lose regardless of specificity. */
+    height: auto !important;
+    padding-top: 2.25rem !important;
+  }
+  html.electron-shell .nav-blur {
+    min-height: 4rem;
+  }
+  /* App-drawn window buttons live in the 36px drag strip, above page content. */
+  .window-controls {
+    display: none;
+  }
+  html.electron-custom-controls .window-controls {
+    position: fixed;
+    z-index: 80;
+    top: 0;
+    right: 0;
+    display: flex;
+    height: 2.25rem;
+    -webkit-app-region: no-drag;
+  }
+  .window-control {
+    display: inline-flex;
+    width: 2.9rem;
+    height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+  .window-control:hover {
+    background: var(--gold-soft);
+    color: var(--gold-text);
+  }
+  .window-control-close:hover {
+    background: #d93025;
+    color: #fff;
+  }
+  .window-control:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: -2px;
+  }
+  html.electron-shell .nav-blur a,
+  html.electron-shell .nav-blur button,
+  html.electron-shell .nav-blur input,
+  html.electron-shell .nav-blur [role="button"],
+  html.electron-shell .login-header a,
+  html.electron-shell .login-header button {
+    -webkit-app-region: no-drag;
+  }
+
   .nav-blur {
     background: color-mix(in srgb, var(--bg) 94%, transparent);
     border-color: color-mix(in srgb, var(--line) 78%, transparent);
@@ -225,6 +283,63 @@
   .btn-danger:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* Telegram-brand action: same blue as the official clients. */
+  .btn-telegram {
+    display: inline-flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border: 1px solid color-mix(in srgb, #229ed9 78%, #000 22%);
+    border-radius: 10px;
+    background: linear-gradient(180deg, #2aabee, #229ed9);
+    color: #fff;
+    padding: 11px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    box-shadow: 0 2px 10px color-mix(in srgb, #229ed9 30%, transparent);
+  }
+  .btn-telegram:hover {
+    background: linear-gradient(180deg, #33b1f2, #249bd1);
+    box-shadow: 0 5px 16px color-mix(in srgb, #229ed9 36%, transparent);
+    transform: translateY(-1px);
+  }
+  .btn-telegram:active {
+    transform: scale(0.98);
+  }
+  .btn-telegram:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .btn-telegram:focus-visible {
+    outline-color: #229ed9;
+  }
+
+  /* Hover/active changes should glide rather than snap. */
+  @media (prefers-reduced-motion: no-preference) {
+    .btn-gold,
+    .btn-ghost,
+    .btn-secondary,
+    .btn-danger,
+    .btn-telegram {
+      transition:
+        transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 140ms ease,
+        border-color 140ms ease,
+        color 140ms ease,
+        box-shadow 140ms ease;
+    }
+    .btn-gold:active:not(:disabled),
+    .btn-ghost:active:not(:disabled),
+    .btn-secondary:active:not(:disabled),
+    .btn-danger:active:not(:disabled),
+    .btn-telegram:active:not(:disabled) {
+      transform: scale(0.98);
+    }
   }
 
   .theme-toggle {
@@ -386,13 +501,13 @@
   }
 
   @keyframes drive-section-enter {
+    /* Opacity only: a non-none transform makes this wrapper the containing
+       block for fixed descendants, which clipped menus and panels. */
     from {
       opacity: 0.8;
-      transform: translateY(4px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 

@@ -229,7 +229,10 @@ export async function* encryptChunks(
   const header = buildHeader(options, epoch);
   yield header;
 
-  let carry: Uint8Array = new Uint8Array(0);
+  // Pieces of the current record. Concatenating on every source chunk would
+  // copy the whole accumulated record each time; join once per full record.
+  let carry: Uint8Array[] = [];
+  let carryLength = 0;
   let index = 0;
   let total = 0;
   const emit = (plaintext: Uint8Array): Uint8Array => {
@@ -247,23 +250,24 @@ export async function* encryptChunks(
   for await (const chunk of toAsyncIterable(source)) {
     let offset = 0;
     while (offset < chunk.length) {
-      const take = Math.min(chunkSize - carry.length, chunk.length - offset);
+      const take = Math.min(chunkSize - carryLength, chunk.length - offset);
       const part = chunk.subarray(offset, offset + take);
       offset += take;
-      if (carry.length === 0 && take === chunkSize) {
+      if (carryLength === 0 && take === chunkSize) {
         yield emit(part);
         continue;
       }
-      const merged = concat(carry, part);
-      if (merged.length === chunkSize) {
-        carry = new Uint8Array(0);
-        yield emit(merged);
-      } else {
-        carry = merged;
+      carry.push(part);
+      carryLength += take;
+      if (carryLength === chunkSize) {
+        const record = concat(...carry);
+        carry = [];
+        carryLength = 0;
+        yield emit(record);
       }
     }
   }
-  if (carry.length > 0 || index === 0) yield emit(carry);
+  if (carryLength > 0 || index === 0) yield emit(concat(...carry));
 
   const manifest = new TextEncoder().encode(JSON.stringify({ chunks: index, size: total, v: 1 }));
   yield encodeRecord(manifest, options.dek, buildAad(options, epoch, AAD_TYPE_MANIFEST), nextNonce);
@@ -279,7 +283,11 @@ export async function encryptBytes(
 }
 
 class ByteReader {
-  private buffer: Uint8Array = new Uint8Array(0);
+  /** Chunks read from the source but not consumed yet. */
+  private queue: Uint8Array[] = [];
+  /** Bytes consumed from the first queued chunk. */
+  private offset = 0;
+  private buffered = 0;
   private done = false;
   constructor(private readonly source: AsyncGenerator<Uint8Array>) {}
 
@@ -289,27 +297,55 @@ class ByteReader {
       this.done = true;
       return false;
     }
-    this.buffer = concat(this.buffer, next.value);
+    if (next.value.length > 0) {
+      this.queue.push(next.value);
+      this.buffered += next.value.length;
+    }
     return true;
   }
 
+  private compact(): void {
+    while (this.queue.length > 0) {
+      const first = this.queue[0]!;
+      if (this.offset < first.length) return;
+      this.queue.shift();
+      this.offset = 0;
+    }
+  }
+
   async readExactly(length: number): Promise<Uint8Array> {
-    while (this.buffer.length < length) {
+    while (this.buffered < length) {
       if (!(await this.fill())) {
         throw new UnsupportedFormatError("truncated envelope");
       }
     }
-    const out = this.buffer.slice(0, length);
-    this.buffer = this.buffer.slice(length);
+    const out = new Uint8Array(length);
+    let written = 0;
+    while (written < length) {
+      this.compact();
+      const first = this.queue[0]!;
+      const take = Math.min(length - written, first.length - this.offset);
+      out.set(first.subarray(this.offset, this.offset + take), written);
+      this.offset += take;
+      written += take;
+    }
+    this.buffered -= length;
     return out;
   }
 
   async atEnd(): Promise<boolean> {
-    while (this.buffer.length === 0) {
+    while (this.buffered === 0) {
       if (this.done) return true;
       if (!(await this.fill())) return true;
     }
     return false;
+  }
+
+  /** Releases the source when the consumer stops early or the stream fails. */
+  async close(): Promise<void> {
+    if (this.done) return;
+    this.done = true;
+    await this.source.return(undefined);
   }
 }
 
@@ -352,55 +388,64 @@ export async function* decryptChunks(options: DecryptStreamOptions): AsyncGenera
   const expectedManifest = (chunks: number, size: number): Uint8Array =>
     new TextEncoder().encode(JSON.stringify({ chunks, size, v: 1 }));
 
-  while (true) {
-    if (await reader.atEnd()) break;
-    if (manifestSeen) throw new TrailingDataError("trailing bytes after manifest");
-    const record = await readRecord(reader);
-    if (index >= 1) {
-      try {
-        const manifest = open(
-          dek,
-          record.nonce,
-          record.ciphertext,
-          buildAad(options, expectedEpoch, AAD_TYPE_MANIFEST),
-        );
-        let parsed: { chunks: unknown; size: unknown; v: unknown };
+  try {
+    while (true) {
+      if (await reader.atEnd()) break;
+      if (manifestSeen) throw new TrailingDataError("trailing bytes after manifest");
+      const record = await readRecord(reader);
+      if (index >= 1) {
         try {
-          parsed = JSON.parse(new TextDecoder().decode(manifest)) as {
-            chunks: unknown;
-            size: unknown;
-            v: unknown;
-          };
-        } catch {
-          throw new ManifestError("manifest is not valid JSON");
+          const manifest = open(
+            dek,
+            record.nonce,
+            record.ciphertext,
+            buildAad(options, expectedEpoch, AAD_TYPE_MANIFEST),
+          );
+          let parsed: { chunks: unknown; size: unknown; v: unknown };
+          try {
+            parsed = JSON.parse(new TextDecoder().decode(manifest)) as {
+              chunks: unknown;
+              size: unknown;
+              v: unknown;
+            };
+          } catch {
+            throw new ManifestError("manifest is not valid JSON");
+          }
+          const keys = Object.keys(parsed).sort().join(",");
+          if (keys !== "chunks,size,v") throw new ManifestError("manifest has unexpected fields");
+          if (
+            parsed.v !== 1 ||
+            !Number.isInteger(parsed.chunks) ||
+            !Number.isInteger(parsed.size)
+          ) {
+            throw new ManifestError("manifest fields invalid");
+          }
+          if (parsed.chunks !== index) throw new ManifestError("manifest chunk count mismatch");
+          if (parsed.size !== total) throw new ManifestError("manifest size mismatch");
+          if (!bytesEqual(manifest, expectedManifest(index, total)))
+            throw new ManifestError("manifest not canonical");
+          manifestSeen = true;
+          continue;
+        } catch (err) {
+          if (!(err instanceof AuthenticationError)) throw err;
         }
-        const keys = Object.keys(parsed).sort().join(",");
-        if (keys !== "chunks,size,v") throw new ManifestError("manifest has unexpected fields");
-        if (parsed.v !== 1 || !Number.isInteger(parsed.chunks) || !Number.isInteger(parsed.size)) {
-          throw new ManifestError("manifest fields invalid");
-        }
-        if (parsed.chunks !== index) throw new ManifestError("manifest chunk count mismatch");
-        if (parsed.size !== total) throw new ManifestError("manifest size mismatch");
-        if (!bytesEqual(manifest, expectedManifest(index, total)))
-          throw new ManifestError("manifest not canonical");
-        manifestSeen = true;
-        continue;
-      } catch (err) {
-        if (!(err instanceof AuthenticationError)) throw err;
       }
+      const plaintext = open(
+        dek,
+        record.nonce,
+        record.ciphertext,
+        buildAad(options, expectedEpoch, AAD_TYPE_DATA, index),
+      );
+      if (plaintext.length > CHUNK_SIZE_HARD_MAX)
+        throw new UnsupportedFormatError("chunk too large");
+      index += 1;
+      total += plaintext.length;
+      yield plaintext;
     }
-    const plaintext = open(
-      dek,
-      record.nonce,
-      record.ciphertext,
-      buildAad(options, expectedEpoch, AAD_TYPE_DATA, index),
-    );
-    if (plaintext.length > CHUNK_SIZE_HARD_MAX) throw new UnsupportedFormatError("chunk too large");
-    index += 1;
-    total += plaintext.length;
-    yield plaintext;
+    if (!manifestSeen) throw new ManifestError("manifest missing");
+  } finally {
+    await reader.close();
   }
-  if (!manifestSeen) throw new ManifestError("manifest missing");
 }
 
 export async function decryptBytes(options: DecryptStreamOptions): Promise<Uint8Array> {
@@ -499,7 +544,8 @@ export function decryptMetadata(
   try {
     parsed = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, unknown>;
   } catch {
-    throw new AuthenticationError("metadata authentication failed");
+    // The AEAD tag already verified; the bytes are authentic but malformed.
+    throw new ManifestError("metadata is not valid JSON");
   }
   const allowed = new Set(["name", "mimeType", "description"]);
   for (const key of Object.keys(parsed)) {

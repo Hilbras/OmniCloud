@@ -100,6 +100,18 @@ const cloud = new OmniCloudClient({
 await cloud.auth.me();
 ```
 
+> **Browser use:** import the browser entry instead of the package root:
+>
+> ```ts
+> import { OmniCloudClient, uploadEncrypted } from "@hilbras/omnicloud/browser";
+> ```
+>
+> It contains the HTTP client, the in-memory OCE1 helpers, crypto primitives and
+> shared helpers — no static `node:` imports and no server-only Telegram stack.
+> Node-only helpers (`encryptFileToSpool`, `uploadEncryptedStream`,
+> `downloadDecryptedToFile`, the CLI, the Telegram provider) stay on the package
+> root.
+
 The token is account-wide and stays valid until you revoke it. Send it in the
 `Authorization` header; the server accepts `Authorization: Bearer <token>` on
 every protected `/api` route. The same mechanism backs `omnicloud login` on the
@@ -532,6 +544,10 @@ The upload client uses XHR when `XMLHttpRequest` exists and falls back to
 `fetch` otherwise. In Node, `fetch` + `FormData` is used, so `onProgress` is not
 called for uploads — the `fetch` request body has no progress events.
 
+In a browser, import `@hilbras/omnicloud/browser`: it ships the same client and
+in-memory encryption helpers without the Node-only modules, and the bundle has
+no static `node:` imports.
+
 ### Cancellation
 
 `AbortSignal` support differs per call, because the SDK forwards the signal
@@ -671,11 +687,11 @@ Measured throughput and caveats are in
 The SDK re-exports the OCE1 primitives from `@omnicloud/crypto`, so you can
 build envelopes yourself, and it wraps them in helpers that talk to the API.
 
-> **Note:** the SDK reads and writes **OCE1** only. OCE2 — the format that also
-> hides the file name from the server — exists in the protocol and in the web
-> app's migration, but it is **not enabled by default**, it is unreviewed, and
-> the package exports no OCE2 helpers. `downloadEncrypted` rejects an OCE2 file
-> with `NOT_ENCRYPTED`.
+> **Note:** `downloadEncrypted` opens both **OCE1** and **OCE2** files, because
+> they carry the same content envelope. OCE2 (server-blind filename) is still
+> unreviewed, is chosen per file by the web app's hide-name migration, and the
+> SDK has no helper to create an OCE2 upload. A plaintext file is rejected with
+> `NOT_ENCRYPTED`; there is no silent fallback.
 
 ### The primitives
 
@@ -740,9 +756,10 @@ envelope with the four OCE1 text fields ahead of the file part. Retries replay
 the very same envelope bytes and the same idempotency key, so a lost response
 never re-encrypts.
 
-`downloadEncrypted` refuses anything that is not OCE1: a plaintext file or an
-unsupported format throws `OmniCloudError(0, "NOT_ENCRYPTED", …)`. There is no
-silent fallback to plaintext anywhere in this module.
+`downloadEncrypted` accepts OCE1 and OCE2, and refuses anything else: a
+plaintext file or an unsupported format throws
+`OmniCloudError(0, "NOT_ENCRYPTED", …)`. There is no silent fallback to
+plaintext anywhere in this module.
 
 ### Migrating a legacy plaintext file
 
@@ -830,6 +847,10 @@ value option accepts both `--flag value` and `--flag=value`; `-o` also accepts
 `-o=value`.
 
 `login` accepts only `--config` and `--url`. `logout` accepts only `--config`.
+
+`key generate` and `recovery restore` refuse to overwrite an existing
+`--keyfile`; pass `--force` if you really mean to replace the only copy of that
+root key.
 
 ### The two `migrate` commands
 

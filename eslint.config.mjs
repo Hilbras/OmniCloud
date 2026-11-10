@@ -7,6 +7,8 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "apps/desktop/out/**",
+      "apps/desktop/release/**",
       "packages/sdk/server/**",
       "**/node_modules/**",
       "**/coverage/**",

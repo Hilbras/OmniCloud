@@ -121,6 +121,59 @@ describe("applying approved repairs", () => {
   });
 });
 
+describe("dangling historical versions", () => {
+  it("removes only the dangling version row", async () => {
+    const repos = createInMemoryRepos();
+    const user = makeUser();
+    const file = await repos.files.createWithFirstVersion({
+      userId: user.id,
+      folderId: null,
+      name: "versioned.txt",
+      size: 1,
+      mimeType: "text/plain",
+      sha256: "a".repeat(64),
+      telegramMessageId: 10,
+      version: {
+        userId: user.id,
+        size: 1,
+        mimeType: "text/plain",
+        sha256: "a".repeat(64),
+        telegramMessageId: 10,
+      },
+    });
+    await repos.files.createVersion({
+      fileId: file.id,
+      userId: user.id,
+      size: 2,
+      mimeType: "text/plain",
+      sha256: "b".repeat(64),
+      telegramMessageId: 11,
+    });
+    const historical = (await repos.files.listVersions(file.id)).find(
+      (version) => version.versionNumber === 1,
+    )!;
+    const { engine } = engineWith(new Map());
+    const applier = new ReconciliationApplier(repos, user.id, engine as never);
+
+    const result = await applier.apply([
+      {
+        id: `remove-version-${historical.id}`,
+        kind: "remove-dangling-version",
+        messageId: historical.telegramMessageId,
+        fileId: file.id,
+        versionId: historical.id,
+        recordedBy: "version",
+        reason: "x",
+        destructive: false,
+      },
+    ]);
+
+    expect(result.applied).toHaveLength(1);
+    expect(await repos.files.findVersionById(historical.id)).toBeNull();
+    expect((await repos.files.findById(file.id))?.currentVersionId).not.toBeNull();
+  });
+});
+
 describe("apply result truthfulness", () => {
   it("does not report a detach as applied when no matching file exists", async () => {
     const repos = createInMemoryRepos();

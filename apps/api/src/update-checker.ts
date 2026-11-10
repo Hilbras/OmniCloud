@@ -40,7 +40,32 @@ export function compareVersions(a: string, b: string): number {
   if (left.prerelease === right.prerelease) return 0;
   if (left.prerelease === "") return 1;
   if (right.prerelease === "") return -1;
-  return left.prerelease > right.prerelease ? 1 : -1;
+  return comparePrerelease(left.prerelease, right.prerelease);
+}
+
+/** Semver prerelease ordering: numeric identifiers compare as numbers. */
+function comparePrerelease(left: string, right: string): number {
+  const a = left.split(".");
+  const b = right.split(".");
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    const one = a[index];
+    const two = b[index];
+    if (one === undefined) return -1;
+    if (two === undefined) return 1;
+    const oneNumeric = /^[0-9]+$/.test(one);
+    const twoNumeric = /^[0-9]+$/.test(two);
+    if (oneNumeric && twoNumeric) {
+      const difference = Number(one) - Number(two);
+      if (difference !== 0) return difference > 0 ? 1 : -1;
+    } else if (oneNumeric !== twoNumeric) {
+      // Numeric identifiers have lower precedence than alphanumeric ones.
+      return oneNumeric ? -1 : 1;
+    } else if (one !== two) {
+      return one > two ? 1 : -1;
+    }
+  }
+  return 0;
 }
 
 export interface UpdateCheckerOptions {

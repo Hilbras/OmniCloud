@@ -311,6 +311,9 @@ export default function LandingPage() {
             <a href="#open-source" className="transition-colors hover:text-text">
               {t.nav.openSource}
             </a>
+            <a href="/download" className="transition-colors hover:text-text">
+              {t.nav.download}
+            </a>
           </nav>
           <div className="flex items-center gap-2.5">
             <LanguageSwitcher label={t.langSwitcher.label} />

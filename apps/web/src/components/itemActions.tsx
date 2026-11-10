@@ -4,6 +4,7 @@ import {
   EyeOff,
   FolderInput,
   Info,
+  Link2,
   LockKeyhole,
   Pencil,
   RefreshCw,
@@ -26,6 +27,7 @@ export type ItemAction =
   | "replace"
   | "migrate"
   | "hideName"
+  | "share"
   | "details"
   | "trash"
   | "restore"
@@ -143,6 +145,14 @@ export function buildItemMenu<T extends ItemRefLike>(
       ),
       onSelect: () => onAction(item.starred ? "unstar" : "star", item),
     });
+
+    if (isFile) {
+      items.push({
+        label: "Share",
+        icon: <Link2 className="h-4 w-4" aria-hidden="true" />,
+        onSelect: () => onAction("share", item),
+      });
+    }
 
     if (isFile && context.canReplace === true) {
       items.push({

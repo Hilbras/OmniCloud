@@ -1,6 +1,6 @@
 import { deepestFirst } from "../utils/folder-order";
-import { paginationMeta } from "@omnicloud/shared";
 import type { ListQuery, PaginationDTO } from "@omnicloud/shared";
+import { mergePagedResults } from "../utils/paginate-merged";
 import type { FileRecord, FolderRecord, PageRequest } from "../types";
 import type { FileRepository, FolderRepository } from "../repos";
 import { NotFoundError } from "../errors";
@@ -47,16 +47,17 @@ export class TrashService {
       folderId: undefined,
     });
 
-    const [filePage, folderPage] = await Promise.all([
-      this.files.query(userId, itemQuery, page),
-      this.folders.query(userId, itemQuery, page),
-    ]);
+    const merged = await mergePagedResults(
+      (request) => this.files.query(userId, itemQuery, request),
+      (request) => this.folders.query(userId, itemQuery, request),
+      itemQuery,
+      page,
+    );
 
-    const total = filePage.total + folderPage.total;
     return {
-      files: filePage.items,
-      folders: folderPage.items,
-      pagination: paginationMeta(page.page, page.limit, total),
+      files: merged.items.filter((item): item is FileRecord => "parentId" in item === false),
+      folders: merged.items.filter((item): item is FolderRecord => "parentId" in item),
+      pagination: merged.pagination,
     };
   }
 
@@ -162,7 +163,6 @@ export class TrashService {
     }
 
     if (deletedFileIds.length > 0) {
-      await this.files.deleteVersionsByFileIds(deletedFileIds);
       await this.files.deleteMany(deletedFileIds);
     }
     return { deletedFiles, failedFiles };
@@ -182,16 +182,26 @@ export class TrashService {
       allFolders,
     );
     let deletedFolders = 0;
+    const removed = new Set<string>();
     for (const folderId of orderedIds) {
       const folder = candidates.find((candidate) => candidate.id === folderId)!;
-      // Skip folders that still contain files we could not delete.
+      // A child folder may be retained because it still holds a file (or is
+      // outside this purge window). Deleting its parent would hit the
+      // `Folder.parentId` restrict foreign key. Children already removed in
+      // this pass no longer block their parent.
+      const hasChild = allFolders.some(
+        (candidate) => candidate.parentId === folder.id && !removed.has(candidate.id),
+      );
+      if (hasChild) continue;
+      // Count files in any state, not only trashed ones.
       const stillHasFiles = await this.files.query(
         userId,
-        { folderId: folder.id, trashed: true },
+        { folderId: folder.id },
         { page: 1, limit: 1 },
       );
       if (stillHasFiles.total > 0) continue;
       await this.folders.deleteMany([folder.id]);
+      removed.add(folder.id);
       deletedFolders += 1;
     }
     return deletedFolders;

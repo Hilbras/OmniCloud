@@ -1,10 +1,12 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { Download, Folder, RefreshCw, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { FileVersionDTO } from "@omnicloud/shared";
+import type { FileDTO, FileVersionDTO, FolderDTO } from "@omnicloud/shared";
 import { api, errorMessage } from "../api/client";
+import { hasOfflineCopy, removeOfflineCopy, saveOfflineCopy } from "../api/download";
+import { isOfflineCopyEligible } from "../lib/offline-files";
 import { formatBytes, formatDateTime, plural } from "../lib/format";
 import { fileVisual } from "../lib/fileIcons";
 import { invalidateVersionQueries } from "../lib/queries";
@@ -17,6 +19,10 @@ interface DetailsPanelProps {
   item: DriveItem | null;
   onClose: () => void;
   onAction: (action: ItemAction, item: DriveItem) => void;
+  /** False hides the Download/New version buttons in contexts without handlers. */
+  showActions?: boolean;
+  /** False hides only "New version". */
+  showReplace?: boolean;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -40,7 +46,13 @@ function ItemGlyph({ item }: { item: DriveItem }) {
  * Slide-over with file/folder metadata and version history. On desktop it slides
  * in from the right; on small screens it becomes a bottom sheet. Escape closes.
  */
-export function DetailsPanel({ item, onClose, onAction }: DetailsPanelProps) {
+export function DetailsPanel({
+  item,
+  onClose,
+  onAction,
+  showActions = true,
+  showReplace = true,
+}: DetailsPanelProps) {
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -56,7 +68,14 @@ export function DetailsPanel({ item, onClose, onAction }: DetailsPanelProps) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-end sm:items-stretch">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <motion.div
+        className="absolute inset-0 bg-black/40"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <motion.aside
         role="dialog"
         aria-modal="true"
@@ -82,7 +101,7 @@ export function DetailsPanel({ item, onClose, onAction }: DetailsPanelProps) {
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {!item.trashed ? (
+          {!item.trashed && showActions ? (
             <div className="flex flex-wrap gap-2">
               {item.kind === "file" ? (
                 <>
@@ -94,17 +113,34 @@ export function DetailsPanel({ item, onClose, onAction }: DetailsPanelProps) {
                     <Download className="h-4 w-4" aria-hidden="true" />
                     Download
                   </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => onAction("replace", item)}
-                  >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                    New version
-                  </button>
+                  {showReplace ? (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => onAction("replace", item)}
+                    >
+                      <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                      New version
+                    </button>
+                  ) : null}
                 </>
               ) : null}
             </div>
+          ) : null}
+
+          {item.kind === "file" &&
+          item.file !== undefined &&
+          item.file !== null &&
+          isOfflineCopyEligible(item.file) ? (
+            <OfflineCopyControl file={item.file} />
+          ) : null}
+
+          {item.kind === "file" && item.file !== undefined && item.file !== null ? (
+            <FileStorageMigration file={item.file} />
+          ) : null}
+
+          {item.kind === "folder" && item.folder !== undefined && item.folder !== null ? (
+            <FolderStorageTarget folder={item.folder} />
           ) : null}
 
           <dl className="mt-5 grid gap-4">
@@ -141,6 +177,180 @@ export function DetailsPanel({ item, onClose, onAction }: DetailsPanelProps) {
         </div>
       </motion.aside>
     </div>
+  );
+}
+
+function FileStorageMigration({ file }: { file: FileDTO }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [target, setTarget] = useState("");
+  const storages = useQuery({
+    queryKey: ["storages"],
+    queryFn: api.storage.listStorages,
+  });
+  const migrate = useMutation({
+    mutationFn: (storageId: string) => api.files.migrate(file.id, storageId),
+    onSuccess: () => {
+      toast.success("Moved to the chosen channel");
+      setTarget("");
+      void queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+    onError: (error) => toast.error(errorMessage(error, "Could not move the file")),
+  });
+
+  const channels = storages.data?.storages ?? [];
+  if (channels.length < 2) return null;
+
+  return (
+    <section className="mt-5" aria-label="Storage channel">
+      <h3 className="eyebrow">Storage channel</h3>
+      <p className="muted mt-1 text-[12.5px]">
+        Copies every version to another channel, verifies the bytes, then removes the old copy.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <select
+          className="field min-w-0 flex-1 px-3 py-2 text-sm"
+          value={target}
+          onChange={(event) => setTarget(event.target.value)}
+          aria-label="Move to channel"
+        >
+          <option value="">Choose a channel…</option>
+          {channels
+            .filter((channel) => channel.id !== file.storageId)
+            .map((channel) => (
+              <option key={channel.id} value={channel.id}>
+                {channel.title}
+              </option>
+            ))}
+        </select>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={target === "" || migrate.isPending}
+          onClick={() => migrate.mutate(target)}
+        >
+          {migrate.isPending ? "Moving…" : "Move"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FolderStorageTarget({ folder }: { folder: FolderDTO }) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const storages = useQuery({
+    queryKey: ["storages"],
+    queryFn: api.storage.listStorages,
+  });
+  const update = useMutation({
+    mutationFn: (storageId: string | null) => api.folders.update(folder.id, { storageId }),
+    onSuccess: () => {
+      toast.success("Upload target updated");
+      void queryClient.invalidateQueries({ queryKey: ["folders"] });
+    },
+    onError: (error) => toast.error(errorMessage(error, "Could not change the upload target")),
+  });
+
+  const channels = storages.data?.storages ?? [];
+  // With one channel there is nothing to choose; the default is implied.
+  if (channels.length < 2) return null;
+
+  return (
+    <section className="mt-5" aria-label="Upload target">
+      <h3 className="eyebrow">Upload target</h3>
+      <p className="muted mt-1 text-[12.5px]">
+        New files in this folder go to the chosen channel. Subfolders inherit it unless they set
+        their own.
+      </p>
+      <select
+        className="field mt-2 w-full px-3 py-2 text-sm"
+        value={folder.storageId ?? ""}
+        disabled={update.isPending}
+        onChange={(event) => update.mutate(event.target.value === "" ? null : event.target.value)}
+        aria-label="Upload target channel"
+      >
+        <option value="">Inherit / default</option>
+        {channels.map((channel, index) => (
+          <option key={channel.id} value={channel.id}>
+            {channel.title}
+            {index === 0 ? " (default)" : ""}
+          </option>
+        ))}
+      </select>
+    </section>
+  );
+}
+
+function OfflineCopyControl({ file }: { file: FileDTO }) {
+  const toast = useToast();
+  const [state, setState] = useState<"checking" | "available" | "missing">("checking");
+  const [busy, setBusy] = useState(false);
+  // The effect only re-checks when the file identity changes; the latest DTO is
+  // read from a ref so an unrelated re-render does not refetch the state.
+  const fileRef = useRef(file);
+  fileRef.current = file;
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("checking");
+    void hasOfflineCopy(fileRef.current).then((available) => {
+      if (!cancelled) setState(available ? "available" : "missing");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.id, file.updatedAt]);
+
+  const keep = async () => {
+    setBusy(true);
+    try {
+      await saveOfflineCopy(file);
+      setState("available");
+      toast.success(`"${file.name}" is now available offline`);
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not save an offline copy"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await removeOfflineCopy(file);
+      setState("missing");
+      toast.success(`Removed the offline copy of "${file.name}"`);
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not remove the offline copy"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-5" aria-label="Offline copy">
+      <h3 className="eyebrow">Offline</h3>
+      {state === "checking" ? (
+        <p className="muted mt-2 text-[13px]">Checking for an offline copy…</p>
+      ) : state === "available" ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="muted text-[13px]">Saved on this device.</p>
+          <button type="button" className="btn-secondary" disabled={busy} onClick={remove}>
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Remove
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="muted text-[13px]">Not saved on this device.</p>
+          <button type="button" className="btn-secondary" disabled={busy} onClick={keep}>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            {busy ? "Saving…" : "Keep offline"}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 

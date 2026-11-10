@@ -36,9 +36,18 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers, enabled = true)
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      // A focused item handles Enter/Space itself; opening from the global
+      // listener too made Enter open the file twice.
+      if (event.defaultPrevented) return;
       const mod = event.ctrlKey || event.metaKey;
       const typing = isTypingTarget(event.target);
       const current = ref.current;
+
+      // Escape is handled by the dialog itself; every other drive shortcut is
+      // suppressed while a modal dialog is open.
+      if (event.key !== "Escape" && document.querySelector('[aria-modal="true"]') !== null) {
+        return;
+      }
 
       if (mod && event.key.toLowerCase() === "k") {
         event.preventDefault();

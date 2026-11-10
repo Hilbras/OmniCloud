@@ -54,6 +54,24 @@ export function registerStorageRoutes(app: FastifyInstance, container: Container
     return { storage: toStorageDTO(storage) };
   });
 
+  // ── Storage channels (one default + optional extra targets) ──────────────
+  app.get("/api/storages", async (request) => {
+    const storages = await container.repos.storages.listByUser(request.user.id);
+    return { storages: storages.map(toStorageDTO) };
+  });
+
+  app.post("/api/storages", async (request, reply) => {
+    const body = (request.body ?? {}) as { title?: unknown };
+    if (body.title !== undefined && typeof body.title !== "string") {
+      throw new ValidationError("title must be a string");
+    }
+    const storage = await container.connection.createStorage(
+      request.user.id,
+      body.title as string | undefined,
+    );
+    return reply.status(201).send({ storage: toStorageDTO(storage) });
+  });
+
   // ── Storage health for the signed-in user ────────────────────────────────
   app.get("/api/storage/health", async (request) => {
     const health = await container.storageHealth.health(request.user.id);

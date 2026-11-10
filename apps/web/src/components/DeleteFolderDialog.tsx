@@ -17,8 +17,10 @@ interface DeleteFolderDialogProps {
 
 function countSubtreeFiles(folderId: string, tree: FolderNode[]): Promise<number> {
   const ids = subtreeFolderIds(tree, folderId);
-  return Promise.all(ids.map((id) => api.files.list({ folderId: id, limit: 200 }))).then(
-    (responses) => responses.reduce((total, response) => total + response.files.length, 0),
+  // Use the total, not the page length: a folder with more than one page was
+  // undercounted and the confirmation understated what would be deleted.
+  return Promise.all(ids.map((id) => api.files.list({ folderId: id, limit: 1 }))).then(
+    (responses) => responses.reduce((total, response) => total + response.pagination.total, 0),
   );
 }
 

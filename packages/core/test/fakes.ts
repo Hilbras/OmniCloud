@@ -23,6 +23,10 @@ import type {
   Paged,
   Repos,
   SessionRepository,
+  KeyPairingRecord,
+  KeyPairingRepository,
+  ShareLinkRecord,
+  ShareLinkRepository,
   StorageProvider,
   StorageRecord,
   StorageRepository,
@@ -115,6 +119,10 @@ function filterFiles(userId: string, all: FileRecord[], query: ItemQuery): FileR
     const matchers = query.mimeMatchers;
     rows = rows.filter((file) => matchMime(file.mimeType, matchers));
   }
+  if (query.mimeExcludeMatchers) {
+    const matchers = query.mimeExcludeMatchers;
+    rows = rows.filter((file) => !matchMime(file.mimeType, matchers));
+  }
   if (query.starred !== undefined) rows = rows.filter((file) => file.starred === query.starred);
   if (query.minSize !== undefined) {
     const min = query.minSize;
@@ -179,6 +187,8 @@ export interface InMemoryRepos extends Repos {
   _browserSessions: BrowserSessionRecord[];
   _uploadOperations: UploadOperationRecord[];
   _apiTokens: ApiTokenRecord[];
+  _shareLinks: ShareLinkRecord[];
+  _keyPairings: KeyPairingRecord[];
 }
 
 export function createInMemoryRepos(): InMemoryRepos {
@@ -195,6 +205,9 @@ export function createInMemoryRepos(): InMemoryRepos {
         userId: input.userId,
         name: input.name,
         tokenHash: input.tokenHash,
+        readOnly: input.readOnly,
+        scope: input.scope,
+        expiresAt: input.expiresAt,
         createdAt: new Date(),
         revokedAt: null,
         lastUsedAt: null,
@@ -269,6 +282,9 @@ export function createInMemoryRepos(): InMemoryRepos {
   const storagesRepo: StorageRepository = {
     findByUserAndProvider: async (userId, provider) =>
       storages.find((s) => s.userId === userId && s.provider === provider) ?? null,
+    findByIdForUser: async (userId, id) =>
+      storages.find((s) => s.userId === userId && s.id === id) ?? null,
+    listByUser: async (userId) => storages.filter((s) => s.userId === userId),
     create: async (input) => {
       const record: StorageRecord = { id: nextId("storage"), createdAt: now(), ...input };
       storages.push(record);
@@ -298,6 +314,7 @@ export function createInMemoryRepos(): InMemoryRepos {
         createdAt: now(),
         updatedAt: now(),
         ...input,
+        storageId: input.storageId ?? null,
       };
       folders.push(record);
       return record;
@@ -421,6 +438,7 @@ export function createInMemoryRepos(): InMemoryRepos {
         createdAt: now(),
         updatedAt: now(),
         ...input,
+        storageId: input.storageId ?? null,
       };
       files.push(record);
       return record;
@@ -483,10 +501,40 @@ export function createInMemoryRepos(): InMemoryRepos {
       };
     },
     deleteMany: async (ids) => {
+      const allowed = new Set(ids);
+      for (let i = versions.length - 1; i >= 0; i -= 1) {
+        if (allowed.has(versions[i]!.fileId)) versions.splice(i, 1);
+      }
       for (const id of ids) {
         const idx = files.findIndex((f) => f.id === id);
         if (idx >= 0) files.splice(idx, 1);
       }
+    },
+    migrateStorage: async (fileId, input) => {
+      const file = files.find((f) => f.id === fileId);
+      if (!file) throw new Error("file not found in fake repo");
+      for (const update of input.versions) {
+        const version = versions.find((v) => v.id === update.id);
+        if (version) version.telegramMessageId = update.telegramMessageId;
+      }
+      file.storageId = input.storageId;
+      file.telegramMessageId = input.telegramMessageId;
+      return file;
+    },
+    rotateEncryption: async (fileId, input) => {
+      const file = files.find((f) => f.id === fileId);
+      if (!file) throw new Error("file not found in fake repo");
+      for (const update of input.versions) {
+        const version = versions.find((v) => v.id === update.id);
+        if (!version) throw new Error("version not found in fake repo");
+        version.wrappedKey = update.wrappedKey;
+        version.metadataBlob = update.metadataBlob;
+        version.keyEpoch = update.keyEpoch;
+      }
+      file.wrappedKey = input.wrappedKey;
+      file.metadataBlob = input.metadataBlob;
+      file.keyEpoch = input.keyEpoch;
+      return file;
     },
     createWithFirstVersion: async (input) => {
       const { version, ...fileInput } = input;
@@ -516,6 +564,7 @@ export function createInMemoryRepos(): InMemoryRepos {
         createdAt: now(),
         updatedAt: now(),
         ...fileInput,
+        storageId: fileInput.storageId ?? null,
         encryptionFormat: fileInput.encryptionFormat ?? null,
         wrappedKey: fileInput.wrappedKey ?? null,
         metadataBlob: fileInput.metadataBlob ?? null,
@@ -606,15 +655,12 @@ export function createInMemoryRepos(): InMemoryRepos {
     },
     findVersionById: async (versionId) => versions.find((v) => v.id === versionId) ?? null,
     countVersions: async (fileId) => versions.filter((v) => v.fileId === fileId).length,
-    deleteVersionsByFileIds: async (fileIds) => {
-      const allowed = new Set(fileIds);
-      for (let i = versions.length - 1; i >= 0; i -= 1) {
-        if (allowed.has(versions[i]!.fileId)) versions.splice(i, 1);
-      }
-    },
     updateVersionMetadata: async (versionId, metadataBlob) => {
       const version = versions.find((v) => v.id === versionId);
       if (version !== undefined) version.metadataBlob = metadataBlob;
+      for (const file of files) {
+        if (file.currentVersionId === versionId) file.metadataBlob = metadataBlob;
+      }
     },
     deleteVersion: async (fileId, versionId) => {
       const index = versions.findIndex((v) => v.id === versionId);
@@ -647,13 +693,16 @@ export function createInMemoryRepos(): InMemoryRepos {
         resourceId: input.resourceId,
       });
     },
-    list: async (userId, page) => {
-      const rows = activity
+    list: async (userId, page, filters = {}) => {
+      let rows = activity
         .filter((e) => e.userId === userId)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      if (filters.action) rows = rows.filter((event) => event.action === filters.action);
+      if (filters.from) rows = rows.filter((event) => event.createdAt >= filters.from!);
+      if (filters.to) rows = rows.filter((event) => event.createdAt <= filters.to!);
       return paginate(rows, page);
     },
-    recentFiles: async (userId, actions, limit) => {
+    recentFiles: async (userId, actions, page) => {
       const allowed = new Set(actions);
       const rows = activity
         .map((event, index) => ({ event, index }))
@@ -672,7 +721,8 @@ export function createInMemoryRepos(): InMemoryRepos {
         seen.add(row.resourceId);
         result.push(row);
       }
-      return result.slice(0, limit);
+      const offset = (page.page - 1) * page.limit;
+      return { items: result.slice(offset, offset + page.limit), total: result.length };
     },
     countByUser: async (userId) => activity.filter((e) => e.userId === userId).length,
     pruneOlderThan: async (cutoff) => {
@@ -773,6 +823,81 @@ export function createInMemoryRepos(): InMemoryRepos {
       Object.assign(record, patch, { updatedAt: now() });
       return record;
     },
+    deleteTerminalBefore: async (before) => {
+      const removed = uploadOps.filter(
+        (op) => (op.status === "COMPLETED" || op.status === "FAILED") && op.updatedAt < before,
+      );
+      for (const op of removed) uploadOps.splice(uploadOps.indexOf(op), 1);
+      return removed.length;
+    },
+  };
+
+  const shareLinks: ShareLinkRecord[] = [];
+  const shareLinksRepo: ShareLinkRepository = {
+    async create(input) {
+      const record: ShareLinkRecord = {
+        id: `share-${shareLinks.length + 1}`,
+        userId: input.userId,
+        fileId: input.fileId,
+        tokenHash: input.tokenHash,
+        passwordHash: input.passwordHash,
+        sharedWrappedKey: input.sharedWrappedKey,
+        expiresAt: input.expiresAt,
+        maxDownloads: input.maxDownloads,
+        downloadCount: 0,
+        revokedAt: null,
+        createdAt: new Date(),
+      };
+      shareLinks.push(record);
+      return record;
+    },
+    async findByIdForUser(userId, id) {
+      return shareLinks.find((s) => s.id === id && s.userId === userId) ?? null;
+    },
+    async findByTokenHash(tokenHash) {
+      return shareLinks.find((s) => s.tokenHash === tokenHash) ?? null;
+    },
+    async listForUser(userId) {
+      return shareLinks
+        .filter((s) => s.userId === userId)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    },
+    async revoke(id, at) {
+      const share = shareLinks.find((s) => s.id === id);
+      if (share) share.revokedAt = at;
+    },
+    async recordDownload(id) {
+      const share = shareLinks.find((s) => s.id === id);
+      if (share) share.downloadCount += 1;
+    },
+  };
+
+  const keyPairings: KeyPairingRecord[] = [];
+  const keyPairingsRepo: KeyPairingRepository = {
+    async create(input) {
+      const record: KeyPairingRecord = {
+        id: `pair-${keyPairings.length + 1}`,
+        userId: input.userId,
+        wrappedUrk: input.wrappedUrk,
+        fileId: input.fileId,
+        versionId: input.versionId,
+        keyEpoch: input.keyEpoch,
+        expiresAt: input.expiresAt,
+        claimedAt: null,
+        createdAt: new Date(),
+      };
+      keyPairings.push(record);
+      return record;
+    },
+    async findByIdForUser(userId, id) {
+      return keyPairings.find((p) => p.id === id && p.userId === userId) ?? null;
+    },
+    async claim(id, at) {
+      const pairing = keyPairings.find((p) => p.id === id && p.claimedAt === null);
+      if (!pairing) return false;
+      pairing.claimedAt = at;
+      return true;
+    },
   };
 
   return {
@@ -785,6 +910,10 @@ export function createInMemoryRepos(): InMemoryRepos {
     folders: foldersRepo,
     files: filesRepo,
     activity: activityRepo,
+    shareLinks: shareLinksRepo,
+    keyPairings: keyPairingsRepo,
+    _shareLinks: shareLinks,
+    _keyPairings: keyPairings,
     _users: users,
     _folders: folders,
     _files: files,
@@ -880,9 +1009,13 @@ export class FakeStorageProvider implements StorageProvider {
     return object.data;
   }
 
-  async getStream(ref: StoredRef, control?: TransferControl): Promise<Readable> {
+  async getStream(
+    ref: StoredRef,
+    control?: TransferControl,
+    range?: { start: number; length: number },
+  ): Promise<Readable> {
     const data = await this.get(ref, control);
-    return Readable.from([data]);
+    return Readable.from([range ? data.subarray(range.start, range.start + range.length) : data]);
   }
 
   async delete(ref: StoredRef): Promise<void> {

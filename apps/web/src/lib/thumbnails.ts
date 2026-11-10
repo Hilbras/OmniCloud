@@ -22,6 +22,8 @@ interface Entry {
 }
 
 const cache = new Map<string, Entry>();
+/** One in-flight request per file, shared by every mounted thumbnail. */
+const inflight = new Map<string, Promise<string>>();
 
 /** Returns the cached object URL for a file, if one exists. */
 export function getThumbnail(fileId: string): string | null {
@@ -46,6 +48,33 @@ export function setThumbnail(fileId: string, url: string): void {
 /** Removes a failed thumbnail so a later attempt can retry. */
 export function failThumbnail(fileId: string): void {
   cache.delete(fileId);
+}
+
+/**
+ * Returns the object URL for a file, sharing one decrypt request between all
+ * callers. Without the in-flight map, every mounted card fetched the same
+ * thumbnail and only one result survived.
+ */
+export function loadThumbnail(fileId: string, load: () => Promise<Blob>): Promise<string> {
+  const cached = getThumbnail(fileId);
+  if (cached !== null) return Promise.resolve(cached);
+  const existing = inflight.get(fileId);
+  if (existing) return existing;
+
+  beginThumbnail(fileId);
+  const request = load()
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      setThumbnail(fileId, url);
+      return url;
+    })
+    .catch((error: unknown) => {
+      failThumbnail(fileId);
+      throw error;
+    })
+    .finally(() => inflight.delete(fileId));
+  inflight.set(fileId, request);
+  return request;
 }
 
 /** Revokes every cached object URL. Used on sign-out. */

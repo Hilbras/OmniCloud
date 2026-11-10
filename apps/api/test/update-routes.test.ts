@@ -20,6 +20,7 @@ describe("update check endpoint", () => {
     // not know yet rather than claiming the install is up to date.
     expect(body.status).toBe("unknown");
     expect(body.latestVersion).toBeNull();
+    expect(body.detail).toMatch(/disabled/i);
   });
 
   it("serves the cached result of the last check", async () => {

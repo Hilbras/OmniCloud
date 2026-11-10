@@ -359,7 +359,7 @@ server.
 | `POST /api/auth/telegram/verify`      | POST   | none             | Check the confirmation code                |
 | `POST /api/auth/telegram/password`    | POST   | none             | Two-factor password step of the phone flow |
 | `POST /api/auth/telegram/qr/start`    | POST   | none             | Start a QR sign-in                         |
-| `GET /api/auth/telegram/qr/status`    | GET    | none             | Poll a QR sign-in                          |
+| `POST /api/auth/telegram/qr/status`   | POST   | none             | Poll a QR sign-in                          |
 | `POST /api/auth/telegram/qr/password` | POST   | none             | Two-factor password step of the QR flow    |
 | `GET /api/auth/me`                    | GET    | cookie only      | Current session                            |
 | `POST /api/auth/logout`               | POST   | session cookie   | Sign out of this session                   |
@@ -538,12 +538,13 @@ curl -sS -X POST https://omnicloud.example.com/api/auth/telegram/qr/start
 
 **Errors**: `429 RATE_LIMITED`, `502 TELEGRAM_CONNECTION_FAILED`.
 
-### `GET /api/auth/telegram/qr/status`
+### `POST /api/auth/telegram/qr/status`
 
-Reports where a QR sign-in stands. The route applies the origin check itself,
-because it can mint a session cookie.
+Reports where a QR sign-in stands. It is a POST, not a GET, so a cross-site
+top-level navigation cannot trigger it with a Lax cookie; the route also applies
+the origin check itself, because it can mint a session cookie.
 
-**Query parameters**
+**Body**
 
 | Parameter | Type   | Required | Notes           |
 | --------- | ------ | -------- | --------------- |
@@ -552,7 +553,9 @@ because it can mint a session cookie.
 **Request**
 
 ```bash
-curl -sS "https://omnicloud.example.com/api/auth/telegram/qr/status?flowId=8c1f2a44-9d1e-4b6a-8f31-2f9b0a7c5d10"
+curl -sS -X POST "https://omnicloud.example.com/api/auth/telegram/qr/status" \
+  -H 'Content-Type: application/json' \
+  -d '{"flowId":"8c1f2a44-9d1e-4b6a-8f31-2f9b0a7c5d10"}'
 ```
 
 **Response** `200`, not approved yet — the token is rotated, use the new one
@@ -820,6 +823,8 @@ Every storage route needs a session cookie or an API token.
 | Endpoint                                 | Method | Purpose                                            |
 | ---------------------------------------- | ------ | -------------------------------------------------- |
 | `POST /api/storage/ensure`               | POST   | Create the storage channel if it is missing        |
+| `GET /api/storages`                      | GET    | List the account's storage channels                |
+| `POST /api/storages`                     | POST   | Create an extra private storage channel            |
 | `GET /api/storage/health`                | GET    | Storage health plus statistics                     |
 | `POST /api/storage/health/check`         | POST   | Probe the connection, optionally deeply            |
 | `GET /api/storage/stats`                 | GET    | Dashboard statistics                               |
@@ -858,6 +863,51 @@ curl -sS -X POST https://omnicloud.example.com/api/storage/ensure \
 **Errors**: `409 STORAGE_NOT_INITIALIZED`, `401 TELEGRAM_AUTH_REQUIRED`,
 `502 TELEGRAM_CONNECTION_FAILED`, `403 PERMISSION_DENIED` (the account cannot
 write to the channel).
+
+### `GET /api/storages`
+
+Lists the account's storage channels, oldest first. The first entry is the
+default target for new uploads; extra channels can be targeted per folder.
+
+**Request**
+
+```bash
+curl -sS https://omnicloud.example.com/api/storages \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Response** `200`
+
+```json
+{
+  "storages": [
+    {
+      "id": "tz4a98xxat96iws9zmbrgj3b",
+      "provider": "telegram",
+      "title": "OmniCloud Storage",
+      "createdAt": "2026-08-01T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `POST /api/storages`
+
+Creates an additional private Telegram channel and registers it as a storage
+target. The oldest registration stays the default; a maximum of five channels
+per account applies.
+
+**Body**
+
+| Field   | Type   | Required | Notes                                |
+| ------- | ------ | -------- | ------------------------------------ |
+| `title` | string | no       | Channel title, at most 80 characters |
+
+**Response** `201` — `{ "storage": { ... } }`, same shape as `ensure`.
+
+**Errors**: `400 INVALID_REQUEST` (title too long or not a string),
+`400 VALIDATION_ERROR` (channel limit reached), `401 TELEGRAM_AUTH_REQUIRED`,
+`502 TELEGRAM_CONNECTION_FAILED`.
 
 ### `GET /api/storage/health`
 
@@ -1170,23 +1220,25 @@ file. The checker never repairs, deletes or rewrites anything.
 Files are the stored objects. Their bytes live in the user's Telegram channel;
 PostgreSQL holds the logical record.
 
-| Endpoint                                          | Method | Purpose                            |
-| ------------------------------------------------- | ------ | ---------------------------------- |
-| `POST /api/files`                                 | POST   | Upload a file                      |
-| `GET /api/files`                                  | GET    | List and filter files              |
-| `POST /api/files/batch`                           | POST   | Apply one operation to many files  |
-| `GET /api/files/:id`                              | GET    | File metadata                      |
-| `GET /api/files/:id/versions`                     | GET    | Version history                    |
-| `POST /api/files/:id/versions/prune`              | POST   | Remove old versions under a policy |
-| `POST /api/files/:id/versions/:versionId/restore` | POST   | Make an earlier version current    |
-| `DELETE /api/files/:id/versions/:versionId`       | DELETE | Remove one historical version      |
-| `POST /api/files/:id/replace`                     | POST   | Upload a new version               |
-| `GET /api/files/:id/download`                     | GET    | Stream the bytes                   |
-| `PATCH /api/files/:id`                            | PATCH  | Rename and/or star                 |
-| `POST /api/files/:id/move`                        | POST   | Move into a folder                 |
-| `POST /api/files/:id/trash`                       | POST   | Move to the Trash                  |
-| `POST /api/files/:id/restore`                     | POST   | Restore from the Trash             |
-| `DELETE /api/files/:id`                           | DELETE | Delete permanently                 |
+| Endpoint                                          | Method | Purpose                              |
+| ------------------------------------------------- | ------ | ------------------------------------ |
+| `POST /api/files`                                 | POST   | Upload a file                        |
+| `GET /api/files`                                  | GET    | List and filter files                |
+| `POST /api/files/batch`                           | POST   | Apply one operation to many files    |
+| `GET /api/files/:id`                              | GET    | File metadata                        |
+| `GET /api/files/:id/versions`                     | GET    | Version history                      |
+| `POST /api/files/:id/versions/prune`              | POST   | Remove old versions under a policy   |
+| `POST /api/files/:id/versions/:versionId/restore` | POST   | Make an earlier version current      |
+| `DELETE /api/files/:id/versions/:versionId`       | DELETE | Remove one historical version        |
+| `POST /api/files/:id/replace`                     | POST   | Upload a new version                 |
+| `GET /api/files/:id/download`                     | GET    | Stream the bytes                     |
+| `PATCH /api/files/:id`                            | PATCH  | Rename and/or star                   |
+| `POST /api/files/:id/move`                        | POST   | Move into a folder                   |
+| `POST /api/files/:id/migrate`                     | POST   | Move the objects to another channel  |
+| `POST /api/files/:id/rotate`                      | POST   | Store re-wrapped encryption metadata |
+| `POST /api/files/:id/trash`                       | POST   | Move to the Trash                    |
+| `POST /api/files/:id/restore`                     | POST   | Restore from the Trash               |
+| `DELETE /api/files/:id`                           | DELETE | Delete permanently                   |
 
 ### The file object
 
@@ -1833,6 +1885,47 @@ curl -sS -X POST https://omnicloud.example.com/api/files/tz4a98xxat96iws9zmbrgj3
 **Errors**: `400 INVALID_REQUEST`, `404 FILE_NOT_FOUND`, `404 FOLDER_NOT_FOUND`,
 `409 CONFLICT` (the target folder is in the Trash).
 
+### `POST /api/files/:id/migrate`
+
+Moves every stored object of a file (all versions) to another storage channel.
+The server copies each object, verifies its SHA-256, repoints the metadata in one
+transaction, and only then removes the old objects. A failure before the commit
+removes the copies, so the file stays readable in its original channel.
+
+**Body**
+
+| Field       | Type   | Required | Notes                            |
+| ----------- | ------ | -------- | -------------------------------- |
+| `storageId` | string | yes      | Target channel owned by the user |
+
+**Response** `200` — the file object, with the new `storageId`.
+
+**Errors**: `400 INVALID_REQUEST` (missing/unknown storage), `404 FILE_NOT_FOUND`,
+`502 DOWNLOAD_FAILED`/`UPLOAD_FAILED`, `409 CONFLICT` (copied bytes do not match
+the recorded hash).
+
+### `POST /api/files/:id/rotate`
+
+Stores encryption metadata that the client re-wrapped under a new root key. The
+server only checks shape and epoch monotonicity; the blobs stay opaque. Every
+version must be supplied together, so a file can never be half-rotated. The
+crypto helper is `rotateVersionKeys` in `packages/crypto`; the web/CLI flow that
+drives it is not implemented yet.
+
+**Body**
+
+| Field          | Type   | Required | Notes                                                                 |
+| -------------- | ------ | -------- | --------------------------------------------------------------------- |
+| `keyEpoch`     | number | yes      | New epoch; must be greater than the file's current epoch              |
+| `wrappedKey`   | string | yes      | Base64, at most 1 KiB                                                 |
+| `metadataBlob` | string | yes      | Base64, at most 64 KiB                                                |
+| `versions`     | array  | yes      | One entry per version: `id`, `wrappedKey`, `metadataBlob`, `keyEpoch` |
+
+**Response** `200` — the file object.
+
+**Errors**: `400 INVALID_REQUEST` (bad base64/size, non-increasing epoch, missing
+version, plaintext file, epoch mismatch between versions), `404 FILE_NOT_FOUND`.
+
 ### `POST /api/files/:id/trash`
 
 Moves a file to the Trash. The channel object is untouched, so a restore is
@@ -1954,10 +2047,11 @@ Creates a folder.
 
 **Body**
 
-| Field      | Type           | Required | Notes                                               |
-| ---------- | -------------- | -------- | --------------------------------------------------- |
-| `name`     | string         | yes      | The folder name                                     |
-| `parentId` | string \| null | no       | The parent folder id. Defaults to `null` (the root) |
+| Field       | Type           | Required | Notes                                                                 |
+| ----------- | -------------- | -------- | --------------------------------------------------------------------- |
+| `name`      | string         | yes      | The folder name                                                       |
+| `parentId`  | string \| null | no       | The parent folder id. Defaults to `null` (the root)                   |
+| `storageId` | string \| null | no       | Channel target for new files. Omit/null to inherit the parent/default |
 
 **Request**
 
@@ -1976,6 +2070,7 @@ curl -sS -X POST https://omnicloud.example.com/api/folders \
     "id": "tz4a98xxat96iws9zmbrgj3d",
     "name": "Documents",
     "parentId": null,
+    "storageId": null,
     "starred": false,
     "trashed": false,
     "deletedAt": null,
@@ -2116,14 +2211,16 @@ curl -sS -X POST https://omnicloud.example.com/api/folders/batch \
 
 ### `PATCH /api/folders/:id`
 
-Renames and/or stars a folder. At least one of `name` or `starred` is required.
+Renames, stars and/or retargets a folder. At least one of `name`, `starred` or
+`storageId` is required.
 
 **Body**
 
-| Field     | Type    | Required | Notes                                                      |
-| --------- | ------- | -------- | ---------------------------------------------------------- |
-| `name`    | string  | no       | The new name                                               |
-| `starred` | boolean | no       | Whether the folder is starred. `"true"`/`"false"` accepted |
+| Field       | Type           | Required | Notes                                                      |
+| ----------- | -------------- | -------- | ---------------------------------------------------------- |
+| `name`      | string         | no       | The new name                                               |
+| `starred`   | boolean        | no       | Whether the folder is starred. `"true"`/`"false"` accepted |
+| `storageId` | string \| null | no       | Channel target for new files. `null` restores inheritance  |
 
 **Request**
 
@@ -2565,14 +2662,15 @@ Rules:
   that UTC day for `before:`. Any other date string is parsed as a date-time.
 - `size:` with `>` means strictly larger, `<` strictly smaller, `>=` and `<=`
   inclusive, and `=` (the default) means exactly that size.
-- `type:other` has no MIME matchers, so the filter is dropped, but folders are
-  still excluded from the result because the filter is file-only.
+- `type:other` matches files outside every known MIME category and excludes
+  folders (the filter is file-only).
 - `type:`, `ext:` and `size:` filters only a file can satisfy, so folders are
   excluded from the result entirely when one of them is present.
 - Search covers **both active and trashed** items unless `trashed:` narrows
   the scope.
-- Files and folders are each paginated with the same `page` and `limit`; the
-  envelope's `total` is the combined count.
+- Files and folders are merged into one globally sorted page; the envelope's
+  `total` is the combined count and a page never contains more than `limit`
+  items across both kinds.
 
 Examples:
 
@@ -2591,6 +2689,60 @@ Examples:
 > the server.
 
 ---
+
+## Device key pairing
+
+Transfers the encryption root key (URK) to a second signed-in device. The
+client wraps the URK under a random secret; the server stores only the opaque
+wrapped payload, and the secret lives in the link fragment
+(`/pair/<id>#p=<secret>`). A pairing can be claimed once and expires after 10
+minutes by default.
+
+| Endpoint               | Method | Auth    | Purpose          |
+| ---------------------- | ------ | ------- | ---------------- |
+| `/api/key-pairing`     | POST   | session | Create a pairing |
+| `/api/key-pairing/:id` | GET    | session | Claim it once    |
+
+`POST` body: `{ "wrappedUrk": base64, "fileId": 32-hex, "versionId": 32-hex,
+"keyEpoch": number, "expiresInSeconds"?: 60..86400 }`.
+
+Claiming with another account, after expiry, or a second time returns `404`.
+
+## Shares
+
+Public download links for plaintext files and **OCE1** files. For OCE1, the
+client re-wraps the file's DEK under a random secret and puts that secret in the
+URL fragment (`/s/<token>#k=<secret>`); the server stores only the re-wrapped
+key (`sharedWrappedKey`) and never sees the fragment. OCE2 files are refused
+because the link cannot carry a hidden name safely.
+
+| Endpoint                           | Method | Auth    | Purpose           |
+| ---------------------------------- | ------ | ------- | ----------------- |
+| `/api/shares`                      | POST   | session | Create a link     |
+| `/api/shares`                      | GET    | session | List links        |
+| `/api/shares/:id`                  | DELETE | session | Revoke a link     |
+| `/api/shares/download/:token/meta` | GET    | public  | File metadata     |
+| `/api/shares/download/:token`      | GET    | public  | Download the file |
+
+`POST /api/shares` body: `{ "fileId": "...", "expiresAt"?: ISO-8601,
+"maxDownloads"?: number, "password"?: string, "sharedWrappedKey"?: base64 }`.
+`sharedWrappedKey` is required for OCE1 files. The response contains the
+token **once**; only its SHA-256 is stored. The web app builds
+`/s/<token>`.
+
+Public requests are limited to 60/minute per IP. A password-protected link
+requires `x-share-password: <password>`; a wrong or missing password returns
+`401`. Expired, revoked, exhausted or unknown links all return `404` so the
+endpoint does not reveal which state applies.
+
+```bash
+curl -sS -X POST https://omnicloud.example.com/api/shares \
+  -H 'Content-Type: application/json' \
+  -b 'omnicloud_session=...' \
+  -d '{"fileId":"file-id","maxDownloads":3}'
+
+curl -sS -OJ https://omnicloud.example.com/api/shares/download/<token>
+```
 
 ## Tokens
 
@@ -2611,9 +2763,12 @@ logged; only its SHA-256 hash is kept.
 
 **Body**
 
-| Field  | Type   | Required | Notes                                                 |
-| ------ | ------ | -------- | ----------------------------------------------------- |
-| `name` | string | yes      | A label for the token. 1–80 characters after trimming |
+| Field       | Type    | Required | Notes                                                                                                       |
+| ----------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `name`      | string  | yes      | A label for the token. 1–80 characters after trimming                                                       |
+| `readOnly`  | boolean | no       | Reject every non-GET/HEAD/OPTIONS request with `403`. Only valid with the default full scope                |
+| `scope`     | string  | no       | `full` (default), `upload` (only `POST /api/files` and version uploads) or `webdav` (only the DAV listener) |
+| `expiresAt` | string  | no       | ISO-8601 expiry; must be in the future. Expired tokens return `401`                                         |
 
 **Request**
 
@@ -2630,6 +2785,9 @@ curl -sS -X POST https://omnicloud.example.com/api/tokens \
 {
   "id": "tz4a98xxat96iws9zmbrgj60",
   "name": "CI runner",
+  "readOnly": false,
+  "scope": "full",
+  "expiresAt": null,
   "createdAt": "2026-08-01T10:00:00.000Z",
   "token": "0kP3sZQvJ1r8Yx2N7mQaBd4EfGh6IjKlMnOpQrStUv"
 }
@@ -2637,8 +2795,8 @@ curl -sS -X POST https://omnicloud.example.com/api/tokens \
 
 Send the secret as `Authorization: Bearer <token>`.
 
-**Errors**: `400 INVALID_REQUEST` (missing name, or a name outside 1–80
-characters).
+**Errors**: `400 INVALID_REQUEST` (missing name, a name outside 1–80
+characters, an unknown scope, or `readOnly` combined with a narrow scope).
 
 ### `GET /api/tokens`
 
@@ -2662,6 +2820,8 @@ curl -sS https://omnicloud.example.com/api/tokens \
     {
       "id": "tz4a98xxat96iws9zmbrgj60",
       "name": "CI runner",
+      "readOnly": false,
+      "scope": "full",
       "createdAt": "2026-08-01T10:00:00.000Z",
       "lastUsedAt": "2026-08-02T09:00:00.000Z",
       "revokedAt": null

@@ -9,8 +9,10 @@ import type {
   TransferControl,
 } from "./provider";
 import {
+  DownloadFailedError,
   IntegrityCheckError,
   OperationCancelledError,
+  StorageUnavailableError,
   UploadFailedError,
   mapProviderError,
 } from "../errors";
@@ -57,11 +59,6 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new OperationCancelledError();
 }
 
-/** Converts a Buffer into a single-chunk Readable. */
-function bufferToStream(data: Buffer): Readable {
-  return Readable.from([data]);
-}
-
 /**
  * Sits between the application and the raw StorageProvider and adds the
  * cross-cutting guarantees: SHA-256 integrity, streaming, progress reporting,
@@ -95,7 +92,8 @@ export class StorageEngine {
       const stored = await this.withRetry(
         () => this.provider.put(input, control),
         control,
-        (error) => new UploadFailedError("Upload failed", error),
+        // Preserve cancellation and auth errors instead of reporting 502.
+        (error) => mapProviderError("Upload failed", error),
       );
       this.assertStoredSize(stored.size, size);
       control.onProgress?.({ transferred: size, total: size, percent: 100 });
@@ -110,7 +108,7 @@ export class StorageEngine {
     const stored = await this.withRetry(
       () => this.provider.put(input, control),
       control,
-      (error) => new UploadFailedError("Upload failed", error),
+      (error) => mapProviderError("Upload failed", error),
     );
     this.assertStoredSize(stored.size, size);
     control.onProgress?.({ transferred: size, total: size, percent: 100 });
@@ -134,7 +132,7 @@ export class StorageEngine {
     return this.withRetry(
       () => this.provider.get(ref, control),
       control,
-      (error) => mapProviderError("Download failed", error),
+      (error) => mapProviderError("Download failed", error, DownloadFailedError),
     );
   }
 
@@ -160,7 +158,7 @@ export class StorageEngine {
     const source = await this.withRetry(
       () => this.provider.getStream(ref, control),
       control,
-      (error) => mapProviderError("Download failed", error),
+      (error) => mapProviderError("Download failed", error, DownloadFailedError),
     );
 
     const hash = createHash("sha256");
@@ -187,6 +185,25 @@ export class StorageEngine {
   }
 
   /**
+   * Streams a byte range without checksum verification.
+   *
+   * Only safe for plaintext previews: a partial read cannot be checked against
+   * the whole-object SHA-256. Encrypted files must be fetched in full.
+   */
+  async downloadStreamRange(
+    ref: StoredRef,
+    start: number,
+    length: number,
+    control: TransferControl = {},
+  ): Promise<Readable> {
+    return this.withRetry(
+      () => this.provider.getStream(ref, control, { start, length }),
+      control,
+      (error) => mapProviderError("Download failed", error, DownloadFailedError),
+    );
+  }
+
+  /**
    * Reads the object in chunks and returns its SHA-256 and byte length, without
    * holding the whole object in memory. Used to adopt an object whose checksum is
    * not yet known, such as an orphan found by reconciliation.
@@ -198,7 +215,7 @@ export class StorageEngine {
     const source = await this.withRetry(
       () => this.provider.getStream(ref, control),
       control,
-      (error) => mapProviderError("Download failed", error),
+      (error) => mapProviderError("Download failed", error, DownloadFailedError),
     );
     const hash = createHash("sha256");
     let size = 0;
@@ -214,7 +231,7 @@ export class StorageEngine {
     await this.withRetry(
       () => this.provider.delete(ref),
       {},
-      (error) => mapProviderError("Delete failed", error),
+      (error) => mapProviderError("Delete failed", error, StorageUnavailableError),
     );
   }
 
@@ -222,7 +239,7 @@ export class StorageEngine {
     try {
       return await this.provider.exists(ref);
     } catch (error) {
-      throw mapProviderError("Storage lookup failed", error);
+      throw mapProviderError("Storage lookup failed", error, StorageUnavailableError);
     }
   }
 
@@ -231,7 +248,7 @@ export class StorageEngine {
     try {
       return await this.provider.listObjects(limit);
     } catch (error) {
-      throw mapProviderError("Storage listing failed", error);
+      throw mapProviderError("Storage listing failed", error, StorageUnavailableError);
     }
   }
 
@@ -241,7 +258,7 @@ export class StorageEngine {
     try {
       return await this.provider.findByCaption(caption, size);
     } catch (error) {
-      throw mapProviderError("Storage lookup failed", error);
+      throw mapProviderError("Storage lookup failed", error, StorageUnavailableError);
     }
   }
 
@@ -249,7 +266,7 @@ export class StorageEngine {
     try {
       return await this.provider.stat(ref);
     } catch (error) {
-      throw mapProviderError("Storage lookup failed", error);
+      throw mapProviderError("Storage lookup failed", error, StorageUnavailableError);
     }
   }
 
@@ -293,5 +310,3 @@ export class StorageEngine {
     throw wrapError(lastError);
   }
 }
-
-export { bufferToStream };

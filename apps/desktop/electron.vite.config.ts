@@ -1,9 +1,11 @@
 import { defineConfig } from "electron-vite";
 
+// Build into "out", not "dist": electron-builder writes its artifacts to
+// "release" and must never pick up its own previous output through "files".
 export default defineConfig({
   main: {
     build: {
-      outDir: "dist/main",
+      outDir: "out/main",
       rollupOptions: {
         input: {
           main: "main.ts",
@@ -13,10 +15,11 @@ export default defineConfig({
   },
   preload: {
     build: {
-      outDir: "dist/preload",
+      outDir: "out/preload",
       rollupOptions: {
         input: {
           preload: "preload.ts",
+          "setup-preload": "setup-preload.ts",
         },
       },
     },
@@ -24,10 +27,10 @@ export default defineConfig({
   renderer: {
     root: ".",
     build: {
-      outDir: "dist/renderer",
+      outDir: "out/renderer",
       rollupOptions: {
         input: {
-          index: "index.html",
+          setup: "setup.html",
         },
       },
     },

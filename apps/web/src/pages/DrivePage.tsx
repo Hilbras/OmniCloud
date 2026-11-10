@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CloudUpload,
   FolderInput,
+  FolderUp,
   FolderPlus,
   LockKeyhole,
   Star,
@@ -17,8 +18,10 @@ import { api, ERROR_CODES, errorMessage, isApiError } from "../api/client";
 import { downloadFile } from "../api/download";
 import { breadcrumbPath, buildFolderTree } from "../lib/tree";
 import { fileToItem, folderToItem, isViewMode, itemKeyOf } from "../lib/drive";
+import { directorySegments } from "../lib/folder-upload";
+import type { DraggedItem } from "../lib/drag-move";
 import type { DriveItem, ViewMode } from "../lib/drive";
-import { TREE_QUERY_KEY } from "../lib/queries";
+import { TREE_QUERY_KEY, invalidateDriveQueries } from "../lib/queries";
 import { useDriveShell } from "../hooks/useDriveShell";
 import { useInfiniteList } from "../hooks/useInfiniteList";
 import { useItemActions } from "../hooks/useItemActions";
@@ -52,7 +55,25 @@ export default function DrivePage() {
   const [sort, setSort] = useState<SortField>("name");
   const [order, setOrder] = useState<SortOrder>("asc");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const queryClient = useQueryClient();
   const [detailsItem, setDetailsItem] = useState<DriveItem | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+
+  // `omnicloud://file/<id>` opens the drive with this file's details.
+  useEffect(() => {
+    const fileId = searchParams.get("file");
+    if (fileId === null || fileId === "") return;
+    let cancelled = false;
+    void api.files
+      .get(fileId)
+      .then(({ file }) => {
+        if (!cancelled) setDetailsItem(fileToItem(file));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
   const selection = useSelection();
   const toast = useToast();
 
@@ -61,6 +82,9 @@ export default function DrivePage() {
 
   useEffect(() => {
     setActiveFolderId(folderId);
+    // Leaving the drive must clear the shell's active folder, or a later page
+    // uploads into the folder the user was last browsing.
+    return () => setActiveFolderId(null);
   }, [folderId, setActiveFolderId]);
 
   const treeQuery = useQuery({ queryKey: TREE_QUERY_KEY, queryFn: api.folders.tree });
@@ -152,6 +176,7 @@ export default function DrivePage() {
 
   const contentError = folders.error ?? files.error;
   const loading = folders.isLoading || files.isLoading;
+  const offlineSnapshot = folders.isOfflineSnapshot || files.isOfflineSnapshot;
 
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
     if (!hasDraggedFiles(event)) return;
@@ -178,6 +203,40 @@ export default function DrivePage() {
     setDragging(false);
     const dropped = Array.from(event.dataTransfer.files);
     if (dropped.length > 0) uploads.enqueue(dropped, folderId);
+  };
+
+  const moveInto = async (targetFolderId: string, dragged: DraggedItem): Promise<void> => {
+    if (dragged.id === targetFolderId) return;
+    try {
+      if (dragged.kind === "file") await api.files.move(dragged.id, targetFolderId);
+      else await api.folders.move(dragged.id, targetFolderId);
+      invalidateDriveQueries(queryClient);
+      toast.success("Moved");
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not move the item"));
+    }
+  };
+
+  const uploadFolder = async (files: File[]): Promise<void> => {
+    const cache = new Map<string, string | null>([["", folderId]]);
+    for (const file of files) {
+      const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+      const segments = directorySegments(relative ?? file.name);
+      let key = "";
+      let parentId = folderId;
+      for (const segment of segments) {
+        key = key === "" ? segment : `${key}/${segment}`;
+        let id = cache.get(key);
+        if (id === undefined) {
+          const created = await api.folders.create(segment, parentId);
+          id = created.folder.id;
+          cache.set(key, id);
+        }
+        parentId = id ?? null;
+      }
+      uploads.enqueue([file], parentId);
+    }
+    invalidateDriveQueries(queryClient);
   };
 
   return (
@@ -208,6 +267,29 @@ export default function DrivePage() {
                   setOrder(nextOrder);
                 }}
               />
+              <input
+                ref={folderInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                aria-hidden="true"
+                tabIndex={-1}
+                {...{ webkitdirectory: "" }}
+                onChange={(event) => {
+                  const input = event.currentTarget;
+                  const files = Array.from(input.files ?? []);
+                  input.value = "";
+                  if (files.length > 0) void uploadFolder(files);
+                }}
+              />
+              <button
+                type="button"
+                className="btn-secondary hidden sm:inline-flex"
+                onClick={() => folderInputRef.current?.click()}
+              >
+                <FolderUp className="h-4 w-4" aria-hidden="true" />
+                Folder
+              </button>
               <button
                 type="button"
                 className="btn-secondary sm:hidden"
@@ -219,6 +301,13 @@ export default function DrivePage() {
             </>
           }
         />
+
+        {offlineSnapshot ? (
+          <p role="status" className="notice">
+            Offline — showing the last listing saved on this device. Opening, uploading and moving
+            items will fail until the connection returns.
+          </p>
+        ) : null}
 
         {storageUnavailable ? (
           <p role="alert" className="notice notice-error">
@@ -236,10 +325,11 @@ export default function DrivePage() {
               actions.handleAction(item.kind === "folder" ? "open" : "download", item)
             }
             onAction={actions.handleAction}
+            onMoveInto={(targetFolderId, dragged) => void moveInto(targetFolderId, dragged)}
             onContextMenu={setContextMenu}
             loading={loading}
             error={
-              storageUnavailable || contentError === null
+              storageUnavailable || offlineSnapshot || contentError === null
                 ? null
                 : errorMessage(contentError, "Could not load this folder.")
             }
@@ -247,7 +337,7 @@ export default function DrivePage() {
               folders.refetch();
               files.refetch();
             }}
-            hasMore={folders.hasMore || files.hasMore}
+            hasMore={!offlineSnapshot && (folders.hasMore || files.hasMore)}
             loadingMore={folders.isLoadingMore || files.isLoadingMore}
             onLoadMore={() => {
               if (folders.hasMore) folders.loadMore();

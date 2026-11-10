@@ -7,7 +7,7 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { DomainError, ForbiddenError, PayloadTooLargeError } from "@omnicloud/core";
+import { DomainError, ForbiddenError } from "@omnicloud/core";
 import type { ErrorCode } from "@omnicloud/shared";
 import type { Container } from "./container";
 import { registerAuthHook } from "./auth";
@@ -17,6 +17,8 @@ import { registerAuthRoutes } from "./routes/auth";
 import { registerFileRoutes } from "./routes/files";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerCollectionRoutes } from "./routes/collections";
+import { registerShareRoutes } from "./routes/shares";
+import { registerKeyPairingRoutes } from "./routes/key-pairing";
 import { registerStorageRoutes } from "./routes/storage";
 import { registerTokenRoutes } from "./routes/tokens";
 import { registerUpdateRoutes } from "./routes/update";
@@ -61,6 +63,27 @@ export async function createApp(
   app.addHook("onRequest", async (request, reply) => {
     attachRequestId(request, reply);
     applySecurityHeaders(reply);
+
+    // Credentialed CORS for the documented split-origin deployment. Only the
+    // configured allowlist is echoed; every other origin gets no CORS header
+    // and is still blocked by the browser.
+    const origin = request.headers.origin;
+    if (origin !== undefined && container.config.allowedOrigins.includes(origin)) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Access-Control-Allow-Credentials", "true");
+      reply.header("Vary", "Origin");
+      if (request.method === "OPTIONS") {
+        reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+        reply.header(
+          "Access-Control-Allow-Headers",
+          "content-type, authorization, idempotency-key, x-request-id",
+        );
+        reply.header("Access-Control-Max-Age", "600");
+        return reply.code(204).send();
+      }
+    } else if (request.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
   });
 
   app.addHook("preHandler", async (request) => {
@@ -109,9 +132,11 @@ export async function createApp(
   registerFileRoutes(app, container);
   registerFolderRoutes(app, container);
   registerCollectionRoutes(app, container);
+  registerShareRoutes(app, container);
+  registerKeyPairingRoutes(app, container);
   registerStorageRoutes(app, container);
   registerTokenRoutes(app, container);
-  registerUpdateRoutes(app, options.updateChecker ?? null);
+  registerUpdateRoutes(app, options.updateChecker ?? null, container.config.updateCheckEnabled);
 
   // ── Serve the built web application (single-port deployments) ─────────────
   const webDistDir = container.config.webDistDir;
@@ -145,5 +170,3 @@ export async function createApp(
 
   return app;
 }
-
-export { PayloadTooLargeError };

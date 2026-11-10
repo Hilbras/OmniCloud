@@ -7,6 +7,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // The desktop app ships for Linux (x64/arm64), macOS (x64/arm64) and
+  // Windows (x64); the client must carry an engine for each.
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "linux-arm64-openssl-1.1.x", "darwin", "darwin-arm64", "windows"]
 }
 
 datasource db {
@@ -35,6 +38,8 @@ model User {
   browserSessions  BrowserSession[]
   apiTokens        ApiToken[]
   uploadOperations UploadOperation[]
+  shareLinks       ShareLink[]
+  keyPairings      KeyPairing[]
 }
 
 /// A signed-in browser session. Only the SHA-256 of the cookie token is stored,
@@ -75,6 +80,7 @@ model UploadOperation {
 
   @@unique([userId, operationId])
   @@index([status, updatedAt])
+  @@index([userId, status])
 }
 
 /// Personal API token for scripts and the SDK. Only a SHA-256 hash of the secret
@@ -85,6 +91,10 @@ model ApiToken {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   tokenHash  String    @unique
+  readOnly   Boolean   @default(false)
+  /// "full" | "upload" | "webdav" — narrows what the token may do.
+  scope      String    @default("full")
+  expiresAt  DateTime?
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
   lastUsedAt DateTime?
@@ -114,8 +124,10 @@ model Storage {
   telegramAccessHash BigInt
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  files              File[]
+  folders            Folder[]
 
-  @@unique([userId, provider])
+  @@index([userId, provider])
 }
 
 /// Folders are virtual OmniCloud objects — they have no physical
@@ -130,6 +142,10 @@ model Folder {
   name         String
   starred      Boolean   @default(false)
   deletedAt    DateTime?
+  /// Storage target for new files in this folder; null inherits the parent or
+  /// the account default. Lets one account spread uploads over several channels.
+  storageId    String?
+  storage      Storage?  @relation(fields: [storageId], references: [id], onDelete: SetNull)
   /// Groups everything one trash operation moved, for exact restore.
   trashBatchId String?
   createdAt    DateTime  @default(now())
@@ -159,6 +175,9 @@ model File {
   mimeType          String
   sha256            String
   telegramMessageId BigInt
+  /// Channel that holds this file's objects; null = the account default.
+  storageId         String?
+  storage           Storage? @relation(fields: [storageId], references: [id], onDelete: SetNull)
   /// Opaque E2EE metadata (OCE1) for the current version; null = plaintext.
   /// The server never interprets these fields.
   encryptionFormat  String?
@@ -177,7 +196,8 @@ model File {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  versions FileVersion[]
+  versions    FileVersion[]
+  shareLinks  ShareLink[]
 
   @@index([userId, folderId, deletedAt])
   /// Leading folderId index: enforces the relation and serves folder-scoped deletes.
@@ -216,6 +236,48 @@ model FileVersion {
   @@unique([fileId, versionNumber])
   @@index([fileId])
   @@index([userId])
+}
+
+
+/// Public download link for one file. Only the SHA-256 of the link token is
+/// stored; the token itself is shown once. Password hashes use scrypt.
+model ShareLink {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId        String
+  file          File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  passwordHash  String?
+  sharedWrappedKey String?
+  expiresAt     DateTime?
+  maxDownloads  Int?
+  downloadCount Int       @default(0)
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+
+/// One-time encrypted root-key transfer to a second device. The payload is
+/// wrapped client-side with a secret that lives only in the pairing link
+/// fragment; the server never sees the URK.
+model KeyPairing {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wrappedUrk  String
+  fileId      String
+  versionId   String
+  keyEpoch    Int
+  expiresAt   DateTime
+  claimedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 /// Structured activity/audit events. Metadata never contains credentials.

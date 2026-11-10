@@ -120,6 +120,10 @@ describe("moving a file to a name the server cannot read", () => {
 
     expect(result.status).toBe("migrated");
     expect(result.name).toBe("report.pdf");
+    // The caller builds the name-index entry from these; without them the real
+    // name would be lost as soon as the page reloads.
+    expect(result.cryptoFileId).toMatch(/^[0-9a-f]+$/);
+    expect(result.cryptoVersionId).toMatch(/^[0-9a-f]+$/);
 
     // The order matters: the old version is removed only after the upload and
     // the verification.
@@ -271,5 +275,18 @@ describe("the name a rename sends to the server", () => {
     // the one thing the format exists to prevent.
     const placeholder = "om_0123456789abcdef0123456789abcdef";
     expect(serverSideNameFor(driveItem("OCE2", placeholder), "new.pdf")).toBe(placeholder);
+  });
+
+  it("does not send the substituted real name for an OCE2 item", () => {
+    const placeholder = "om_0123456789abcdef0123456789abcdef";
+    // fileToItem replaces the display name with the indexed real name; the
+    // original server name is kept separately.
+    const item = { ...driveItem("OCE2", "real.pdf"), serverName: placeholder };
+    expect(serverSideNameFor(item, "new.pdf")).toBe(placeholder);
+  });
+
+  it("refuses to guess when the placeholder is unavailable", () => {
+    const item = { ...driveItem("OCE2", "real.pdf"), serverName: undefined };
+    expect(() => serverSideNameFor(item, "new.pdf")).toThrow(/placeholder/i);
   });
 });

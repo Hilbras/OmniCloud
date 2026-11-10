@@ -2,13 +2,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { onUnauthorized } from "./api/client";
 import DriveLayout from "./components/DriveLayout";
 import { useMe } from "./hooks/useMe";
 import { ME_QUERY_KEY, SIGNED_OUT_SESSION } from "./lib/queries";
+import { clear as clearCryptoSession } from "./lib/crypto-session";
+import { clearNameIndex, forgetLoadedIndex } from "./lib/name-index-session";
+import { clearThumbnails } from "./lib/thumbnails";
+import { clearPersistedThumbnails } from "./lib/thumbnail-cache";
+import { clearOfflineFiles } from "./lib/offline-files";
 const DrivePage = lazy(() => import("./pages/DrivePage"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
+const DownloadPage = lazy(() => import("./pages/DownloadPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RecentPage = lazy(() => import("./pages/RecentPage"));
 const StarredPage = lazy(() => import("./pages/StarredPage"));
@@ -18,6 +24,20 @@ const TokensPage = lazy(() =>
 );
 const TrashPage = lazy(() => import("./pages/TrashPage"));
 const StorageInit = lazy(() => import("./pages/StorageInit"));
+const SharePage = lazy(() => import("./pages/SharePage"));
+const PairPage = lazy(() => import("./pages/PairPage").then((m) => ({ default: m.PairPage })));
+
+function ShareRoute() {
+  const { token } = useParams<{ token: string }>();
+  if (!token) return <Navigate to="/" replace />;
+  return <SharePage token={token} />;
+}
+
+function PairRoute() {
+  const { id } = useParams<{ id: string }>();
+  if (!id) return <Navigate to="/" replace />;
+  return <PairPage id={id} />;
+}
 
 function FullPageSpinner() {
   return (
@@ -35,7 +55,7 @@ function FullPageSpinner() {
 function RequireAuth({ children }: { children: ReactNode }) {
   const me = useMe();
   if (me.isPending) return <FullPageSpinner />;
-  if (me.data === undefined || me.data.user === null) return <Navigate to="/" replace />;
+  if (me.data === undefined || me.data.user === null) return <Navigate to="/login" replace />;
   if (me.data.storage === null) return <StorageInit />;
   return children;
 }
@@ -47,6 +67,12 @@ export default function App() {
   useEffect(
     () =>
       onUnauthorized(() => {
+        clearCryptoSession();
+        clearNameIndex();
+        forgetLoadedIndex();
+        clearThumbnails();
+        void clearPersistedThumbnails();
+        void clearOfflineFiles();
         queryClient.setQueryData(ME_QUERY_KEY, SIGNED_OUT_SESSION);
         queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "me" });
       }),
@@ -57,8 +83,18 @@ export default function App() {
     <Suspense fallback={<FullPageSpinner />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/download" element={<DownloadPage />} />
         <Route path="/welcome" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/s/:token" element={<ShareRoute />} />
+        <Route
+          path="/pair/:id"
+          element={
+            <RequireAuth>
+              <PairRoute />
+            </RequireAuth>
+          }
+        />
         <Route
           element={
             <RequireAuth>

@@ -53,6 +53,14 @@ interface ParsedArgs {
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
+  // Global flags are handled before command selection; otherwise `--version`
+  // becomes an unknown option of the default `start` command.
+  if (argv.includes("--help") || argv.includes("-h")) {
+    return { command: "help", migrate: false, envFile: null, open: true };
+  }
+  if (argv.includes("--version") || argv.includes("-v")) {
+    return { command: "version", migrate: false, envFile: null, open: true };
+  }
   const [first, ...rest] = argv;
   const command = first === undefined || first.startsWith("-") ? "start" : first;
   const options = first === undefined || first.startsWith("-") ? argv : rest;
@@ -150,9 +158,14 @@ function openUrl(url: string): void {
   child.unref();
 }
 
-async function waitForServer(url: string, timeoutMs: number): Promise<boolean> {
+async function waitForServer(
+  url: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (signal?.aborted) return false;
     try {
       const response = await fetch(url);
       if (response.ok) return true;
@@ -195,7 +208,15 @@ async function start(args: ParsedArgs, env: NodeJS.ProcessEnv): Promise<void> {
   process.on("SIGTERM", forward("SIGTERM"));
 
   if (args.open) {
-    const ready = await waitForServer(`${url}/api/health`, 60_000);
+    const stopWaiting = new AbortController();
+    const onExit = (): void => stopWaiting.abort();
+    server.once("exit", onExit);
+    let ready: boolean;
+    try {
+      ready = await waitForServer(`${url}/api/health/ready`, 60_000, stopWaiting.signal);
+    } finally {
+      server.off("exit", onExit);
+    }
     if (ready) {
       process.stdout.write(`\nOmniCloud is running at ${url}\n`);
       openUrl(url);

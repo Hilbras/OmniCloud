@@ -27,6 +27,16 @@ export type RepairAction =
     }
   | {
       id: string;
+      kind: "remove-dangling-version";
+      messageId: number;
+      fileId: string;
+      versionId: string;
+      recordedBy: "version";
+      reason: string;
+      destructive: false;
+    }
+  | {
+      id: string;
       kind: "adopt-unknown";
       messageId: number;
       sizeBytes: number | null;
@@ -43,16 +53,37 @@ export interface RepairPlan {
 export function planRepairs(report: ReconciliationReport): RepairPlan {
   const actions: RepairAction[] = [];
   for (const finding of report.dangling) {
-    actions.push({
-      id: `detach-${finding.recordedBy}-${finding.messageId}`,
-      kind: "detach-dangling",
-      messageId: finding.messageId,
-      recordedBy: finding.recordedBy,
-      reason:
-        "A record points at a Telegram message that is no longer in the channel. " +
-        "Detaching marks the record as missing; it does not delete it.",
-      destructive: false,
-    });
+    if (finding.recordedBy === "file") {
+      actions.push({
+        id: `detach-file-${finding.messageId}`,
+        kind: "detach-dangling",
+        messageId: finding.messageId,
+        recordedBy: "file",
+        reason:
+          "A record points at a Telegram message that is no longer in the channel. " +
+          "Detaching marks the record as missing; it does not delete it.",
+        destructive: false,
+      });
+    } else if (
+      finding.recordedBy === "version" &&
+      finding.fileId !== undefined &&
+      finding.versionId !== undefined
+    ) {
+      actions.push({
+        id: `remove-version-${finding.versionId}`,
+        kind: "remove-dangling-version",
+        messageId: finding.messageId,
+        fileId: finding.fileId,
+        versionId: finding.versionId,
+        recordedBy: "version",
+        reason:
+          "A historical version points at a Telegram message that is gone. Removing it " +
+          "deletes only that version row; the current file and its object are untouched.",
+        destructive: false,
+      });
+    }
+    // Upload-operation findings have no safe repair here. They stay visible in
+    // the report rather than being offered as an action that always fails.
   }
   for (const finding of report.unknown) {
     actions.push({

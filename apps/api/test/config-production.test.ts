@@ -28,6 +28,25 @@ describe("production configuration", () => {
     expect(config.encryptionKey).toBeNull();
   });
 
+  it("defaults cookies to Secure in production", () => {
+    const config = loadConfig({
+      ...base,
+      NODE_ENV: "production",
+      OMNICLOUD_ENCRYPTION_KEY: "a".repeat(64),
+    } as never);
+    expect(config.cookieSecure).toBe(true);
+  });
+
+  it("allows an explicit plain-HTTP opt-out", () => {
+    const config = loadConfig({
+      ...base,
+      NODE_ENV: "production",
+      OMNICLOUD_ENCRYPTION_KEY: "a".repeat(64),
+      COOKIE_SECURE: "false",
+    } as never);
+    expect(config.cookieSecure).toBe(false);
+  });
+
   it("an empty encryption key counts as missing", () => {
     expect(() =>
       loadConfig({ ...base, NODE_ENV: "production", OMNICLOUD_ENCRYPTION_KEY: "" } as never),

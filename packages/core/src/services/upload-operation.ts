@@ -16,26 +16,6 @@
 export type UploadOperationStatus =
   "PENDING" | "UPLOADING" | "COMMITTING" | "UNKNOWN" | "COMPLETED" | "FAILED";
 
-const TRANSITIONS: Record<UploadOperationStatus, readonly UploadOperationStatus[]> = {
-  PENDING: ["UPLOADING", "FAILED"],
-  UPLOADING: ["COMMITTING", "FAILED", "UNKNOWN"],
-  // UNKNOWN is resolved, never re-uploaded: the object is either found (committed) or
-  // confirmed absent (failed). It is not a state a new request may claim.
-  UNKNOWN: ["COMMITTING", "FAILED"],
-  COMMITTING: ["COMPLETED", "UPLOADING"],
-  COMPLETED: [],
-  FAILED: [],
-};
-
-export function canTransition(from: UploadOperationStatus, to: UploadOperationStatus): boolean {
-  return TRANSITIONS[from].includes(to);
-}
-
-/** A completed operation is final: replays return its result and never re-upload. */
-export function isTerminal(status: UploadOperationStatus): boolean {
-  return status === "COMPLETED" || status === "FAILED";
-}
-
 /** Operation ids are client-supplied; accept only a bounded, URL-safe token. */
 export function isValidOperationId(id: string): boolean {
   return /^[A-Za-z0-9_-]{8,64}$/.test(id);

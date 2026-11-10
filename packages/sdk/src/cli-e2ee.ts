@@ -7,6 +7,7 @@ import {
   openRecoveryBlob,
   parseRecoveryCode,
 } from "@omnicloud/crypto";
+import { isEncryptedFormat } from "@omnicloud/shared";
 import { OmniCloudClient } from "./client";
 import {
   bytesToHex,
@@ -165,7 +166,7 @@ export async function runKeyGenerate(argv: string[], ctx: CliContext): Promise<n
   const urk = createUrk();
   const fingerprint = keyFingerprint(urk);
   if (wantPersist) {
-    writeKeyfile(keyfile!, urk);
+    writeKeyfile(keyfile!, urk, { force: parsed.flags.force === true });
     ctx.io.out(
       `Root key written to ${resolvePath(keyfile!)} (mode 600).\n` +
         `Fingerprint: ${fingerprint}\n` +
@@ -292,7 +293,7 @@ export async function runRecoveryRestore(argv: string[], ctx: CliContext): Promi
 
   const fingerprint = keyFingerprint(urk);
   if (wantPersist) {
-    writeKeyfile(keyfile!, urk);
+    writeKeyfile(keyfile!, urk, { force: parsed.flags.force === true });
     ctx.io.out(
       `Root key restored to ${resolvePath(keyfile!)} (mode 600).\nFingerprint: ${fingerprint}\n`,
     );
@@ -369,12 +370,12 @@ export async function runDownload(argv: string[], ctx: CliContext): Promise<numb
     // Check the format BEFORE asking for key material, so a legacy file fails
     // fast instead of after the user has typed a secret.
     const meta = await client.files.get(id);
-    if ((meta.encryptionFormat ?? null) !== "OCE1") {
+    if (!isEncryptedFormat(meta.encryptionFormat)) {
       const seen = meta.encryptionFormat ?? null;
       throw new Error(
         seen === null
-          ? `File ${id} is not encrypted (stored as plaintext); --decrypt only opens OCE1-encrypted files. Migrate it first: omnicloud migrate ${id}`
-          : `File ${id} has unsupported encryptionFormat "${seen}"; --decrypt only opens OCE1-encrypted files`,
+          ? `File ${id} is not encrypted (stored as plaintext); --decrypt only opens OCE1/OCE2-encrypted files. Migrate it first: omnicloud migrate ${id}`
+          : `File ${id} has unsupported encryptionFormat "${seen}"; --decrypt only opens OCE1/OCE2-encrypted files`,
       );
     }
     const urk = await resolveUrk(options);
@@ -635,7 +636,8 @@ function hasPositionalTarget(args: string[]): boolean {
     const eq = raw.indexOf("=");
     const name = raw.startsWith("--") && eq !== -1 ? raw.slice(0, eq) : raw;
     if (MIGRATE_VALUE_OPTIONS.includes(name)) {
-      i++;
+      // `--flag=value` carries its value inline; do not consume the next word.
+      if (!(raw.startsWith("--") && eq !== -1)) i++;
       continue;
     }
     if (MIGRATE_FLAG_OPTIONS.includes(name)) continue;

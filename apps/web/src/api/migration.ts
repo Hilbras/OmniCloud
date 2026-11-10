@@ -1,7 +1,7 @@
 import { decryptFile, encryptFile, readHeader, sha256Hex } from "@omnicloud/crypto";
-import type { FileDTO, FileVersionDTO } from "@omnicloud/shared";
+import type { FileVersionDTO } from "@omnicloud/shared";
 import { generateOpaqueName } from "@omnicloud/shared";
-import { base64ToBytes, bytesToBase64, toArrayBuffer } from "../lib/bytes";
+import { base64ToBytes, bytesToBase64, bytesToHex, toArrayBuffer } from "../lib/bytes";
 import { ApiError, api, errorMessage } from "./client";
 import { fetchFileBytes } from "./download";
 import { replaceEncryptedFile } from "./upload";
@@ -96,7 +96,7 @@ export async function migrateLegacyFile(fileId: string, urk: Uint8Array): Promis
         keyEpoch: encrypted.keyEpoch,
       },
     );
-    if (uploaded.encryptionFormat !== OCE1) {
+    if (uploaded.file.encryptionFormat !== OCE1) {
       throw new ApiError(
         0,
         "MIGRATION_UPLOAD_FAILED",
@@ -161,6 +161,11 @@ export interface OpaqueNameResult {
   fileId: string;
   /** The name the user knows the file by, which the server never sees. */
   name: string | null;
+  /** Metadata recovered while verifying, needed to build the name-index entry. */
+  mimeType?: string | null;
+  description?: string | null;
+  cryptoFileId?: string;
+  cryptoVersionId?: string;
   error: string | null;
 }
 
@@ -217,6 +222,8 @@ export async function migrateToOpaqueName(
   let envelope: Uint8Array;
   let plaintext: Uint8Array;
   let realName: string;
+  let realMimeType: string | null = null;
+  let realDescription: string | null = null;
   try {
     envelope = await fetchFileBytes(fileId);
     const header = readHeader(envelope);
@@ -231,6 +238,8 @@ export async function migrateToOpaqueName(
     });
     plaintext = restored.plaintext;
     realName = restored.metadata.name ?? file.name;
+    realMimeType = restored.metadata.mimeType ?? null;
+    realDescription = restored.metadata.description ?? null;
   } catch (error) {
     return {
       status: "failed",
@@ -243,13 +252,15 @@ export async function migrateToOpaqueName(
   // The same ciphertext, the same wrapped key and metadata, under an opaque
   // name and the OCE2 format.
   const opaqueName = generateOpaqueName();
-  let uploaded: FileDTO;
+  let uploaded: Awaited<ReturnType<typeof replaceEncryptedFile>>;
   try {
     uploaded = await replaceEncryptedFile(fileId, new Blob([toArrayBuffer(envelope)]), opaqueName, {
       format: OCE2,
       wrappedKey,
       metadataBlob,
       keyEpoch: file.keyEpoch ?? 0,
+      cryptoFileId: bytesToHex(readHeader(envelope).fileId),
+      cryptoVersionId: bytesToHex(readHeader(envelope).versionId),
     });
   } catch (error) {
     return {
@@ -290,7 +301,7 @@ export async function migrateToOpaqueName(
   }
 
   // Verified: the old version's object can go.
-  if (current.id !== uploaded.currentVersionId) {
+  if (current.id !== uploaded.file.currentVersionId) {
     try {
       await api.files.deleteVersion(fileId, current.id);
     } catch (error) {
@@ -301,10 +312,27 @@ export async function migrateToOpaqueName(
         status: "migrated",
         fileId,
         name: realName,
+        mimeType: realMimeType,
+        description: realDescription,
+        ...(uploaded.cryptoFileId !== undefined ? { cryptoFileId: uploaded.cryptoFileId } : {}),
+        ...(uploaded.cryptoVersionId !== undefined
+          ? { cryptoVersionId: uploaded.cryptoVersionId }
+          : {}),
         error: `The file now has an opaque name, but the old version's object could not be removed: ${errorMessage(error, "unknown error")}`,
       };
     }
   }
 
-  return { status: "migrated", fileId, name: realName, error: null };
+  return {
+    status: "migrated",
+    fileId,
+    name: realName,
+    mimeType: realMimeType,
+    description: realDescription,
+    ...(uploaded.cryptoFileId !== undefined ? { cryptoFileId: uploaded.cryptoFileId } : {}),
+    ...(uploaded.cryptoVersionId !== undefined
+      ? { cryptoVersionId: uploaded.cryptoVersionId }
+      : {}),
+    error: null,
+  };
 }

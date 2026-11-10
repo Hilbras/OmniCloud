@@ -54,6 +54,16 @@ describe("matching a query against an item", () => {
     ).toBe(true);
   });
 
+  it("matches type:other only for unknown categories, like the server", () => {
+    expect(matchesListQuery(item(), { ...active, type: "other" })).toBe(false);
+    expect(
+      matchesListQuery(item({ name: "a.qqq", mimeType: "application/octet-stream" }), {
+        ...active,
+        type: "other",
+      }),
+    ).toBe(true);
+  });
+
   it("matches an exact MIME type", () => {
     expect(matchesListQuery(item(), { ...active, type: "application/pdf" })).toBe(true);
     expect(matchesListQuery(item(), { ...active, type: "application/zip" })).toBe(false);

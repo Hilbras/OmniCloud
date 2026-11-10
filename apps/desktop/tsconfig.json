@@ -1,19 +1,18 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "lib": ["ES2022"],
-    "outDir": "../.output/desktop",
-    "rootDir": ".",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": false,
-    "sourceMap": true
+    "noEmit": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "electron"]
   },
-  "include": ["main.ts", "preload.ts"],
+  "include": [
+    "main.ts",
+    "preload.ts",
+    "setup.ts",
+    "setup-preload.ts",
+    "desktop-config.ts",
+    "updater.ts",
+    "deep-link.ts"
+  ],
   "exclude": ["node_modules"]
 }

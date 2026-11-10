@@ -175,6 +175,7 @@ export default function RecentPage() {
       <DetailsPanel
         item={detailsItem}
         onClose={() => setDetailsItem(null)}
+        showReplace={false}
         onAction={(action, item) => {
           if (action === "download") {
             void downloadFile(item.id, item.file).catch((error) =>

@@ -55,11 +55,26 @@ const RECONNECT_COOLDOWN_MS = 5_000;
 export class TelegramClientManager {
   private connections = new Map<string, ManagedConnection>();
   private lastReconnectAt = new Map<string, number>();
+  private changeListeners: Array<(userId: string) => void> = [];
 
   constructor(
     private readonly credentials: TelegramCredentials,
     private readonly sessions: SessionRepository,
+    private readonly createClient: (sessionString: string) => TelegramClient = (sessionString) =>
+      new TelegramClient(new StringSession(sessionString), credentials.apiId, credentials.apiHash, {
+        connectionRetries: 3,
+        autoReconnect: false,
+      }),
   ) {}
+
+  /** Called whenever a user's client is installed or dropped. */
+  onClientChanged(listener: (userId: string) => void): void {
+    this.changeListeners.push(listener);
+  }
+
+  private notifyClientChanged(userId: string): void {
+    for (const listener of this.changeListeners) listener(userId);
+  }
 
   /** Returns a connected client, (re)connecting when needed. */
   async getForUser(userId: string): Promise<TelegramClient> {
@@ -102,7 +117,7 @@ export class TelegramClientManager {
    * `deep` performs a real Telegram round-trip to validate the session.
    */
   async healthCheck(userId: string, deep = false): Promise<StorageHealth> {
-    const connection = this.connections.get(userId);
+    let connection = this.connections.get(userId);
 
     if (!connection) {
       try {
@@ -119,25 +134,75 @@ export class TelegramClientManager {
           targetTitle: null,
         };
       }
+      connection = this.connections.get(userId);
     }
 
-    const active = this.connections.get(userId)!;
-
-    if (!deep && active.lastCheckAt && Date.now() - active.lastCheckAt < HEALTH_TTL_MS) {
+    if (!connection) {
       return {
-        healthy: active.lastCheckOk ?? false,
+        healthy: false,
         latencyMs: null,
-        message: active.lastError,
+        message: "Telegram is not connected",
         targetTitle: null,
       };
     }
 
-    // A connection that is still establishing has no client to ask yet.
+    if (connection.state === "AUTH_REQUIRED") {
+      return {
+        healthy: false,
+        latencyMs: null,
+        message: connection.lastError ?? "Telegram sign-in is required",
+        targetTitle: null,
+      };
+    }
+
+    if (connection.pending) {
+      try {
+        await connection.pending;
+      } catch (error) {
+        return {
+          healthy: false,
+          latencyMs: null,
+          message: error instanceof Error ? error.message : "Telegram is not connected",
+          targetTitle: null,
+        };
+      }
+    }
+
+    if (
+      !deep &&
+      connection.state === "CONNECTED" &&
+      connection.lastCheckAt &&
+      Date.now() - connection.lastCheckAt < HEALTH_TTL_MS
+    ) {
+      return {
+        healthy: connection.lastCheckOk ?? false,
+        latencyMs: null,
+        message: connection.lastError,
+        targetTitle: null,
+      };
+    }
+
+    // An errored connection has no usable client. Reconnect rather than
+    // reporting "still connecting" forever.
+    if (connection.client === null || !this.isConnected(connection.client)) {
+      try {
+        await this.reconnect(userId, connection);
+      } catch (error) {
+        return {
+          healthy: false,
+          latencyMs: null,
+          message: error instanceof Error ? error.message : "Telegram is not connected",
+          targetTitle: null,
+        };
+      }
+    }
+
+    const active = connection;
     if (active.client === null) {
       return {
         healthy: false,
         latencyMs: null,
-        message: "Telegram is still connecting",
+        message: active.lastError ?? "Telegram is not connected",
         targetTitle: null,
       };
     }
@@ -175,23 +240,33 @@ export class TelegramClientManager {
 
   /** Registers an already-authenticated client (from the login flow). */
   cacheClient(userId: string, client: TelegramClient): void {
+    const previous = this.connections.get(userId);
+    if (previous?.client && previous.client !== client) {
+      void previous.client.disconnect().catch(() => undefined);
+    }
+    this.lastReconnectAt.delete(userId);
     this.connections.set(userId, {
       client,
       state: "CONNECTED",
       pending: null,
       lastError: null,
-      lastCheckAt: Date.now(),
-      lastCheckOk: true,
+      // The login flow proved the session, but no health probe has run yet.
+      lastCheckAt: null,
+      lastCheckOk: null,
     });
+    this.notifyClientChanged(userId);
   }
 
   /** Drops a user's connection (e.g. after logout) without touching storage. */
   async disconnectUser(userId: string): Promise<void> {
     const connection = this.connections.get(userId);
-    if (!connection) return;
     this.connections.delete(userId);
+    this.lastReconnectAt.delete(userId);
+    this.notifyClientChanged(userId);
+    if (!connection) return;
+    // Wait for an in-flight handshake so its client cannot escape the map.
+    await connection.pending?.catch(() => undefined);
     try {
-      // A connection that never established has no client to disconnect.
       await connection.client?.disconnect();
     } catch {
       // best effort
@@ -214,11 +289,11 @@ export class TelegramClientManager {
   }
 
   private async connectUser(userId: string): Promise<TelegramClient> {
-    const session = await this.sessions.get(userId);
-    if (!session) {
-      throw new TelegramAuthRequiredError("Telegram account is not connected");
-    }
+    const existing = this.connections.get(userId);
+    if (existing?.pending) return existing.pending;
 
+    // Reserve the slot before the first await, so two concurrent callers
+    // cannot both establish a client that the map can only reference once.
     const connection: ManagedConnection = {
       client: null,
       state: "CONNECTING",
@@ -227,68 +302,47 @@ export class TelegramClientManager {
       lastCheckAt: null,
       lastCheckOk: null,
     };
-
-    const attempt = this.establish(session.stringSession).then((client) => {
-      connection.client = client;
-      connection.state = "CONNECTED";
-      connection.pending = null;
-      connection.lastError = null;
-      return client;
-    });
-    connection.pending = attempt;
     this.connections.set(userId, connection);
 
-    try {
-      return await attempt;
-    } catch (error) {
-      connection.pending = null;
-      const mapped = mapTelegramError(error, "Could not connect to Telegram");
-      connection.state =
-        mapped instanceof TelegramAuthRequiredError || mapped instanceof UnauthorizedError
-          ? "AUTH_REQUIRED"
-          : "ERROR";
-      connection.lastError = mapped.message;
-      throw mapped;
-    }
-  }
-
-  private async reconnect(userId: string, connection: ManagedConnection): Promise<TelegramClient> {
-    const lastAttempt = this.lastReconnectAt.get(userId) ?? 0;
-    if (Date.now() - lastAttempt < RECONNECT_COOLDOWN_MS && connection.pending) {
-      return connection.pending;
-    }
-    this.lastReconnectAt.set(userId, Date.now());
-
-    connection.state = "RECONNECTING";
-    const session = await this.sessions.get(userId);
-    if (!session) {
-      connection.state = "AUTH_REQUIRED";
-      throw new TelegramAuthRequiredError("Telegram account is not connected");
-    }
-
     const attempt = (async () => {
-      try {
-        await connection.client?.disconnect().catch(() => undefined);
-      } catch {
-        // ignore
+      const session = await this.sessions.get(userId);
+      if (!session) {
+        throw new TelegramAuthRequiredError("Telegram account is not connected");
       }
       return this.establish(session.stringSession);
     })()
-      .then((client) => {
+      .then(async (client) => {
+        // A concurrent disconnect may have removed or replaced this slot while
+        // the handshake was in flight. Do not leak an unmanaged client.
+        if (this.connections.get(userId) !== connection) {
+          await client.disconnect().catch(() => undefined);
+          throw new TelegramAuthRequiredError("The Telegram connection was closed");
+        }
         connection.client = client;
         connection.state = "CONNECTED";
         connection.pending = null;
         connection.lastError = null;
+        await this.persistSession(userId, client);
+        this.notifyClientChanged(userId);
         return client;
       })
       .catch((error: unknown) => {
         connection.pending = null;
-        const mapped = mapTelegramError(error, "Could not reconnect to Telegram");
-        connection.state =
-          mapped instanceof TelegramAuthRequiredError || mapped instanceof UnauthorizedError
-            ? "AUTH_REQUIRED"
-            : "ERROR";
-        connection.lastError = mapped.message;
+        if (error instanceof TelegramAuthRequiredError) {
+          if (this.connections.get(userId) === connection) {
+            connection.state = "AUTH_REQUIRED";
+            connection.lastError = error.message;
+          }
+          throw error;
+        }
+        const mapped = mapTelegramError(error, "Could not connect to Telegram");
+        if (this.connections.get(userId) === connection) {
+          connection.state =
+            mapped instanceof TelegramAuthRequiredError || mapped instanceof UnauthorizedError
+              ? "AUTH_REQUIRED"
+              : "ERROR";
+          connection.lastError = mapped.message;
+        }
         throw mapped;
       });
 
@@ -296,13 +350,78 @@ export class TelegramClientManager {
     return attempt;
   }
 
+  private async reconnect(userId: string, connection: ManagedConnection): Promise<TelegramClient> {
+    if (connection.pending) return connection.pending;
+
+    const lastAttempt = this.lastReconnectAt.get(userId) ?? 0;
+    if (Date.now() - lastAttempt < RECONNECT_COOLDOWN_MS) {
+      // Fail fast during the cooldown instead of hammering Telegram on every
+      // request while it is unreachable.
+      throw new TelegramConnectionError(
+        connection.lastError ?? "Telegram is reconnecting — try again shortly",
+      );
+    }
+    this.lastReconnectAt.set(userId, Date.now());
+    connection.state = "RECONNECTING";
+
+    const attempt = (async () => {
+      const session = await this.sessions.get(userId);
+      if (!session) {
+        throw new TelegramAuthRequiredError("Telegram account is not connected");
+      }
+      await connection.client?.disconnect().catch(() => undefined);
+      return this.establish(session.stringSession);
+    })()
+      .then(async (client) => {
+        if (this.connections.get(userId) !== connection) {
+          await client.disconnect().catch(() => undefined);
+          throw new TelegramAuthRequiredError("The Telegram connection was closed");
+        }
+        connection.client = client;
+        connection.state = "CONNECTED";
+        connection.pending = null;
+        connection.lastError = null;
+        await this.persistSession(userId, client);
+        this.notifyClientChanged(userId);
+        return client;
+      })
+      .catch((error: unknown) => {
+        connection.pending = null;
+        if (error instanceof TelegramAuthRequiredError) {
+          if (this.connections.get(userId) === connection) {
+            connection.state = "AUTH_REQUIRED";
+            connection.lastError = error.message;
+          }
+          throw error;
+        }
+        const mapped = mapTelegramError(error, "Could not reconnect to Telegram");
+        if (this.connections.get(userId) === connection) {
+          connection.state =
+            mapped instanceof TelegramAuthRequiredError || mapped instanceof UnauthorizedError
+              ? "AUTH_REQUIRED"
+              : "ERROR";
+          connection.lastError = mapped.message;
+        }
+        throw mapped;
+      });
+
+    connection.pending = attempt;
+    return attempt;
+  }
+
+  /** Persists auth-key/DC updates GramJS applies while connecting or reconnecting. */
+  private async persistSession(userId: string, client: TelegramClient): Promise<void> {
+    if (!(client.session instanceof StringSession)) return;
+    try {
+      await this.sessions.save(userId, client.session.save());
+    } catch {
+      // A session write failure must not tear down a working connection; the
+      // previous persisted session stays valid.
+    }
+  }
+
   private async establish(sessionString: string): Promise<TelegramClient> {
-    const client = new TelegramClient(
-      new StringSession(sessionString),
-      this.credentials.apiId,
-      this.credentials.apiHash,
-      { connectionRetries: 3 },
-    );
+    const client = this.createClient(sessionString);
     try {
       await client.connect();
       // Validate the session immediately so expired sessions surface as
@@ -310,8 +429,10 @@ export class TelegramClientManager {
       if (!client.connected) {
         throw new TelegramConnectionError("Telegram client did not connect");
       }
+      await client.getMe();
       return client;
     } catch (error) {
+      await client.disconnect().catch(() => undefined);
       throw mapTelegramError(error, "Could not connect to Telegram");
     }
   }
@@ -320,6 +441,7 @@ export class TelegramClientManager {
 export function newTelegramClient(credentials: TelegramCredentials): TelegramClient {
   return new TelegramClient(new StringSession(""), credentials.apiId, credentials.apiHash, {
     connectionRetries: 3,
+    autoReconnect: false,
   });
 }
 

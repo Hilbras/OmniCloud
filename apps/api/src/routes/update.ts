@@ -10,8 +10,23 @@ import type { UpdateChecker } from "../update-checker";
  * user data. The response is the cached result of the server's periodic check,
  * so polling this endpoint never touches the npm registry.
  */
-export function registerUpdateRoutes(app: FastifyInstance, checker: UpdateChecker | null): void {
+export function registerUpdateRoutes(
+  app: FastifyInstance,
+  checker: UpdateChecker | null,
+  enabled = true,
+): void {
   app.get("/api/update/check", async (_request, reply) => {
+    if (!enabled) {
+      reply.header("cache-control", "no-store");
+      return {
+        status: "unknown",
+        currentVersion: "",
+        latestVersion: null,
+        packageName: "",
+        checkedAt: new Date().toISOString(),
+        detail: "The update check is disabled.",
+      } satisfies UpdateCheckDTO;
+    }
     const result = checker?.current() ?? null;
     if (result === null) {
       // The first check has not completed yet. Tell the client to come back

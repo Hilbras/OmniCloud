@@ -1,5 +1,7 @@
 import { Folder, Star } from "lucide-react";
-import type { MouseEvent } from "react";
+import { isEncryptedFormat } from "@omnicloud/shared";
+import { useState } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import { formatBytes, formatDate, formatRelative } from "../lib/format";
 import { fileVisual } from "../lib/fileIcons";
 import { itemKeyOf, itemRef } from "../lib/drive";
@@ -11,6 +13,7 @@ import { FileThumb } from "./FileThumb";
 import { SelectCheckbox } from "./SelectCheckbox";
 import { buildItemMenu } from "./itemActions";
 import type { ItemAction, MenuContext } from "./itemActions";
+import { DRAG_MIME, encodeDraggedItem, parseDraggedItem, type DraggedItem } from "../lib/drag-move";
 
 interface DriveItemsProps {
   items: DriveItem[];
@@ -18,6 +21,8 @@ interface DriveItemsProps {
   selection: SelectionController;
   onOpen: (item: DriveItem) => void;
   onAction: (action: ItemAction, item: DriveItem) => void;
+  /** Move a dragged file/folder into a folder item. */
+  onMoveInto?: (targetFolderId: string, dragged: DraggedItem) => void;
   onContextMenu: (menu: ContextMenuState) => void;
   menuContext?: MenuContext;
   loading?: boolean;
@@ -61,8 +66,10 @@ export function DriveItems({
   onContextMenu,
   menuContext = {},
   loading = false,
+  onMoveInto,
 }: DriveItemsProps) {
   const orderedKeys = items.map(itemKeyOf);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const handleActivate = (
     event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean },
@@ -89,6 +96,36 @@ export function DriveItems({
     });
   };
 
+  const dragProps = (item: DriveItem) => ({
+    draggable: true,
+    onDragStart: (event: DragEvent) => {
+      event.dataTransfer.setData(DRAG_MIME, encodeDraggedItem({ id: item.id, kind: item.kind }));
+      event.dataTransfer.effectAllowed = "move";
+    },
+  });
+
+  const dropProps = (item: DriveItem) => {
+    if (item.kind !== "folder" || onMoveInto === undefined) return {};
+    return {
+      onDragOver: (event: DragEvent) => {
+        if (!event.dataTransfer.types.includes(DRAG_MIME)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "move";
+        setDropTarget(item.id);
+      },
+      onDragLeave: () => setDropTarget((current) => (current === item.id ? null : current)),
+      onDrop: (event: DragEvent) => {
+        const dragged = parseDraggedItem(event.dataTransfer.getData(DRAG_MIME));
+        if (dragged === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setDropTarget(null);
+        if (dragged.id !== item.id) onMoveInto(item.id, dragged);
+      },
+    };
+  };
+
   if (loading) return <Skeleton view={view} />;
   if (items.length === 0) return null;
 
@@ -100,6 +137,8 @@ export function DriveItems({
           return (
             <li
               key={itemKeyOf(item)}
+              {...dragProps(item)}
+              {...dropProps(item)}
               onClick={(event) => handleActivate(event, item)}
               onContextMenu={(event) => openContextMenu(event, item)}
               tabIndex={0}
@@ -110,11 +149,13 @@ export function DriveItems({
                 }
               }}
               style={{ animationDelay: `${Math.min(index, 12) * 24}ms` }}
-              className={`drive-item drive-item-card drive-card-enter group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-surface outline-none focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/35 ${
+              className={`drive-item drive-item-card drive-card-enter group relative flex cursor-pointer flex-col rounded-2xl border bg-surface outline-none focus-visible:border-gold focus-visible:ring-2 focus-visible:ring-gold/35 ${
                 selected
                   ? "border-gold bg-gold-soft"
                   : "border-line hover:border-gold/45 hover:bg-bg-soft"
-              } ${item.trashed ? "opacity-70" : ""}`}
+              } ${item.trashed ? "opacity-70" : ""} ${
+                dropTarget === item.id ? "ring-2 ring-gold" : ""
+              }`}
             >
               <div className="relative">
                 <div className="drive-media rounded-b-none">
@@ -153,7 +194,7 @@ export function DriveItems({
                     items={buildItemMenu(item, onAction, menuContext)}
                   />
                 </div>
-                {item.file?.encryptionFormat === "OCE1" ? (
+                {isEncryptedFormat(item.file?.encryptionFormat) ? (
                   <span
                     className="absolute right-2 bottom-2 rounded-full border border-line bg-surface/80 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted uppercase backdrop-blur-sm"
                     title="End-to-end encrypted"
@@ -197,6 +238,8 @@ export function DriveItems({
         return (
           <li
             key={itemKeyOf(item)}
+            {...dragProps(item)}
+            {...dropProps(item)}
             onClick={(event) => handleActivate(event, item)}
             onContextMenu={(event) => openContextMenu(event, item)}
             tabIndex={0}
@@ -210,7 +253,9 @@ export function DriveItems({
               selected
                 ? "border-gold bg-gold-soft"
                 : "border-line hover:border-gold/45 hover:bg-bg-soft hover:shadow-[var(--shadow)]"
-            } ${item.trashed ? "opacity-70" : ""}`}
+            } ${item.trashed ? "opacity-70" : ""} ${
+              dropTarget === item.id ? "ring-2 ring-gold" : ""
+            }`}
           >
             <div onClick={(event) => event.stopPropagation()}>
               <SelectCheckbox
@@ -234,7 +279,7 @@ export function DriveItems({
               ) : null}
               {item.name}
             </span>
-            {item.file?.encryptionFormat === "OCE1" ? (
+            {isEncryptedFormat(item.file?.encryptionFormat) ? (
               <span className="shrink-0 rounded-full border border-line bg-bg-soft px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted uppercase">
                 Encrypted
               </span>

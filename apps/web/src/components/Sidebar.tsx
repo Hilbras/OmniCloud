@@ -1,4 +1,4 @@
-import { Cloud, FolderPlus, HardDrive, X } from "lucide-react";
+import { Cloud, FolderPlus, HardDrive, Settings, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import type { StorageHealthDTO } from "@omnicloud/shared";
 import type { StorageDTO } from "@omnicloud/shared";
@@ -103,6 +103,25 @@ export function Sidebar({
               </li>
             );
           })}
+          <li>
+            <NavLink
+              to="/settings/tokens"
+              onClick={() => onClose?.()}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px]  ${
+                  isActive
+                    ? "bg-gold-soft font-semibold text-gold-text"
+                    : "muted hover:bg-surface hover:text-text"
+                }`
+              }
+            >
+              <Settings
+                className="h-4 w-4 shrink-0  group-hover:text-gold-text"
+                aria-hidden="true"
+              />
+              Settings
+            </NavLink>
+          </li>
         </ul>
       </nav>
 

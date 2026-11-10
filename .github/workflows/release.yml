@@ -81,6 +81,7 @@ jobs:
             exit 1
           fi
           for manifest in package.json apps/api/package.json apps/web/package.json \
+                          apps/desktop/package.json \
                           packages/core/package.json packages/database/package.json \
                           packages/shared/package.json packages/telegram/package.json \
                           packages/crypto/package.json; do

@@ -1,6 +1,6 @@
 import {
   PrismaClient,
-  type Prisma,
+  Prisma,
   type File as DbFile,
   type Folder as DbFolder,
   type FileVersion as DbFileVersion,
@@ -29,10 +29,14 @@ import type {
   FolderRecord,
   FolderRepository,
   ItemQuery,
+  KeyPairingRecord,
+  KeyPairingRepository,
   PageRequest,
   Repos,
   SecretBox,
   SessionRepository,
+  ShareLinkRecord,
+  ShareLinkRepository,
   StorageRecord,
   StorageRepository,
   TelegramSessionRecord,
@@ -97,6 +101,7 @@ function mapFolder(folder: DbFolder): FolderRecord {
     name: folder.name,
     starred: folder.starred,
     deletedAt: folder.deletedAt,
+    storageId: folder.storageId,
     trashBatchId: folder.trashBatchId,
     createdAt: folder.createdAt,
     updatedAt: folder.updatedAt,
@@ -113,6 +118,7 @@ function mapFile(file: DbFile): FileRecord {
     mimeType: file.mimeType,
     sha256: file.sha256,
     telegramMessageId: Number(file.telegramMessageId),
+    storageId: file.storageId,
     encryptionFormat: file.encryptionFormat,
     wrappedKey: file.wrappedKey,
     metadataBlob: file.metadataBlob,
@@ -204,6 +210,13 @@ function fileWhere(userId: string, query: ItemQuery): Prisma.FileWhereInput {
       matcher.endsWith("/") ? { mimeType: { startsWith: matcher } } : { mimeType: matcher },
     );
   }
+  if (query.mimeExcludeMatchers && query.mimeExcludeMatchers.length > 0) {
+    where.NOT = {
+      OR: query.mimeExcludeMatchers.map((matcher) =>
+        matcher.endsWith("/") ? { mimeType: { startsWith: matcher } } : { mimeType: matcher },
+      ),
+    };
+  }
 
   return where;
 }
@@ -215,7 +228,8 @@ function folderWhere(userId: string, query: ItemQuery): Prisma.FolderWhereInput 
   if (query.trashed === true) where.deletedAt = { not: null };
   else if (query.trashed === false) where.deletedAt = null;
 
-  if (query.folderId !== undefined) where.parentId = query.folderId;
+  if (query.folderIds) where.parentId = { in: query.folderIds };
+  else if (query.folderId !== undefined) where.parentId = query.folderId;
   if (query.nameContains) where.name = { contains: query.nameContains, mode: "insensitive" };
   if (query.starred !== undefined) where.starred = query.starred;
 
@@ -230,18 +244,19 @@ function folderWhere(userId: string, query: ItemQuery): Prisma.FolderWhereInput 
 
 function fileOrderBy(query: ItemQuery): Prisma.FileOrderByWithRelationInput[] {
   const order = query.order ?? "asc";
+  // The id tiebreaker makes skip/take deterministic when the sort key is equal.
   switch (query.sort) {
     case "size":
-      return [{ size: order }];
+      return [{ size: order }, { id: "asc" }];
     case "createdAt":
-      return [{ createdAt: order }];
+      return [{ createdAt: order }, { id: "asc" }];
     case "updatedAt":
-      return [{ updatedAt: order }];
+      return [{ updatedAt: order }, { id: "asc" }];
     case "type":
-      return [{ mimeType: order }, { name: "asc" }];
+      return [{ mimeType: order }, { name: "asc" }, { id: "asc" }];
     case "name":
     default:
-      return [{ name: order }, { createdAt: "asc" }];
+      return [{ name: order }, { createdAt: "asc" }, { id: "asc" }];
   }
 }
 
@@ -249,12 +264,12 @@ function folderOrderBy(query: ItemQuery): Prisma.FolderOrderByWithRelationInput[
   const order = query.order ?? "asc";
   switch (query.sort) {
     case "createdAt":
-      return [{ createdAt: order }];
+      return [{ createdAt: order }, { id: "asc" }];
     case "updatedAt":
-      return [{ updatedAt: order }];
+      return [{ updatedAt: order }, { id: "asc" }];
     case "name":
     default:
-      return [{ name: order }, { createdAt: "asc" }];
+      return [{ name: order }, { createdAt: "asc" }, { id: "asc" }];
   }
 }
 
@@ -452,6 +467,15 @@ function createUploadOperationRepo(prisma: PrismaClient): UploadOperationReposit
       });
       return mapUploadOperation(row);
     },
+    async deleteTerminalBefore(before) {
+      const result = await prisma.uploadOperation.deleteMany({
+        where: {
+          status: { in: ["COMPLETED", "FAILED"] },
+          updatedAt: { lt: before },
+        },
+      });
+      return result.count;
+    },
   };
 }
 
@@ -488,11 +512,95 @@ function createApiTokenRepo(prisma: PrismaClient): ApiTokenRepository {
   };
 }
 
+function createKeyPairingRepo(prisma: PrismaClient): KeyPairingRepository {
+  const map = (row: {
+    id: string;
+    userId: string;
+    wrappedUrk: string;
+    fileId: string;
+    versionId: string;
+    keyEpoch: number;
+    expiresAt: Date;
+    claimedAt: Date | null;
+    createdAt: Date;
+  }): KeyPairingRecord => row;
+  return {
+    async create(input) {
+      const row = await prisma.keyPairing.create({ data: input });
+      return map(row);
+    },
+    async findByIdForUser(userId, id) {
+      const row = await prisma.keyPairing.findFirst({ where: { id, userId } });
+      return row ? map(row) : null;
+    },
+    async claim(id, at) {
+      const result = await prisma.keyPairing.updateMany({
+        where: { id, claimedAt: null },
+        data: { claimedAt: at },
+      });
+      return result.count === 1;
+    },
+  };
+}
+
+function createShareLinkRepo(prisma: PrismaClient): ShareLinkRepository {
+  const map = (row: {
+    id: string;
+    userId: string;
+    fileId: string;
+    tokenHash: string;
+    passwordHash: string | null;
+    sharedWrappedKey: string | null;
+    expiresAt: Date | null;
+    maxDownloads: number | null;
+    downloadCount: number;
+    revokedAt: Date | null;
+    createdAt: Date;
+  }): ShareLinkRecord => row;
+
+  return {
+    async create(input) {
+      const row = await prisma.shareLink.create({ data: input });
+      return map(row);
+    },
+    async findByIdForUser(userId, id) {
+      const row = await prisma.shareLink.findFirst({ where: { id, userId } });
+      return row ? map(row) : null;
+    },
+    async findByTokenHash(tokenHash) {
+      const row = await prisma.shareLink.findUnique({ where: { tokenHash } });
+      return row ? map(row) : null;
+    },
+    async listForUser(userId) {
+      const rows = await prisma.shareLink.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+      });
+      return rows.map(map);
+    },
+    async revoke(id, at) {
+      await prisma.shareLink.updateMany({
+        where: { id, revokedAt: null },
+        data: { revokedAt: at },
+      });
+    },
+    async recordDownload(id) {
+      await prisma.shareLink.update({
+        where: { id },
+        data: { downloadCount: { increment: 1 } },
+      });
+    },
+  };
+}
+
 function mapApiToken(row: {
   id: string;
   userId: string;
   name: string;
   tokenHash: string;
+  readOnly: boolean;
+  scope: string;
+  expiresAt: Date | null;
   createdAt: Date;
   revokedAt: Date | null;
   lastUsedAt: Date | null;
@@ -502,6 +610,9 @@ function mapApiToken(row: {
     userId: row.userId,
     name: row.name,
     tokenHash: row.tokenHash,
+    readOnly: row.readOnly,
+    scope: row.scope === "upload" || row.scope === "webdav" ? row.scope : "full",
+    expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     revokedAt: row.revokedAt,
     lastUsedAt: row.lastUsedAt,
@@ -553,10 +664,24 @@ function createBrowserSessionRepo(prisma: PrismaClient): BrowserSessionRepositor
 function createStorageRepo(prisma: PrismaClient): StorageRepository {
   return {
     async findByUserAndProvider(userId, provider) {
-      const storage = await prisma.storage.findUnique({
-        where: { userId_provider: { userId, provider } },
+      // The oldest registration is the account default; extra channels are
+      // opt-in targets for specific folders.
+      const storage = await prisma.storage.findFirst({
+        where: { userId, provider },
+        orderBy: { createdAt: "asc" },
       });
       return storage ? mapStorage(storage) : null;
+    },
+    async findByIdForUser(userId, id) {
+      const storage = await prisma.storage.findFirst({ where: { id, userId } });
+      return storage ? mapStorage(storage) : null;
+    },
+    async listByUser(userId) {
+      const rows = await prisma.storage.findMany({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+      });
+      return rows.map(mapStorage);
     },
     async create(input) {
       const storage = await prisma.storage.create({
@@ -576,27 +701,36 @@ function createStorageRepo(prisma: PrismaClient): StorageRepository {
 function createFolderRepo(prisma: PrismaClient): FolderRepository {
   return {
     async moveSafely(id, newParentId) {
-      const folder = await prisma.$transaction(
-        async (tx) => {
-          if (newParentId !== null) {
-            let cursor: string | null = newParentId;
-            while (cursor !== null) {
-              if (cursor === id) {
-                throw new ConflictError("Cannot move a folder into one of its subfolders");
+      // Serializable moves can abort with P2034 under concurrency. Retry the
+      // whole transaction here, so the service does not surface a raw 500.
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const folder = await prisma.$transaction(
+            async (tx) => {
+              if (newParentId !== null) {
+                let cursor: string | null = newParentId;
+                while (cursor !== null) {
+                  if (cursor === id) {
+                    throw new ConflictError("Cannot move a folder into one of its subfolders");
+                  }
+                  const parent: { parentId: string | null } | null = await tx.folder.findUnique({
+                    where: { id: cursor },
+                    select: { parentId: true },
+                  });
+                  if (!parent) throw new NotFoundError("Folder not found", "folder");
+                  cursor = parent.parentId;
+                }
               }
-              const parent: { parentId: string | null } | null = await tx.folder.findUnique({
-                where: { id: cursor },
-                select: { parentId: true },
-              });
-              if (!parent) throw new NotFoundError("Folder not found", "folder");
-              cursor = parent.parentId;
-            }
-          }
-          return tx.folder.update({ where: { id }, data: { parentId: newParentId } });
-        },
-        { isolationLevel: "Serializable" },
-      );
-      return mapFolder(folder);
+              return tx.folder.update({ where: { id }, data: { parentId: newParentId } });
+            },
+            { isolationLevel: "Serializable" },
+          );
+          return mapFolder(folder);
+        } catch (error) {
+          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          throw error;
+        }
+      }
     },
     async create(input) {
       const folder = await prisma.folder.create({
@@ -722,7 +856,11 @@ function createFolderRepo(prisma: PrismaClient): FolderRepository {
         remaining = remaining.filter((id) => !leaves.includes(id));
       }
       if (remaining.length > 0) {
-        await prisma.folder.deleteMany({ where: { id: { in: remaining } } });
+        // Never force-delete a parent with a surviving child: the foreign key
+        // would reject it after partial deletes. The caller must retain it.
+        throw new ConflictError(
+          `Cannot delete folders with surviving children: ${remaining.join(", ")}`,
+        );
       }
     },
     async countByUser(userId) {
@@ -820,7 +958,10 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
           );
           return mapFile(file);
         } catch (error) {
-          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          // P2002 is the unique (fileId, versionNumber) collision that
+          // PostgreSQL reports instead of P2034 for concurrent inserts.
+          const code = (error as { code?: string }).code;
+          if ((code === "P2034" || code === "P2002") && attempt < 4) continue;
           throw error;
         }
       }
@@ -946,7 +1087,61 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
       return { fileCount, folderCount, totalBytes, trashBytes, trashFileCount, starredCount };
     },
     async deleteMany(ids) {
-      await prisma.file.deleteMany({ where: { id: { in: ids } } });
+      if (ids.length === 0) return;
+      await prisma.$transaction(async (tx) => {
+        // The current version is referenced by a NO ACTION foreign key, so the
+        // pointers must be cleared before the version rows can go. All three
+        // steps commit together: a failure leaves the metadata retryable.
+        await tx.file.updateMany({
+          where: { id: { in: ids } },
+          data: { currentVersionId: null },
+        });
+        await tx.fileVersion.deleteMany({ where: { fileId: { in: ids } } });
+        await tx.file.deleteMany({ where: { id: { in: ids } } });
+      });
+    },
+
+    async migrateStorage(fileId, input) {
+      const row = await prisma.$transaction(async (tx) => {
+        for (const version of input.versions) {
+          await tx.fileVersion.update({
+            where: { id: version.id },
+            data: { telegramMessageId: BigInt(version.telegramMessageId) },
+          });
+        }
+        return tx.file.update({
+          where: { id: fileId },
+          data: {
+            storageId: input.storageId,
+            telegramMessageId: BigInt(input.telegramMessageId),
+          },
+        });
+      });
+      return mapFile(row);
+    },
+
+    async rotateEncryption(fileId, input) {
+      const row = await prisma.$transaction(async (tx) => {
+        for (const version of input.versions) {
+          await tx.fileVersion.update({
+            where: { id: version.id },
+            data: {
+              wrappedKey: version.wrappedKey,
+              metadataBlob: version.metadataBlob,
+              keyEpoch: version.keyEpoch,
+            },
+          });
+        }
+        return tx.file.update({
+          where: { id: fileId },
+          data: {
+            wrappedKey: input.wrappedKey,
+            metadataBlob: input.metadataBlob,
+            keyEpoch: input.keyEpoch,
+          },
+        });
+      });
+      return mapFile(row);
     },
 
     // ── Versions ───────────────────────────────────────────────────────────
@@ -1006,7 +1201,8 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
           );
           return mapVersion(version);
         } catch (error) {
-          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          const code = (error as { code?: string }).code;
+          if ((code === "P2034" || code === "P2002") && attempt < 4) continue;
           throw error;
         }
       }
@@ -1036,15 +1232,17 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
     async countVersions(fileId) {
       return prisma.fileVersion.count({ where: { fileId } });
     },
-    async deleteVersionsByFileIds(fileIds) {
-      if (fileIds.length === 0) return;
-      await prisma.fileVersion.deleteMany({ where: { fileId: { in: fileIds } } });
-    },
     async updateVersionMetadata(versionId, metadataBlob) {
-      await prisma.fileVersion.updateMany({
-        where: { id: versionId },
-        data: { metadataBlob },
-      });
+      // The file row carries the current version's blob for clients and
+      // downloads. Updating only the version row leaves a renamed encrypted
+      // file decrypting to its old name.
+      await prisma.$transaction([
+        prisma.fileVersion.updateMany({ where: { id: versionId }, data: { metadataBlob } }),
+        prisma.file.updateMany({
+          where: { currentVersionId: versionId },
+          data: { metadataBlob },
+        }),
+      ]);
     },
     async deleteVersion(fileId, versionId) {
       for (let attempt = 0; ; attempt += 1) {
@@ -1101,8 +1299,19 @@ function createActivityRepo(prisma: PrismaClient): ActivityRepository {
         },
       });
     },
-    async list(userId, page) {
-      const where = { userId };
+    async list(userId, page, filters = {}) {
+      const where = {
+        userId,
+        ...(filters.action ? { action: filters.action } : {}),
+        ...(filters.from || filters.to
+          ? {
+              createdAt: {
+                ...(filters.from ? { gte: filters.from } : {}),
+                ...(filters.to ? { lte: filters.to } : {}),
+              },
+            }
+          : {}),
+      };
       const [rows, total] = await Promise.all([
         prisma.activityEvent.findMany({
           where,
@@ -1113,20 +1322,45 @@ function createActivityRepo(prisma: PrismaClient): ActivityRepository {
       ]);
       return { items: rows.map(mapActivity), total };
     },
-    async recentFiles(userId, actions, limit) {
-      const rows = await prisma.activityEvent.findMany({
-        where: { userId, resourceType: "file", action: { in: [...actions] } },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: limit,
-      });
-      const seen = new Set<string>();
-      const result: ActivityEventRecord[] = [];
-      for (const row of rows) {
-        if (seen.has(row.resourceId)) continue;
-        seen.add(row.resourceId);
-        result.push(mapActivity(row));
-      }
-      return result;
+    async recentFiles(userId, actions, page) {
+      // Deduplicate before applying LIMIT/OFFSET. Doing it after `take` would
+      // return fewer distinct files than requested and make totals unstable.
+      const actionList = Prisma.join([...actions]);
+      const offset = (page.page - 1) * page.limit;
+      const rows = await prisma.$queryRaw<
+        {
+          id: string;
+          userId: string;
+          action: string;
+          resourceType: string;
+          resourceId: string;
+          resourceName: string | null;
+          metadata: Prisma.JsonValue;
+          createdAt: Date;
+        }[]
+      >(Prisma.sql`
+        SELECT * FROM (
+          SELECT DISTINCT ON ("resourceId") *
+          FROM "ActivityEvent"
+          WHERE "userId" = ${userId}
+            AND "resourceType" = 'file'
+            AND "action" IN (${actionList})
+          ORDER BY "resourceId", "createdAt" DESC, "id" DESC
+        ) latest
+        ORDER BY "createdAt" DESC, "id" DESC
+        LIMIT ${page.limit} OFFSET ${offset}
+      `);
+      const counted = await prisma.$queryRaw<{ total: bigint }[]>(Prisma.sql`
+        SELECT COUNT(DISTINCT "resourceId") AS total
+        FROM "ActivityEvent"
+        WHERE "userId" = ${userId}
+          AND "resourceType" = 'file'
+          AND "action" IN (${actionList})
+      `);
+      return {
+        items: rows.map((row) => mapActivity(row)),
+        total: Number(counted[0]?.total ?? 0),
+      };
     },
     async countByUser(userId) {
       return prisma.activityEvent.count({ where: { userId } });
@@ -1155,5 +1389,7 @@ export function createPrismaRepos(prisma: PrismaClient, box: SecretBox | null = 
     folders: createFolderRepo(prisma),
     files: createFileRepo(prisma),
     activity: createActivityRepo(prisma),
+    shareLinks: createShareLinkRepo(prisma),
+    keyPairings: createKeyPairingRepo(prisma),
   };
 }

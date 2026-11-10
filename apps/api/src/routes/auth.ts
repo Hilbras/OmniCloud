@@ -96,11 +96,10 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
     return reply.send({ flowId: started.flowId, token: started.token });
   });
 
-  app.get("/api/auth/telegram/qr/status", async (request, reply) => {
-    // This route can issue a session cookie once the phone approves, so a
-    // cross-origin page must not be able to trigger it. Browsers send Origin on
-    // cross-origin requests; a request without one is a non-browser client and is
-    // checked against the same allow-list the CSRF hook uses.
+  app.post("/api/auth/telegram/qr/status", async (request, reply) => {
+    // This route can issue a session cookie once the phone approves. It is POST
+    // so a cross-site top-level navigation cannot trigger it with a Lax cookie,
+    // and the Origin allow-list rejects cross-origin form posts.
     if (
       !isAllowedOrigin(
         request.headers.origin,
@@ -111,7 +110,8 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
       throw new ForbiddenError("Cross-origin request rejected");
     }
     statusLimiter(request.ip);
-    const flowId = requireString(request.query, "flowId");
+    const body = requireBody(request);
+    const flowId = requireString(body, "flowId");
     const result = await container.connection.pollQrLogin(flowId);
     if (result.status === "approved") {
       await issueSessionCookie(

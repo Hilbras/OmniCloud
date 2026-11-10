@@ -1,13 +1,18 @@
 import committedVector from "../test/vectors/v1.json";
 import {
+  canonicalIndexJson,
+  createIndexContainer,
   createRecoveryBlob,
   decryptFile,
+  deriveIndexKey,
   deriveKek,
   deriveMek,
   encryptBytes,
   encryptMetadata,
+  openIndexContainer,
   openRecoveryBlob,
   wrapDek,
+  type IndexEntry,
 } from "../src/index";
 
 export function hex(bytes: Uint8Array): string {
@@ -71,9 +76,16 @@ export async function verifyVectors(runtime: string): Promise<VectorReport> {
       metadataBlobHex: string;
     };
     recovery: { codeHex: string; nonceHex: string; blobHex: string; urkHex: string };
+    index: {
+      keyHex: string;
+      nonceHex: string;
+      entries: IndexEntry[];
+      jsonHex: string;
+      containerHex: string;
+    };
   };
 
-  const { inputs, expected, recovery } = committed;
+  const { inputs, expected, recovery, index } = committed;
   const urk = fromHex(inputs.urkHex);
   const dek = fromHex(inputs.dekHex);
   const fileId = fromHex(inputs.fileIdHex);
@@ -111,6 +123,15 @@ export async function verifyVectors(runtime: string): Promise<VectorReport> {
     inputs.keyEpoch,
   );
 
+  const indexJson = canonicalIndexJson(index.entries);
+  const indexContainer = createIndexContainer(
+    urk,
+    index.entries,
+    inputs.keyEpoch,
+    fromHex(index.nonceHex),
+  );
+  const reopened = openIndexContainer(urk, fromHex(index.containerHex), inputs.keyEpoch);
+
   const fields: VectorFieldResult[] = [
     { field: "kek", pass: hex(deriveKek(urk)) === expected.kekHex },
     { field: "mek", pass: hex(deriveMek(urk)) === expected.mekHex },
@@ -124,6 +145,13 @@ export async function verifyVectors(runtime: string): Promise<VectorReport> {
       pass: JSON.stringify(decrypted.metadata) === JSON.stringify(inputs.metadata),
     },
     { field: "openRecoveryUrk", pass: hex(openedUrk) === recovery.urkHex },
+    { field: "indexKey", pass: hex(deriveIndexKey(urk)) === index.keyHex },
+    { field: "indexJson", pass: hex(indexJson) === index.jsonHex },
+    { field: "indexContainer", pass: hex(indexContainer) === index.containerHex },
+    {
+      field: "openIndex",
+      pass: JSON.stringify(reopened) === JSON.stringify(index.entries),
+    },
   ];
 
   const recomputed: Record<string, string> = {
@@ -133,6 +161,9 @@ export async function verifyVectors(runtime: string): Promise<VectorReport> {
     wrappedKey: hex(wrappedKey),
     metadataBlob: hex(metadataBlob),
     recoveryBlob: hex(recoveryBlob),
+    indexKey: hex(deriveIndexKey(urk)),
+    indexJson: hex(indexJson),
+    indexContainer: hex(indexContainer),
   };
 
   return {

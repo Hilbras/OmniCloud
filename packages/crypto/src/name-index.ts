@@ -3,7 +3,7 @@ import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { randomBytes } from "@noble/hashes/utils";
 import { AuthenticationError, UnsupportedFormatError, ValidationError } from "./errors";
-import { KEY_BYTES, assertKeyMaterial } from "./keys";
+import { KEY_BYTES, assertKeyEpoch, assertKeyMaterial } from "./keys";
 import { KEY_EPOCH_V1, NONCE_BYTES, SUITE, TAG_BYTES } from "./envelope";
 
 /**
@@ -61,9 +61,9 @@ export function deriveIndexKey(urk: Uint8Array): Uint8Array {
   );
 }
 
-function indexAad(keyEpoch: number): Uint8Array {
+function indexAad(rawEpoch: number): Uint8Array {
   const epoch = new Uint8Array(4);
-  new DataView(epoch.buffer).setUint32(0, keyEpoch, false);
+  new DataView(epoch.buffer).setUint32(0, assertKeyEpoch(rawEpoch), false);
   const out = new Uint8Array(OCE2_MAGIC.length + 1 + 1 + epoch.length + 1);
   out.set(OCE2_MAGIC, 0);
   out[OCE2_MAGIC.length] = INDEX_CONTAINER_VERSION;
@@ -95,7 +95,10 @@ export function canonicalIndexJson(entries: readonly IndexEntry[]): Uint8Array {
     fields.push(`"description":${JSON.stringify(entry.description)}`);
     fields.push(`"folderId":${JSON.stringify(entry.folderId)}`);
     fields.push(`"id":${JSON.stringify(entry.id)}`);
-    fields.push(`"mimeType":${JSON.stringify(entry.mimeType)}`);
+    // Optional: omit a null MIME type rather than writing `"mimeType":null`.
+    if (entry.mimeType !== null) {
+      fields.push(`"mimeType":${JSON.stringify(entry.mimeType)}`);
+    }
     fields.push(`"name":${JSON.stringify(entry.name)}`);
     fields.push(`"size":${JSON.stringify(entry.size)}`);
     fields.push(`"starred":${JSON.stringify(entry.starred)}`);
@@ -185,8 +188,66 @@ export function parseIndexJson(bytes: Uint8Array): IndexEntry[] {
       throw new UnsupportedFormatError("an index entry is not an object");
     }
     const record = entry as Record<string, unknown>;
+    const allowed = new Set([
+      "id",
+      "name",
+      "cryptoFileId",
+      "cryptoVersionId",
+      "mimeType",
+      "description",
+      "size",
+      "folderId",
+      "starred",
+      "trashed",
+      "versionCount",
+      "createdAt",
+      "updatedAt",
+    ]);
+    for (const key of Object.keys(record)) {
+      if (!allowed.has(key)) {
+        throw new UnsupportedFormatError(`an index entry has an unknown field: ${key}`);
+      }
+    }
     if (typeof record["id"] !== "string" || typeof record["name"] !== "string") {
       throw new UnsupportedFormatError("an index entry is missing its id or name");
+    }
+    for (const key of ["cryptoFileId", "cryptoVersionId"] as const) {
+      if (record[key] !== undefined && typeof record[key] !== "string") {
+        throw new UnsupportedFormatError(`an index entry has an invalid ${key}`);
+      }
+    }
+    if (
+      record["mimeType"] !== undefined &&
+      record["mimeType"] !== null &&
+      typeof record["mimeType"] !== "string"
+    ) {
+      throw new UnsupportedFormatError("an index entry has an invalid mimeType");
+    }
+    if (record["description"] !== null && typeof record["description"] !== "string") {
+      throw new UnsupportedFormatError("an index entry has an invalid description");
+    }
+    if (record["folderId"] !== null && typeof record["folderId"] !== "string") {
+      throw new UnsupportedFormatError("an index entry has an invalid folderId");
+    }
+    if (
+      typeof record["size"] !== "number" ||
+      !Number.isSafeInteger(record["size"]) ||
+      record["size"] < 0
+    ) {
+      throw new UnsupportedFormatError("an index entry has an invalid size");
+    }
+    if (typeof record["starred"] !== "boolean" || typeof record["trashed"] !== "boolean") {
+      throw new UnsupportedFormatError("an index entry has invalid flags");
+    }
+    if (
+      typeof record["versionCount"] !== "number" ||
+      !Number.isSafeInteger(record["versionCount"]) ||
+      record["versionCount"] < 0
+    ) {
+      throw new UnsupportedFormatError("an index entry has an invalid versionCount");
+    }
+    if (typeof record["createdAt"] !== "string" || typeof record["updatedAt"] !== "string") {
+      throw new UnsupportedFormatError("an index entry has invalid dates");
     }
     return {
       id: record["id"],
@@ -198,14 +259,14 @@ export function parseIndexJson(bytes: Uint8Array): IndexEntry[] {
         ? { cryptoVersionId: record["cryptoVersionId"] }
         : {}),
       mimeType: typeof record["mimeType"] === "string" ? record["mimeType"] : null,
-      description: typeof record["description"] === "string" ? record["description"] : null,
-      size: typeof record["size"] === "number" ? record["size"] : 0,
-      folderId: typeof record["folderId"] === "string" ? record["folderId"] : null,
-      starred: record["starred"] === true,
-      trashed: record["trashed"] === true,
-      versionCount: typeof record["versionCount"] === "number" ? record["versionCount"] : 0,
-      createdAt: typeof record["createdAt"] === "string" ? record["createdAt"] : "",
-      updatedAt: typeof record["updatedAt"] === "string" ? record["updatedAt"] : "",
+      description: record["description"] as string | null,
+      size: record["size"],
+      folderId: record["folderId"] as string | null,
+      starred: record["starred"],
+      trashed: record["trashed"],
+      versionCount: record["versionCount"],
+      createdAt: record["createdAt"],
+      updatedAt: record["updatedAt"],
     };
   });
 }

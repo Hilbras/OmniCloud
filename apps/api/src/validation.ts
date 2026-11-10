@@ -43,7 +43,11 @@ export function stringOrNull(body: unknown, field: string): string | null {
   }
   const value = (body as Record<string, unknown>)[field];
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || value === "") return null;
+  // A number/boolean here used to become root silently; reject it instead.
+  if (typeof value !== "string") {
+    throw new ValidationError(`Field "${field}" must be a string or null`);
+  }
+  if (value === "") return null;
   return value;
 }
 

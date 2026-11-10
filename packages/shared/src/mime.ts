@@ -91,7 +91,12 @@ export function fileExtension(filename: string): string {
 
 /** Derives a MIME type from the filename extension. Never trusts client input. */
 export function mimeFromFilename(filename: string): string {
-  return MIME_BY_EXTENSION[fileExtension(filename)] ?? DEFAULT_MIME_TYPE;
+  const extension = fileExtension(filename);
+  // A plain lookup also finds Object.prototype keys such as "constructor";
+  // those are not MIME types and must fall back like any unknown extension.
+  return Object.hasOwn(MIME_BY_EXTENSION, extension)
+    ? MIME_BY_EXTENSION[extension]!
+    : DEFAULT_MIME_TYPE;
 }
 
 export type FileCategory =
@@ -175,6 +180,15 @@ const CATEGORY_PREFIXES: Record<FileCategory, readonly string[]> = {
   document: [...OFFICE_MIMES],
   other: [],
 };
+
+/** Every MIME matcher used by a concrete category, excluding "other". */
+export const KNOWN_MIME_MATCHERS: readonly string[] = [
+  ...new Set(
+    FILE_CATEGORIES.filter((category) => category !== "other").flatMap(
+      (category) => CATEGORY_PREFIXES[category],
+    ),
+  ),
+];
 
 export function isFileCategory(value: string): value is FileCategory {
   return (FILE_CATEGORIES as readonly string[]).includes(value);

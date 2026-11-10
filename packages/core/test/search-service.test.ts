@@ -3,6 +3,7 @@ import { ValidationError } from "../src/errors";
 import { FileService } from "../src/services/file-service";
 import { FolderService } from "../src/services/folder-service";
 import { SearchService } from "../src/services/search-service";
+import { resolveItemQuery } from "../src/services/query-resolver";
 import { StorageEngine } from "../src/storage/engine";
 import { FakeStorageProvider, createInMemoryRepos, makeUser, type InMemoryRepos } from "./fakes";
 
@@ -40,6 +41,32 @@ describe("search query language", () => {
   it("filters by extension", async () => {
     const result = await search.search(user.id, "ext:pdf", PAGE);
     expect(result.files.map((f) => f.name)).toEqual(["report.pdf"]);
+  });
+
+  it("treats type:other as files outside every known category", async () => {
+    await files.upload(user.id, { folderId: null, name: "blob.qqq", data: Buffer.alloc(8) });
+    const other = await search.search(user.id, "type:other", PAGE);
+    expect(other.files.map((f) => f.name)).toEqual(["blob.qqq"]);
+  });
+
+  it("rejects an invalid date filter instead of widening the results", async () => {
+    await expect(resolveItemQuery(repos.folders, user.id, { from: "not-a-date" })).rejects.toThrow(
+      ValidationError,
+    );
+  });
+
+  it("applies folder: to both files and folder results", async () => {
+    const projects = (await folders.query(user.id, { q: "Projects" }, PAGE)).items[0]!;
+    await files.upload(user.id, {
+      folderId: projects.id,
+      name: "inside.txt",
+      data: Buffer.alloc(8),
+    });
+    await folders.create(user.id, { name: "Nested", parentId: projects.id });
+
+    const result = await search.search(user.id, "folder:Projects", PAGE);
+    expect(result.files.map((f) => f.name)).toEqual(["inside.txt"]);
+    expect(result.folders.map((f) => f.name)).toEqual(["Nested"]);
   });
 
   it("filters by coarse category", async () => {
@@ -153,6 +180,28 @@ describe("a file-only filter does not return folders", () => {
     const result = await search.search(user.id, "ext:zip", PAGE);
     expect(result.files.map((f) => f.name)).toEqual(["archive.zip"]);
     expect(result.folders).toEqual([]);
+  });
+
+  it("paginates the merged file and folder result without overfilling a page", async () => {
+    const first = await search.search(user.id, "", PAGE).catch(() => null);
+    // Empty queries are rejected; use a query that matches every seeded item.
+    expect(first).toBeNull();
+
+    const pageOne = await search.search(user.id, "starred:false", { page: 1, limit: 2 });
+    const pageTwo = await search.search(user.id, "starred:false", { page: 2, limit: 2 });
+    const pageThree = await search.search(user.id, "starred:false", { page: 3, limit: 2 });
+    const seen = [
+      ...pageOne.files,
+      ...pageOne.folders,
+      ...pageTwo.files,
+      ...pageTwo.folders,
+      ...pageThree.files,
+      ...pageThree.folders,
+    ];
+
+    expect(pageOne.files.length + pageOne.folders.length).toBeLessThanOrEqual(2);
+    expect(pageOne.pagination.total).toBe(6);
+    expect(new Set(seen.map((item) => item.id)).size).toBe(6);
   });
 
   it("returns no folders for a size filter", async () => {

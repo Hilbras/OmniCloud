@@ -133,7 +133,7 @@ POST /api/auth/telegram/qr/start
         │  auth.ExportLoginToken → tg://login?token=<base64url>
         │  → { flowId, token: { url, expiresAt } }
         ▼
-GET /api/auth/telegram/qr/status?flowId=…
+POST /api/auth/telegram/qr/status  { flowId }
         │  while waiting: export a fresh token (Telegram rotates them
         │                 every few seconds) → { status: "waiting", token }
         │  on approval:  LoginTokenSuccess observed → finalize the login

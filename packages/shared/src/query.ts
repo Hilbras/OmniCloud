@@ -66,9 +66,10 @@ export function parseSize(value: string): number | null {
   const amount = Number(match[1]);
   if (!Number.isFinite(amount) || amount < 0) return null;
   const unit = (match[2] ?? "").toLowerCase() || "b";
-  const factor = SIZE_UNITS[unit];
-  if (factor === undefined) return null;
-  return Math.round(amount * factor);
+  if (!Object.hasOwn(SIZE_UNITS, unit)) return null;
+  const factor = SIZE_UNITS[unit]!;
+  const bytes = Math.round(amount * factor);
+  return Number.isFinite(bytes) ? bytes : null;
 }
 
 /** Parses a size comparison such as ">100MB", "<=2gb", "5mb". */
@@ -155,6 +156,10 @@ export function parseSearchQuery(
           terms.push(rawToken);
           break;
         }
+        // The last size: token wins, so a previous opposite bound cannot stay
+        // behind and make the range empty.
+        query.minSize = undefined;
+        query.maxSize = undefined;
         if (comparison.min !== undefined) query.minSize = comparison.min;
         if (comparison.max !== undefined) query.maxSize = comparison.max;
         break;
@@ -199,10 +204,13 @@ export function parseSearchQuery(
   return { query, freeText };
 }
 
+/** Highest page accepted, so `(page - 1) * limit` stays a representable skip. */
+export const MAX_PAGE_INDEX = 1_000_000;
+
 export function normalizePage(value: unknown): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) return 1;
-  return parsed;
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return 1;
+  return Math.min(parsed, MAX_PAGE_INDEX);
 }
 
 export function normalizeLimit(value: unknown): number {

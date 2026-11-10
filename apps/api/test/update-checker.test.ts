@@ -26,6 +26,12 @@ describe("compareVersions", () => {
     expect(compareVersions("1.0.0", "1.0.0-beta.1")).toBeGreaterThan(0);
   });
 
+  it("orders numeric prerelease identifiers numerically", () => {
+    expect(compareVersions("1.0.0-alpha.10", "1.0.0-alpha.2")).toBeGreaterThan(0);
+    expect(compareVersions("1.0.0-alpha.2", "1.0.0-alpha.10")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-alpha.1", "1.0.0-alpha")).toBeGreaterThan(0);
+  });
+
   it("handles missing minor and patch components", () => {
     expect(compareVersions("1.1", "1.0.9")).toBeGreaterThan(0);
     expect(compareVersions("1", "1.0.0")).toBe(0);

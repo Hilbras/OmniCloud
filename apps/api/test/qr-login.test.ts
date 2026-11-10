@@ -23,8 +23,9 @@ async function start() {
 
 function status(flowId: string) {
   return h.app.inject({
-    method: "GET",
-    url: `/api/auth/telegram/qr/status?flowId=${encodeURIComponent(flowId)}`,
+    method: "POST",
+    url: "/api/auth/telegram/qr/status",
+    payload: { flowId },
   });
 }
 
@@ -71,8 +72,21 @@ describe("QR sign-in routes", () => {
   });
 
   it("requires a flow id to poll", async () => {
-    const response = await h.app.inject({ method: "GET", url: "/api/auth/telegram/qr/status" });
+    const response = await h.app.inject({
+      method: "POST",
+      url: "/api/auth/telegram/qr/status",
+      payload: {},
+    });
     expect(response.statusCode).toBe(400);
+  });
+
+  it("does not accept the cookie-issuing status check as a GET", async () => {
+    const started = await start();
+    const response = await h.app.inject({
+      method: "GET",
+      url: `/api/auth/telegram/qr/status?flowId=${encodeURIComponent(started.flowId)}`,
+    });
+    expect(response.statusCode).toBe(404);
   });
 });
 
@@ -91,8 +105,9 @@ describe("the QR status poll", () => {
   it("rejects a status request from a disallowed origin, since it can issue a session", async () => {
     const started = await start();
     const response = await h.app.inject({
-      method: "GET",
-      url: `/api/auth/telegram/qr/status?flowId=${encodeURIComponent(started.flowId)}`,
+      method: "POST",
+      url: "/api/auth/telegram/qr/status",
+      payload: { flowId: started.flowId },
       headers: { origin: "https://evil.example" },
     });
     expect(response.statusCode).toBe(403);

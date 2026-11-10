@@ -42,6 +42,8 @@ export interface FolderRecord {
   starred: boolean;
   /** Soft-delete marker (null = active). */
   deletedAt: Date | null;
+  /** Channel target for new files; null inherits the parent or the default. */
+  storageId: string | null;
   /**
    * Groups everything moved to the Trash by one operation, so restoring a
    * folder restores exactly what it took (and leaves separately-trashed
@@ -61,6 +63,8 @@ export interface FileRecord {
   mimeType: string;
   sha256: string;
   telegramMessageId: number;
+  /** Channel that holds this file's objects; null = the account default. */
+  storageId: string | null;
   /** Opaque OCE1 encryption metadata for the current version; null = plaintext. */
   encryptionFormat?: string | null;
   wrappedKey?: string | null;
@@ -119,6 +123,8 @@ export interface ItemQuery {
   nameContains?: string;
   /** MIME matchers: exact values or prefixes ending in "/". */
   mimeMatchers?: readonly string[];
+  /** MIME matchers that must NOT match (used by `type:other`). */
+  mimeExcludeMatchers?: readonly string[];
   ext?: string;
   starred?: boolean;
   /** false = active only, true = trashed only, undefined = both. */
@@ -160,6 +166,17 @@ export interface StorageStats {
   starredCount: number;
   byType: FileTypeBucket[];
   largestFiles: FileRecord[];
+  /** Subtree usage for the largest folders (root files are `folderId: null`). */
+  folderUsage: Array<{ folderId: string | null; name: string; bytes: number; fileCount: number }>;
+  /** Active files that share the same content hash, most wasteful first. */
+  duplicateGroups: Array<{
+    sha256: string;
+    size: number;
+    fileCount: number;
+    wastedBytes: number;
+    fileIds: string[];
+    names: string[];
+  }>;
   /** Optional quota ceiling (null = unlimited, the v0.2 default). */
   quotaBytes: number | null;
 }

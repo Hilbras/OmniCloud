@@ -5,7 +5,6 @@ export interface AppConfig {
   host: string;
   logLevel: string;
   nodeEnv: string;
-  sessionSecret: string;
   cookieSecure: boolean;
   telegramApiId: number;
   telegramApiHash: string;
@@ -25,7 +24,11 @@ export interface AppConfig {
    * Zero or less keeps everything in the trash indefinitely.
    */
   trashRetentionDays: number;
+  /** Days a terminal upload-operation replay record is kept. */
+  uploadOperationRetentionDays: number;
   webDavEnabled: boolean;
+  /** Interface the WebDAV listener binds to. Loopback by default. */
+  webDavHost: string;
   webDavPort: number;
   webDavWriteEnabled: boolean;
 }
@@ -71,7 +74,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const nodeEnv = optional(env, "NODE_ENV", "development");
-  const sessionSecret = optional(env, "SESSION_SECRET", "");
 
   const encryptionKey = optional(env, "OMNICLOUD_ENCRYPTION_KEY", "");
   if (!encryptionKey && nodeEnv === "production") {
@@ -86,8 +88,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     host: optional(env, "HOST", "0.0.0.0"),
     logLevel: optional(env, "LOG_LEVEL", "info"),
     nodeEnv,
-    sessionSecret: sessionSecret || "development-only-secret-change-me",
-    cookieSecure: bool(env, "COOKIE_SECURE", false),
+    // Secure by default in production; a plain-HTTP deployment must opt out
+    // explicitly rather than silently sending session cookies in clear text.
+    cookieSecure: bool(env, "COOKIE_SECURE", nodeEnv === "production"),
     telegramApiId,
     telegramApiHash,
     maxUploadBytes: int(env, "MAX_UPLOAD_MB", 256) * 1024 * 1024,
@@ -103,7 +106,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // Zero keeps the trash indefinitely, which is what TrashService does with
     // a retention of zero or less.
     trashRetentionDays: nonNegativeInt(env, "TRASH_RETENTION_DAYS", 30),
+    uploadOperationRetentionDays: nonNegativeInt(env, "UPLOAD_OPERATION_RETENTION_DAYS", 7),
     webDavEnabled: bool(env, "WEBDAV_ENABLED", false),
+    webDavHost: optional(env, "WEBDAV_HOST", "127.0.0.1"),
     webDavPort: int(env, "WEBDAV_PORT", 8551),
     webDavWriteEnabled: bool(env, "WEBDAV_WRITE", false),
   };

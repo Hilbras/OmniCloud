@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { ValidationError } from "@omnicloud/core";
+import { ValidationError, isValidOperationId } from "@omnicloud/core";
 import type { Container } from "../container";
 import {
   optionalBoolean,
@@ -13,6 +13,16 @@ import {
 import { toFolderDTO } from "../mappers";
 import { BATCH_FOLDER_OPERATIONS, type BatchFolderOperation } from "@omnicloud/shared";
 
+/** A folder may only target a storage channel owned by the same account. */
+async function assertStorageTarget(
+  container: Container,
+  userId: string,
+  storageId: string,
+): Promise<void> {
+  const storage = await container.repos.storages.findByIdForUser(userId, storageId);
+  if (!storage) throw new ValidationError("Unknown storage target");
+}
+
 /** Folder endpoints: create, list, tree, rename/star, move, trash/restore, delete, batch. */
 export function registerFolderRoutes(app: FastifyInstance, container: Container): void {
   // ── Create ────────────────────────────────────────────────────────────────
@@ -21,15 +31,24 @@ export function registerFolderRoutes(app: FastifyInstance, container: Container)
     const name = optionalString(body, "name");
     if (name === undefined) throw new ValidationError('Field "name" is required');
     const parentId = stringOrNull(body, "parentId");
-    const record = await container.folders.create(request.user.id, { name, parentId });
+    const hasStorage = typeof body === "object" && body !== null && "storageId" in body;
+    const storageId = hasStorage ? stringOrNull(body, "storageId") : null;
+    if (storageId !== null) await assertStorageTarget(container, request.user.id, storageId);
+    const record = await container.folders.create(request.user.id, {
+      name,
+      parentId,
+      storageId,
+    });
     return reply.status(201).send({ folder: toFolderDTO(record) });
   });
 
   // ── List children of a folder (root when parentId is absent) ─────────────
   app.get("/api/folders", async (request) => {
     const raw = request.query as Record<string, unknown>;
-    // Default to the root when no scope filter is supplied, matching v0.1.
-    if (!("parentId" in raw) && !("status" in raw) && !("q" in raw) && !("starred" in raw)) {
+    const scoped = "parentId" in raw || "status" in raw || "q" in raw || "starred" in raw;
+    // Paging or sorting without a scope still means "the root", and must not
+    // be silently answered with page 1 / unsorted data.
+    if (!scoped && !("page" in raw) && !("limit" in raw) && !("sort" in raw) && !("order" in raw)) {
       const folders = await container.folders.listChildren(request.user.id, null);
       return {
         folders: folders.map(toFolderDTO),
@@ -41,6 +60,8 @@ export function registerFolderRoutes(app: FastifyInstance, container: Container)
     if ("parentId" in raw) {
       query.folderId =
         typeof raw.parentId === "string" && raw.parentId !== "" ? raw.parentId : null;
+    } else if (!scoped) {
+      query.folderId = null;
     }
     const result = await container.folders.query(request.user.id, query, { page, limit });
     return {
@@ -61,6 +82,10 @@ export function registerFolderRoutes(app: FastifyInstance, container: Container)
     const operation = requireEnum<BatchFolderOperation>(body, "operation", BATCH_FOLDER_OPERATIONS);
     const ids = requireStringArray(body, "ids");
     const parentId = operation === "move" ? stringOrNull(body, "parentId") : undefined;
+    const operationId = stringOrNull(body, "operationId") ?? undefined;
+    if (operationId !== undefined && !isValidOperationId(operationId)) {
+      throw new ValidationError("Invalid batch operation id");
+    }
 
     let succeeded = 0;
     const errors: { id: string; code: "INVALID_REQUEST"; message: string }[] = [];
@@ -97,7 +122,13 @@ export function registerFolderRoutes(app: FastifyInstance, container: Container)
       }
     }
 
-    return { requested: ids.length, succeeded, failed: errors.length, errors };
+    return {
+      ...(operationId ? { operationId } : {}),
+      requested: ids.length,
+      succeeded,
+      failed: errors.length,
+      errors,
+    };
   });
 
   // ── Rename / star ─────────────────────────────────────────────────────────
@@ -106,14 +137,20 @@ export function registerFolderRoutes(app: FastifyInstance, container: Container)
     const body = requireBody(request);
     const name = optionalString(body, "name");
     const starred = optionalBoolean(body, "starred");
-    if (name === undefined && starred === undefined) {
-      throw new ValidationError('At least one of "name" or "starred" is required');
+    const hasStorage = typeof body === "object" && body !== null && "storageId" in body;
+    if (name === undefined && starred === undefined && !hasStorage) {
+      throw new ValidationError('At least one of "name", "starred" or "storageId" is required');
     }
 
     let record = await container.folders.get(request.user.id, id);
     if (name !== undefined) record = await container.folders.rename(request.user.id, id, name);
     if (starred !== undefined) {
       record = await container.folders.setStarred(request.user.id, id, starred);
+    }
+    if (hasStorage) {
+      const storageId = stringOrNull(body, "storageId");
+      if (storageId !== null) await assertStorageTarget(container, request.user.id, storageId);
+      record = await container.folders.setStorageTarget(request.user.id, id, storageId);
     }
     return { folder: toFolderDTO(record) };
   });

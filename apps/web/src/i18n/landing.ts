@@ -9,6 +9,7 @@ const en = {
     features: "Features",
     security: "Security",
     openSource: "Open source",
+    download: "Download",
     signIn: "Sign in",
     getStarted: "Get started",
   },
@@ -106,6 +107,53 @@ const en = {
     subtitle: "Free, open source, and running on your own machine in minutes.",
     button: "Get started with Telegram",
   },
+  download: {
+    seoTitle: "Download OmniCloud — desktop app for Linux, macOS and Windows",
+    seoDescription:
+      "Download the OmniCloud desktop app for Linux, macOS and Windows, or install the CLI and SDK from npm.",
+    kicker: "DESKTOP APP",
+    titleA: "Your drive,",
+    titleB: "on your desktop.",
+    subtitle:
+      "A native window over the same drive: tray uploads, offline listings, window-state memory and auto-updates. Pick your platform, or run the CLI anywhere.",
+    latest: "Latest release",
+    source: "Run from source",
+    platforms: {
+      linux: {
+        title: "Linux",
+        body: "AppImage for a portable run, or the .deb package for a system install.",
+        formats: ".AppImage · .deb",
+      },
+      macos: {
+        title: "macOS",
+        body: "Universal build for Apple silicon and Intel. Signed builds need the Developer ID certificate.",
+        formats: ".dmg · .zip",
+      },
+      windows: {
+        title: "Windows",
+        body: "NSIS installer for Windows 10 and 11. Authenticode signing is optional for local builds.",
+        formats: ".exe",
+      },
+    },
+    note: "Artifacts come from the Desktop Build & Release workflow on GitHub. Unsigned builds show the usual OS warning — the source is public, so you can build your own.",
+    cli: {
+      kicker: "CLI & SDK",
+      title: "Prefer the terminal?",
+      body: "The same engine ships as an npm package: script uploads, mount WebDAV, or build your own client on the SDK.",
+      install: "npm install -g @hilbras/omnicloud",
+      run: "omnicloud --help",
+    },
+    requirements: {
+      title: "What you need",
+      items: [
+        "A Telegram account — files live in a private channel you control.",
+        "Node.js ≥ 20 for the CLI, SDK or running from source.",
+        "Docker and PostgreSQL for a self-hosted server.",
+        "No third-party cloud storage vendor.",
+      ],
+    },
+    back: "Back to home",
+  },
   footer: {
     features: "Features",
     security: "Security",
@@ -129,6 +177,7 @@ const ar: Translation = {
     features: "المزايا",
     security: "الأمان",
     openSource: "المصدر المفتوح",
+    download: "التنزيل",
     signIn: "تسجيل الدخول",
     getStarted: "ابدأ الآن",
   },
@@ -226,6 +275,53 @@ const ar: Translation = {
     subtitle: "مجاني، مفتوح المصدر، ويعمل على جهازك الخاص خلال دقائق.",
     button: "ابدأ مع تيليغرام",
   },
+  download: {
+    seoTitle: "تنزيل OmniCloud — تطبيق سطح المكتب للينكس وماك وويندوز",
+    seoDescription:
+      "نزّل تطبيق OmniCloud لسطح المكتب للينكس وماك وويندوز، أو ثبّت سطر الأوامر وحزمة SDK من npm.",
+    kicker: "تطبيق سطح المكتب",
+    titleA: "قرصك،",
+    titleB: "على سطح مكتبك.",
+    subtitle:
+      "نافذة أصلية على القرص نفسه: رفع من شريط النظام، قوائم دون اتصال، تذكّر موضع النافذة وتحديثات تلقائية. اختر منصّتك، أو شغّل سطر الأوامر في أي مكان.",
+    latest: "أحدث إصدار",
+    source: "التشغيل من المصدر",
+    platforms: {
+      linux: {
+        title: "لينكس",
+        body: "AppImage للتشغيل المحمول، أو حزمة .deb لتثبيت على النظام.",
+        formats: ".AppImage · .deb",
+      },
+      macos: {
+        title: "ماك",
+        body: "نسخة شاملة لشرائح Apple وIntel. النسخ الموقّعة تحتاج شهادة Developer ID.",
+        formats: ".dmg · .zip",
+      },
+      windows: {
+        title: "ويندوز",
+        body: "مثبّت NSIS لويندوز 10 و11. توقيع Authenticode اختياري للنسخ المحلية.",
+        formats: ".exe",
+      },
+    },
+    note: "الملفات تأتي من سير عمل بناء وإصدار سطح المكتب على GitHub. النسخ غير الموقّعة تُظهر تحذير النظام المعتاد — والمصدر عام، فيمكنك البناء بنفسك.",
+    cli: {
+      kicker: "سطر الأوامر وSDK",
+      title: "تفضّل الطرفية؟",
+      body: "المحرّك نفسه يُنشر كحزمة npm: برمِج الرفع، أو اربط WebDAV، أو ابنِ عميلك على SDK.",
+      install: "npm install -g @hilbras/omnicloud",
+      run: "omnicloud --help",
+    },
+    requirements: {
+      title: "ما تحتاجه",
+      items: [
+        "حساب تيليغرام — تعيش الملفات في قناة خاصة تتحكم بها.",
+        "Node.js ≥ 20 لسطر الأوامر أو SDK أو التشغيل من المصدر.",
+        "Docker وPostgreSQL لخادم مستضاف ذاتيًا.",
+        "بلا مزوّد تخزين سحابي خارجي.",
+      ],
+    },
+    back: "العودة إلى الرئيسية",
+  },
   footer: {
     features: "المزايا",
     security: "الأمان",
@@ -247,6 +343,7 @@ const ru: Translation = {
     features: "Возможности",
     security: "Безопасность",
     openSource: "Открытый код",
+    download: "Скачать",
     signIn: "Войти",
     getStarted: "Начать",
   },
@@ -347,6 +444,53 @@ const ru: Translation = {
     title: "Верните файлы домой.",
     subtitle: "Бесплатно, открытый исходный код, запускается на вашей машине за минуты.",
     button: "Начать с Telegram",
+  },
+  download: {
+    seoTitle: "Скачать OmniCloud — приложение для Linux, macOS и Windows",
+    seoDescription:
+      "Скачайте приложение OmniCloud для Linux, macOS и Windows или установите CLI и SDK из npm.",
+    kicker: "ПРИЛОЖЕНИЕ",
+    titleA: "Ваш диск,",
+    titleB: "на вашем рабочем столе.",
+    subtitle:
+      "Нативное окно к тому же диску: загрузки из трея, офлайн-списки, запоминание окна и автообновления. Выберите платформу или запускайте CLI где угодно.",
+    latest: "Последний релиз",
+    source: "Запуск из исходников",
+    platforms: {
+      linux: {
+        title: "Linux",
+        body: "AppImage для переносного запуска или пакет .deb для установки в систему.",
+        formats: ".AppImage · .deb",
+      },
+      macos: {
+        title: "macOS",
+        body: "Универсальная сборка для Apple silicon и Intel. Подписанным сборкам нужен сертификат Developer ID.",
+        formats: ".dmg · .zip",
+      },
+      windows: {
+        title: "Windows",
+        body: "Установщик NSIS для Windows 10 и 11. Подпись Authenticode для локальных сборок необязательна.",
+        formats: ".exe",
+      },
+    },
+    note: "Файлы публикует workflow Desktop Build & Release на GitHub. Неподписанные сборки показывают обычное предупреждение ОС — исходники открыты, можно собрать самому.",
+    cli: {
+      kicker: "CLI И SDK",
+      title: "Предпочитаете терминал?",
+      body: "Тот же движок поставляется как npm-пакет: автоматизируйте загрузки, подключайте WebDAV или стройте свой клиент на SDK.",
+      install: "npm install -g @hilbras/omnicloud",
+      run: "omnicloud --help",
+    },
+    requirements: {
+      title: "Что понадобится",
+      items: [
+        "Аккаунт Telegram — файлы живут в приватном канале, которым владеете вы.",
+        "Node.js ≥ 20 для CLI, SDK или запуска из исходников.",
+        "Docker и PostgreSQL для собственного сервера.",
+        "Без сторонних облачных провайдеров.",
+      ],
+    },
+    back: "На главную",
   },
   footer: {
     features: "Возможности",

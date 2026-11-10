@@ -2,6 +2,7 @@ import { RPCError } from "telegram/errors/index.js";
 import {
   DomainError,
   ForbiddenError,
+  OperationCancelledError,
   RateLimitedError,
   StorageNotInitializedError,
   TelegramAuthRequiredError,
@@ -84,6 +85,9 @@ export function mapTelegramError(error: unknown, fallbackMessage: string): Domai
       // Permanent: the stored channel reference is stale. Retrying with the same reference fails too.
       case "PEER_ID_INVALID":
         return new StorageNotInitializedError();
+      case "USER_CANCELED":
+        // GramJS throws this after observing a canceled progress callback.
+        return new OperationCancelledError();
       case "MSG_ID_INVALID":
       case "MESSAGE_ID_INVALID":
         return new TelegramFileNotFoundError();

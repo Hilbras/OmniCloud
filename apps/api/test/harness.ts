@@ -19,7 +19,6 @@ export function testConfig(maxUploadBytes = 1024 * 1024, webDistDir?: string): A
     host: "127.0.0.1",
     logLevel: "error",
     nodeEnv: "test",
-    sessionSecret: "test-secret",
     cookieSecure: false,
     telegramApiId: 12345,
     telegramApiHash: "test-hash",
@@ -31,7 +30,9 @@ export function testConfig(maxUploadBytes = 1024 * 1024, webDistDir?: string): A
     updatePackageName: "@hilbras/omnicloud",
     updateCheckEnabled: false,
     trashRetentionDays: 30,
+    uploadOperationRetentionDays: 7,
     webDavEnabled: false,
+    webDavHost: "127.0.0.1",
     webDavPort: 8551,
     webDavWriteEnabled: false,
   };
@@ -116,6 +117,18 @@ export class FakeTelegramConnection implements ConnectionService {
     });
   }
 
+  async createStorage(userId: string, title?: string) {
+    const existing = await this.repos.storages.listByUser(userId);
+    if (existing.length >= 5) throw new Error("At most 5 storage channels per account");
+    return this.repos.storages.create({
+      userId,
+      provider: TELEGRAM_PROVIDER,
+      title: title?.trim() || "OmniCloud Storage",
+      telegramChatId: `-10012345678${existing.length + 1}`,
+      telegramAccessHash: `98765432${existing.length + 1}`,
+    });
+  }
+
   private async complete(phone: string) {
     const telegramUserId = phone.replace(/\D/g, "") || "424242";
     const user = await this.completeUser(phone, telegramUserId);
@@ -159,6 +172,8 @@ export interface TestHarness {
   connectionDouble: FakeTelegramConnection;
   /** Base URL for the WebDAV server when `webDavEnabled` is true. */
   webDavUrl?: string;
+  /** Stops the WebDAV server when `webDavEnabled` is true. */
+  webDavStop: (() => Promise<void>) | null;
 }
 
 /** Builds the Fastify app wired to in-memory repos, a fake provider and a fake Telegram connection. */
@@ -170,11 +185,17 @@ export async function createTestHarness(
   engineFor?: (userId: string) => Promise<StorageEngine>,
   updateChecker?: UpdateChecker | null,
   webDavEnabled = false,
+  webDavWriteEnabled = false,
+  webDavPort = 0,
 ): Promise<TestHarness> {
   const repos = createInMemoryRepos();
 
   const connectionDouble = new FakeTelegramConnection(repos);
-  const container = buildContainerFromRepos(testConfig(maxUploadBytes, webDistDir), repos, {
+  const config = {
+    ...testConfig(maxUploadBytes, webDistDir),
+    updateCheckEnabled: updateChecker !== null && updateChecker !== undefined,
+  };
+  const container = buildContainerFromRepos(config, repos, {
     operationLog,
     connection: connectionDouble,
     storageHealth: new FakeStorageHealth(provider),
@@ -187,9 +208,14 @@ export async function createTestHarness(
   let webDavStop: (() => Promise<void>) | null = null;
   let webDavUrl: string | undefined;
   if (webDavEnabled) {
-    const webdavConfig = loadWebDavConfig(testConfig(maxUploadBytes, webDistDir));
-    webDavStop = await startWebDavServer(app, container, webdavConfig);
-    webDavUrl = `http://127.0.0.1:${webdavConfig.port}`;
+    const webdavConfig = {
+      ...loadWebDavConfig(testConfig(maxUploadBytes, webDistDir)),
+      port: webDavPort,
+      writeEnabled: webDavWriteEnabled,
+    };
+    const started = await startWebDavServer(app, container, webdavConfig);
+    webDavStop = started.stop;
+    webDavUrl = `http://${webdavConfig.host}:${started.port}`;
   }
 
   return {
@@ -220,23 +246,26 @@ export async function createTestHarness(
 export function multipartBody(
   fields: Record<string, string>,
   file: { name: string; data: Buffer },
+  options: { fileFirst?: boolean } = {},
 ): { payload: Buffer; contentType: string } {
   const boundary = "----omnicloudtestboundary";
-  const parts: Buffer[] = [];
+  const fieldParts: Buffer[] = [];
   for (const [key, value] of Object.entries(fields)) {
-    parts.push(
+    fieldParts.push(
       Buffer.from(
         `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`,
       ),
     );
   }
-  parts.push(
+  const fileParts: Buffer[] = [
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
     ),
-  );
-  parts.push(file.data);
-  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    file.data,
+    Buffer.from("\r\n"),
+  ];
+  const parts = options.fileFirst ? [...fileParts, ...fieldParts] : [...fieldParts, ...fileParts];
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
   return {
     payload: Buffer.concat(parts),
     contentType: `multipart/form-data; boundary=${boundary}`,

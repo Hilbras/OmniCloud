@@ -41,3 +41,11 @@ kimi-export-session_*.md
 .vercel/
 .vercel
 .env*
+
+# Desktop build output (electron-vite / electron-builder)
+apps/desktop/out/
+apps/desktop/release/
+
+# Desktop packaging assets are source, not build output.
+!apps/desktop/build/
+!apps/desktop/build/**

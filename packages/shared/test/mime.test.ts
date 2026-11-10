@@ -50,6 +50,10 @@ describe("mimeFromFilename", () => {
   it("falls back to the default type for an unknown extension", () => {
     expect(mimeFromFilename("thing.qqq")).toBe(DEFAULT_MIME_TYPE);
     expect(mimeFromFilename("README")).toBe(DEFAULT_MIME_TYPE);
+    // Prototype keys are not MIME types.
+    expect(mimeFromFilename("x.constructor")).toBe(DEFAULT_MIME_TYPE);
+    expect(mimeFromFilename("x.toString")).toBe(DEFAULT_MIME_TYPE);
+    expect(mimeFromFilename("x.__proto__")).toBe(DEFAULT_MIME_TYPE);
   });
 
   it("uses only the final extension, so a double extension is not misread", () => {

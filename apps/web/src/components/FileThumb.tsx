@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchThumbnailBlob } from "../api/download";
-import {
-  beginThumbnail,
-  failThumbnail,
-  getThumbnail,
-  isThumbnailable,
-  setThumbnail,
-} from "../lib/thumbnails";
+import { isThumbnailable, loadThumbnail } from "../lib/thumbnails";
 import type { DriveItem } from "../lib/drive";
 
 interface FileThumbProps {
@@ -21,7 +15,8 @@ interface FileThumbProps {
  * The thumbnail is fetched only once the card scrolls into view, so opening a
  * large drive does not download every image in it. Encrypted files are
  * decrypted in the tab exactly as the preview does; the bytes are exposed only
- * as an object URL held in a bounded cache, and are never written to disk.
+ * as an object URL held in a bounded cache and are never written to disk.
+ * Plaintext images may come from the on-disk thumbnail cache instead.
  */
 export function FileThumb({ item, children }: FileThumbProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -57,31 +52,17 @@ export function FileThumb({ item, children }: FileThumbProps) {
   // Fetch once visible.
   useEffect(() => {
     if (!visible || !thumbnailable || file === null) return;
-    const cached = getThumbnail(file.id);
-    if (cached !== null) {
-      setUrl(cached);
-      return;
-    }
     let cancelled = false;
-    let settled = false;
-    beginThumbnail(file.id);
-    fetchThumbnailBlob(file.id, file)
-      .then((blob) => {
+    loadThumbnail(file.id, () => fetchThumbnailBlob(file.id, file))
+      .then((objectUrl) => {
         if (cancelled) return;
-        const objectUrl = URL.createObjectURL(blob);
-        settled = true;
-        setThumbnail(file.id, objectUrl);
         setUrl(objectUrl);
       })
       .catch(() => {
         // A thumbnail is a nicety: on failure the card keeps its icon.
-        settled = true;
-        failThumbnail(file.id);
       });
     return () => {
       cancelled = true;
-      // Drop the pending marker so a later mount can retry cleanly.
-      if (!settled) failThumbnail(file.id);
     };
   }, [visible, thumbnailable, file]);
 

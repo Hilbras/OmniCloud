@@ -10,6 +10,8 @@ export interface DriveItem {
   kind: "file" | "folder";
   id: string;
   name: string;
+  /** The server-side name before any OCE2 real-name substitution. */
+  serverName?: string;
   /** Bytes; folders report 0. */
   size: number;
   mimeType: string;
@@ -33,6 +35,7 @@ export function fileToItem(file: FileDTO): DriveItem {
     kind: "file",
     id: named.id,
     name: named.name,
+    serverName: file.name,
     size: file.size,
     mimeType: file.mimeType,
     starred: file.starred,
@@ -51,6 +54,7 @@ export function folderToItem(folder: FolderDTO): DriveItem {
     kind: "folder",
     id: folder.id,
     name: folder.name,
+    serverName: folder.name,
     size: 0,
     mimeType: "",
     starred: folder.starred,

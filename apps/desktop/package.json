@@ -1,12 +1,12 @@
 {
   "name": "@hilbras/omnicloud-desktop",
   "version": "0.5.0",
-  "private": false,
-  "description": "OmniCloud desktop app — self-hosted cloud storage powered by your Telegram account.",
+  "private": true,
+  "description": "OmniCloud desktop app \u2014 self-hosted cloud storage powered by your Telegram account.",
   "license": "MIT",
   "author": "Hilbras Team <contact@hilbras.com>",
   "type": "module",
-  "main": "./dist/main/main.js",
+  "main": "./out/main/main.js",
   "homepage": "https://omnicloud.hilbras.com",
   "repository": {
     "type": "git",
@@ -23,38 +23,37 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "dist": "pnpm build:web && pnpm build:server && pnpm build:electron && electron-builder --linux deb AppImage",
+    "typecheck": "tsc --noEmit",
+    "dist": "pnpm build:web && pnpm build:server && pnpm copy:node_modules && pnpm build:electron && electron-builder --publish never",
     "build:web": "pnpm --filter @omnicloud/web build",
     "build:server": "pnpm --filter @hilbras/omnicloud bundle:server",
     "build:electron": "electron-vite build",
-    "prepublishOnly": "pnpm build:web && pnpm build:server && pnpm build:electron",
-    "postinstall": "electron-builder install-app-deps"
-  },
-  "publishConfig": {
-    "access": "public"
+    "postinstall": "electron-builder install-app-deps",
+    "copy:node_modules": "node copy-node-modules.mjs",
+    "test": "vitest run"
   },
   "files": [
-    "dist",
-    "build",
-    "server",
-    "web"
+    "out",
+    "build"
   ],
   "devDependencies": {
-    "electron": "^28.3.3",
+    "@types/node": "^22.10.0",
+    "electron": "^35.7.5",
     "electron-builder": "^24.9.1",
     "electron-vite": "^2.0.0",
     "typescript": "^5.6.3",
-    "wait-on": "^7.2.0"
+    "vitest": "^4.1.11"
   },
   "build": {
     "appId": "com.hilbras.omnicloud",
-    "productName": "omnicloud",
-    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "productName": "OmniCloud",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
     "files": [
-      "dist/**/*",
-      "!dist/**/*.map",
-      "server/**/*",
-      "web/**/*"
+      "out/**/*",
+      "!out/**/*.map"
     ],
     "extraResources": [
       {
@@ -64,33 +63,98 @@
       {
         "from": "../../apps/web/dist",
         "to": "web"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
       }
     ],
     "linux": {
       "target": [
         {
           "target": "deb",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "AppImage",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
-      "category": "Network",
-      "icon": "build/icon.png"
+      "category": "Utility",
+      "icon": "build/icons",
+      "executableName": "omnicloud"
     },
     "deb": {
       "depends": [
-        "gconf2",
-        "gconf-service",
+        "libasound2 | libasound2t64",
+        "libatk1.0-0 | libatk1.0-0t64",
+        "libatk-bridge2.0-0 | libatk-bridge2.0-0t64",
+        "libcups2 | libcups2t64",
+        "libdrm2",
+        "libgbm1",
+        "libgtk-3-0 | libgtk-3-0t64",
         "libnotify4",
-        "libappindicator1",
-        "libxtst6",
         "libnss3",
+        "libx11-xcb1",
+        "libxcb1",
+        "libxcomposite1",
+        "libxdamage1",
+        "libxrandr2",
         "libxss1",
-        "libasound2"
+        "libxtst6"
       ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Hilbras",
+      "repo": "OmniCloud"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   }
 }

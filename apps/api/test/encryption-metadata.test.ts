@@ -133,13 +133,13 @@ describe("replace updates and clears encryption metadata", () => {
     expectPlaintext(list[1]!);
   });
 
-  it("replacing without encryption clears the file-level fields", async () => {
+  it("refuses a plaintext replacement that would remove encryption", async () => {
     const uploaded = await upload(encryptionFields, "clear-me.bin");
     const id = uploaded.json().file.id as string;
 
     const response = await replace(id, {}, Buffer.from("now plaintext"));
-    expect(response.statusCode).toBe(200);
-    expectPlaintext(response.json().file);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/remove its encryption/i);
 
     const versions = await h.app.inject({
       method: "GET",
@@ -147,10 +147,9 @@ describe("replace updates and clears encryption metadata", () => {
       cookies: { omnicloud_session: cookie },
     });
     const list = versions.json().versions as Record<string, unknown>[];
-    expect(list).toHaveLength(2);
-    // The new version is plaintext; the old encrypted version keeps its fields.
-    expectPlaintext(list[0]!);
-    expectEncryption(list[1]!, encryptionFields);
+    // Nothing was written: the encrypted version is still the only one.
+    expect(list).toHaveLength(1);
+    expectEncryption(list[0]!, encryptionFields);
   });
 });
 

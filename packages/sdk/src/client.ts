@@ -121,7 +121,6 @@ export interface DownloadResult {
   contentType: string;
   size: number;
   sha256: string | null;
-  integrityVerified: boolean | null;
 }
 
 type Query = Record<string, string | number | boolean | undefined | null>;
@@ -448,11 +447,9 @@ export class OmniCloudClient {
     const total = lengthHeader === null ? null : Number(lengthHeader);
     const contentType = response.headers.get("content-type") ?? "application/octet-stream";
     const sha256 = response.headers.get("x-content-sha256");
-    const integrityHeader = response.headers.get("x-integrity-verified");
-    const integrityVerified = integrityHeader === null ? null : integrityHeader === "true";
 
     const data = await readBody(response, total, onProgress);
-    return { data, contentType, size: data.byteLength, sha256, integrityVerified };
+    return { data, contentType, size: data.byteLength, sha256 };
   }
 }
 
@@ -698,10 +695,20 @@ class FilesApi {
 
   private uploadViaXhr(form: FormData, options: UploadOptions): Promise<FileDTO> {
     return new Promise((resolve, reject) => {
+      if (options.signal?.aborted) {
+        reject(new OmniCloudError(0, "ABORTED", "Upload aborted"));
+        return;
+      }
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${this.client.baseUrl}/api/files`);
       xhr.responseType = "json";
       xhr.withCredentials = true;
+      // Every other transport applies the client's headers (bearer token,
+      // caller headers). The XHR path used to drop them and send an
+      // unauthenticated upload.
+      for (const [name, value] of Object.entries(this.client.defaultHeaders)) {
+        xhr.setRequestHeader(name, value);
+      }
       if (options.operationId) xhr.setRequestHeader("Idempotency-Key", options.operationId);
 
       const onAbort = () => xhr.abort();
@@ -734,9 +741,14 @@ class FilesApi {
           ),
         );
       };
-      xhr.onerror = () =>
+      xhr.onerror = () => {
+        options.signal?.removeEventListener("abort", onAbort);
         reject(new OmniCloudError(0, "NETWORK_ERROR", "Network error during upload"));
-      xhr.onabort = () => reject(new OmniCloudError(0, "ABORTED", "Upload aborted"));
+      };
+      xhr.onabort = () => {
+        options.signal?.removeEventListener("abort", onAbort);
+        reject(new OmniCloudError(0, "ABORTED", "Upload aborted"));
+      };
       xhr.send(form);
     });
   }
@@ -848,9 +860,14 @@ class FilesApi {
     return `${this.client.baseUrl}/api/files/${id}/download`;
   }
 
-  async rename(id: string, name: string): Promise<FileDTO> {
+  async rename(
+    id: string,
+    name: string,
+    options: { metadataBlob?: string } = {},
+  ): Promise<FileDTO> {
     const { file } = await this.client.request<{ file: FileDTO }>("PATCH", `/api/files/${id}`, {
       name,
+      ...(options.metadataBlob !== undefined ? { metadataBlob: options.metadataBlob } : {}),
     });
     return file;
   }

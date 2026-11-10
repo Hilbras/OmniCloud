@@ -31,9 +31,13 @@ interface LoginFlow {
   client: TelegramClient;
   phoneCodeHash: string;
   createdAt: number;
+  expiryTimer: NodeJS.Timeout | null;
 }
 
 const LOGIN_FLOW_TTL_MS = 5 * 60 * 1000;
+
+/** Upper bound on storage channels one account may create. */
+const MAX_STORAGES_PER_USER = 5;
 
 /** A QR sign-in in progress: a connected client waiting for the phone to approve the token. */
 interface QrFlow {
@@ -49,6 +53,8 @@ interface QrFlow {
   tokenRequest: Promise<QrLoginToken | null> | null;
   /** Most recent token kept available when a transient refresh fails. */
   token: QrLoginToken | null;
+  /** Set while finalizing, so concurrent polls share one login completion. */
+  completion: Promise<UserRecord> | null;
 }
 
 export interface QrLoginToken {
@@ -82,6 +88,12 @@ export type VerifyCodeResult = { status: "ok"; user: UserRecord } | { status: "p
 export class TelegramConnectionService {
   private flows = new Map<string, LoginFlow>();
   private qrFlows = new Map<string, QrFlow>();
+  /** Recently completed QR logins, so a concurrent second poll sees approval. */
+  private qrCompletions = new Map<string, Promise<UserRecord>>();
+  /** Coalesces concurrent code sends for the same phone number. */
+  private loginStarts = new Map<string, Promise<void>>();
+  /** Single-flight storage creation per user. */
+  private storageCreations = new Map<string, Promise<StorageRecord>>();
 
   constructor(
     private readonly repos: Repos,
@@ -91,6 +103,17 @@ export class TelegramConnectionService {
 
   /** Sends the Telegram confirmation code for the phone number. */
   async startLogin(phone: string): Promise<void> {
+    const inFlight = this.loginStarts.get(phone);
+    if (inFlight) return inFlight;
+
+    const started = this.startLoginOnce(phone).finally(() => {
+      this.loginStarts.delete(phone);
+    });
+    this.loginStarts.set(phone, started);
+    return started;
+  }
+
+  private async startLoginOnce(phone: string): Promise<void> {
     this.sweepExpiredFlows();
     await this.cancelLogin(phone);
 
@@ -101,11 +124,30 @@ export class TelegramConnectionService {
         { apiId: this.credentials.apiId, apiHash: this.credentials.apiHash },
         phone,
       );
-      this.flows.set(phone, { phone, client, phoneCodeHash, createdAt: Date.now() });
+      const flow: LoginFlow = {
+        phone,
+        client,
+        phoneCodeHash,
+        createdAt: Date.now(),
+        expiryTimer: null,
+      };
+      this.flows.set(phone, flow);
+      this.armLoginExpiry(flow);
     } catch (error) {
       await this.disconnectQuietly(client);
       throw mapTelegramError(error, "Could not send the Telegram confirmation code");
     }
+  }
+
+  /** Closes an abandoned phone login even when the user never polls again. */
+  private armLoginExpiry(flow: LoginFlow): void {
+    flow.expiryTimer = setTimeout(() => {
+      const current = this.flows.get(flow.phone);
+      if (current !== flow) return;
+      this.flows.delete(flow.phone);
+      void this.disconnectQuietly(flow.client);
+    }, LOGIN_FLOW_TTL_MS);
+    flow.expiryTimer.unref();
   }
 
   /** Verifies the confirmation code. Returns `password_required` for 2FA accounts. */
@@ -158,6 +200,7 @@ export class TelegramConnectionService {
         failure: null,
         tokenRequest: null,
         token: null,
+        completion: null,
       };
       const flowId = randomUUID();
       const token = await this.exportQrToken(client, flow);
@@ -184,7 +227,16 @@ export class TelegramConnectionService {
    * (Telegram rotates them every few seconds). On approval, completes the login.
    */
   async pollQrLogin(flowId: string): Promise<QrStatus> {
-    const flow = this.requireQrFlow(flowId);
+    const completed = this.qrCompletions.get(flowId);
+    if (completed) return { status: "approved", user: await completed };
+
+    const flow = this.qrFlows.get(flowId);
+    if (!flow) return { status: "expired" };
+    if (Date.now() - flow.createdAt > QR_FLOW_TTL_MS) {
+      this.qrFlows.delete(flowId);
+      await this.disconnectQuietly(flow.client);
+      return { status: "expired" };
+    }
     if (flow.failure) {
       this.qrFlows.delete(flowId);
       await this.disconnectQuietly(flow.client);
@@ -332,8 +384,18 @@ export class TelegramConnectionService {
     flowId: string,
     flow: QrFlow,
   ): Promise<{ status: "approved"; user: UserRecord }> {
-    this.qrFlows.delete(flowId);
-    const user = await this.finalizeConnectedClient(flow.client, null);
+    if (flow.completion === null) {
+      // Claim the flow before the first await: a poll and the watcher can both
+      // observe approval, and finalizing twice would save two sessions.
+      this.qrFlows.delete(flowId);
+      const completion = this.finalizeConnectedClient(flow.client, null);
+      this.qrCompletions.set(flowId, completion);
+      const cleanup = setTimeout(() => this.qrCompletions.delete(flowId), 60_000);
+      cleanup.unref();
+      completion.catch(() => this.qrCompletions.delete(flowId));
+      flow.completion = completion;
+    }
+    const user = await flow.completion;
     return { status: "approved", user };
   }
 
@@ -365,6 +427,7 @@ export class TelegramConnectionService {
     const flow = this.flows.get(phone);
     if (flow) {
       this.flows.delete(phone);
+      if (flow.expiryTimer) clearTimeout(flow.expiryTimer);
       await this.disconnectQuietly(flow.client);
     }
   }
@@ -382,14 +445,60 @@ export class TelegramConnectionService {
   }
 
   async ensureStorageForClient(userId: string, client: TelegramClient): Promise<StorageRecord> {
+    const inFlight = this.storageCreations.get(userId);
+    if (inFlight) return inFlight;
+
+    const attempt = this.createStorageForClient(userId, client).finally(() => {
+      this.storageCreations.delete(userId);
+    });
+    this.storageCreations.set(userId, attempt);
+    return attempt;
+  }
+
+  /**
+   * Creates an additional private storage channel for the account. The oldest
+   * registration stays the default; extra channels exist so folders can target
+   * them. Capped so a stuck client cannot create channels without bound.
+   */
+  async createStorage(userId: string, title?: string): Promise<StorageRecord> {
+    const existing = await this.repos.storages.listByUser(userId);
+    if (existing.length >= MAX_STORAGES_PER_USER) {
+      throw new ValidationError(`At most ${MAX_STORAGES_PER_USER} storage channels per account`);
+    }
+    const label = title?.trim() || "OmniCloud Storage";
+    if (label.length > 80) throw new ValidationError("Storage title must be 80 characters or less");
+    const client = await this.clientManager.getForUser(userId);
+    return this.createChannelForClient(userId, client, label);
+  }
+
+  private async createStorageForClient(
+    userId: string,
+    client: TelegramClient,
+  ): Promise<StorageRecord> {
     const existing = await this.repos.storages.findByUserAndProvider(userId, TELEGRAM_PROVIDER);
     if (existing) return existing;
 
+    try {
+      return await this.createChannelForClient(userId, client, "OmniCloud Storage");
+    } catch (error) {
+      // A concurrent ensureStorage may have won the race after our initial
+      // check. Return its record instead of surfacing a 500.
+      const winner = await this.repos.storages.findByUserAndProvider(userId, TELEGRAM_PROVIDER);
+      if (winner) return winner;
+      throw error;
+    }
+  }
+
+  private async createChannelForClient(
+    userId: string,
+    client: TelegramClient,
+    title: string,
+  ): Promise<StorageRecord> {
     let channel: Api.Channel;
     try {
       const result = await client.invoke(
         new Api.channels.CreateChannel({
-          title: "OmniCloud Storage",
+          title,
           about:
             "Private storage channel created by OmniCloud (https://github.com/Hilbras/OmniCloud)",
           megagroup: false,
@@ -407,13 +516,17 @@ export class TelegramConnectionService {
 
     await this.brandChannel(client, channel);
 
-    return this.repos.storages.create({
-      userId,
-      provider: TELEGRAM_PROVIDER,
-      title: channel.title ?? "OmniCloud Storage",
-      telegramChatId: channel.id.toString(),
-      telegramAccessHash: accessHash,
-    });
+    try {
+      return await this.repos.storages.create({
+        userId,
+        provider: TELEGRAM_PROVIDER,
+        title: channel.title ?? title,
+        telegramChatId: channel.id.toString(),
+        telegramAccessHash: accessHash,
+      });
+    } catch (error) {
+      throw mapTelegramError(error, "Could not register the private storage channel");
+    }
   }
 
   /**
@@ -483,6 +596,7 @@ export class TelegramConnectionService {
     }
     if (Date.now() - flow.createdAt > LOGIN_FLOW_TTL_MS) {
       this.flows.delete(phone);
+      if (flow.expiryTimer) clearTimeout(flow.expiryTimer);
       void this.disconnectQuietly(flow.client);
       throw new ValidationError("The login session expired — please start again");
     }
@@ -491,6 +605,7 @@ export class TelegramConnectionService {
 
   private async finalizeLogin(flow: LoginFlow): Promise<VerifyCodeResult> {
     this.flows.delete(flow.phone);
+    if (flow.expiryTimer) clearTimeout(flow.expiryTimer);
     const user = await this.finalizeConnectedClient(flow.client, flow.phone);
     return { status: "ok", user };
   }
@@ -525,15 +640,16 @@ export class TelegramConnectionService {
         lastName: me.lastName ?? null,
         phone: me.phone ?? phone ?? "",
       });
+      // Storage creation belongs to finalization: if it fails, the client must
+      // not stay connected and unmanaged, and the caller must see the failure.
+      await this.repos.sessions.save(user.id, stringSession);
+      await this.ensureStorageForClient(user.id, client);
     } catch (error) {
       await this.disconnectQuietly(client);
       throw mapTelegramError(error, "Could not complete the Telegram connection");
     }
 
-    await this.repos.sessions.save(user.id, stringSession);
-    await this.ensureStorageForClient(user.id, client);
     this.clientManager.cacheClient(user.id, client);
-
     return user;
   }
 
@@ -542,6 +658,7 @@ export class TelegramConnectionService {
     for (const [phone, flow] of this.flows) {
       if (now - flow.createdAt > LOGIN_FLOW_TTL_MS) {
         this.flows.delete(phone);
+        if (flow.expiryTimer) clearTimeout(flow.expiryTimer);
         void this.disconnectQuietly(flow.client);
       }
     }

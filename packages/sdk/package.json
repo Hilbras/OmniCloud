@@ -15,6 +15,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
     }
   },
   "files": [
@@ -39,10 +43,11 @@
   ],
   "scripts": {
     "build": "node --max-old-space-size=4096 ./node_modules/tsup/dist/cli-default.js",
+    "build:browser": "node --max-old-space-size=4096 ./node_modules/tsup/dist/cli-default.js --config tsup.browser.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src test",
-    "prepublishOnly": "pnpm build && pnpm build:cli && pnpm bundle:server",
+    "prepublishOnly": "pnpm build && pnpm build:browser && pnpm build:cli && pnpm bundle:server",
     "build:cli": "tsup --config tsup.cli.config.ts",
     "bundle:server": "node scripts/bundle-server.mjs",
     "prepack": "pnpm build && pnpm build:cli && pnpm bundle:server"

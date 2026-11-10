@@ -8,6 +8,7 @@ import { migrateLegacyFile } from "../api/migration";
 import { invalidateDriveQueries } from "../lib/queries";
 import { getUrk } from "../lib/crypto-session";
 import type { DriveItem } from "../lib/drive";
+import type { EncryptionFormat } from "@omnicloud/shared";
 import { useToast } from "../components/Toasts";
 import { useNameIndex } from "./useNameIndex";
 import { renamedMetadataBlob, serverSideNameFor } from "../lib/rename-metadata";
@@ -16,6 +17,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DeleteFolderDialog } from "../components/DeleteFolderDialog";
 import { FilePreview } from "../components/FilePreview";
 import { MoveDialog } from "../components/MoveDialog";
+import { ShareDialog } from "../components/ShareDialog";
 import { NameDialog } from "../components/NameDialog";
 import { buildFolderTree } from "../lib/tree";
 import { useQuery } from "@tanstack/react-query";
@@ -28,7 +30,7 @@ interface UseItemActionsOptions {
   /** Show the details slide-over. */
   onShowDetails: (item: DriveItem) => void;
   /** Route a "new version" upload through the shared uploads panel. */
-  onReplaceFile: (file: File, fileId: string) => void;
+  onReplaceFile: (file: File, fileId: string, format: EncryptionFormat | null) => void;
 }
 
 export interface ItemActionsController {
@@ -68,6 +70,7 @@ export function useItemActions({
   const [deletingFolder, setDeletingFolder] = useState<DriveItem | null>(null);
   const [migrating, setMigrating] = useState<DriveItem[] | null>(null);
   const [previewing, setPreviewing] = useState<DriveItem | null>(null);
+  const [sharing, setSharing] = useState<DriveItem | null>(null);
   const replaceInput = useRef<HTMLInputElement | null>(null);
   const replaceTarget = useRef<DriveItem | null>(null);
 
@@ -285,17 +288,41 @@ export function useItemActions({
         return;
       }
       for (const item of items) {
-        if (item.kind !== "file") continue;
-        const result = await migrateToOpaqueName(item.id, urk);
+        if (item.kind !== "file" || item.file === null) continue;
+        let result: Awaited<ReturnType<typeof migrateToOpaqueName>>;
+        try {
+          result = await migrateToOpaqueName(item.id, urk);
+        } catch (error) {
+          toast.error(errorMessage(error, "Could not hide the name"));
+          continue;
+        }
         if (result.status === "failed") {
           toast.error(result.error ?? "Could not hide the name");
           continue;
         }
         if (result.status === "already_migrated") continue;
-        // The name now lives only in the index.
-        const entry = nameIndex.entries.get(item.id);
-        if (entry !== undefined && result.name !== null) {
-          nameIndex.upsert({ ...entry, name: result.name });
+        if (result.name !== null) {
+          // The name now lives only in the index. Create the entry even when
+          // the file had none before: hide-name is available to OCE1 files,
+          // which never populated the index.
+          const file = item.file;
+          nameIndex.upsert({
+            id: item.id,
+            name: result.name,
+            mimeType: result.mimeType ?? file.mimeType ?? null,
+            description: result.description ?? null,
+            size: file.size,
+            folderId: file.folderId,
+            starred: file.starred,
+            trashed: file.trashed,
+            versionCount: file.versionCount,
+            createdAt: file.createdAt,
+            updatedAt: file.updatedAt,
+            ...(result.cryptoFileId !== undefined ? { cryptoFileId: result.cryptoFileId } : {}),
+            ...(result.cryptoVersionId !== undefined
+              ? { cryptoVersionId: result.cryptoVersionId }
+              : {}),
+          });
         }
         toast.success(`"${result.name ?? item.name}" now has a name only you can read`);
         if (result.error !== null) toast.error(result.error);
@@ -347,6 +374,9 @@ export function useItemActions({
         case "hideName":
           void hideName([item]);
           return;
+        case "share":
+          if (item.kind === "file") setSharing(item);
+          return;
         case "details":
           onShowDetails(item);
           return;
@@ -392,13 +422,24 @@ export function useItemActions({
           const file = input.files?.[0];
           const target = replaceTarget.current;
           input.value = "";
-          if (file !== undefined && target !== null) onReplaceFile(file, target.id);
+          if (file !== undefined && target !== null) {
+            const format = target.file?.encryptionFormat ?? null;
+            onReplaceFile(file, target.id, format === "OCE1" || format === "OCE2" ? format : null);
+          }
           replaceTarget.current = null;
         }}
       />
 
       {previewing !== null ? (
         <FilePreview item={previewing} onClose={() => setPreviewing(null)} />
+      ) : null}
+
+      {sharing !== null ? (
+        <ShareDialog
+          item={sharing}
+          onClose={() => setSharing(null)}
+          onChanged={() => invalidateDriveQueries(queryClient)}
+        />
       ) : null}
 
       {renaming !== null ? (

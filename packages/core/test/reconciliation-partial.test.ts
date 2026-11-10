@@ -9,7 +9,7 @@ describe("a scan that hit its cap is reported as partial", () => {
     const repos = createInMemoryRepos();
     const user = makeUser();
     // A listing that returns exactly as many objects as the cap allows.
-    const many = Array.from({ length: 5 }, (_, i) => ({
+    const many = Array.from({ length: 6 }, (_, i) => ({
       messageId: String(1000 + i),
       name: `f${i}`,
       size: 1,
@@ -24,6 +24,26 @@ describe("a scan that hit its cap is reported as partial", () => {
     const report = await service.run(user.id, { limit: 5 });
     expect(report.truncated).toBe(true);
     expect(report.limit).toBe(5);
+  });
+
+  it("does not mark a channel that exactly fills the cap as truncated", async () => {
+    const repos = createInMemoryRepos();
+    const user = makeUser();
+    const many = Array.from({ length: 5 }, (_, i) => ({
+      messageId: String(2000 + i),
+      name: `f${i}`,
+      size: 1,
+      mimeType: "application/octet-stream",
+    }));
+    const engine = { list: async (limit: number) => many.slice(0, limit) };
+
+    const service = new ReconciliationService(
+      repos,
+      async () => engine as unknown as StorageEngine,
+    );
+    const report = await service.run(user.id, { limit: 5 });
+    expect(report.truncated).toBe(false);
+    expect(report.scannedMessages).toBe(5);
   });
 
   it("marks a short scan as complete", async () => {
@@ -53,5 +73,15 @@ describe("a scan that hit its cap is reported as partial", () => {
       },
     );
     expect(report.truncated).toBe(true);
+  });
+
+  it("never reports dangling references when the listing was truncated", () => {
+    const report = reconcile(
+      [{ messageId: 1, sizeBytes: 1 }],
+      { fileMessageIds: new Set([1, 2]), pendingUploadMessageIds: new Set([3]) },
+      { limit: 1, truncated: true },
+    );
+    expect(report.dangling).toEqual([]);
+    expect(report.unknown).toEqual([]);
   });
 });

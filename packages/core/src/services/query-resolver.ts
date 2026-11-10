@@ -1,5 +1,6 @@
-import { mimeMatchersForType, paginationMeta } from "@omnicloud/shared";
+import { KNOWN_MIME_MATCHERS, mimeMatchersForType, paginationMeta } from "@omnicloud/shared";
 import type { ListQuery, PaginationDTO } from "@omnicloud/shared";
+import { ValidationError } from "../errors";
 import type { FolderRepository } from "../repos";
 import type { ItemQuery } from "../types";
 
@@ -39,17 +40,27 @@ export async function resolveItemQuery(
   }
 
   if (input.type) {
-    const matchers = mimeMatchersForType(input.type);
-    if (matchers) query.mimeMatchers = matchers;
+    if (input.type.toLowerCase().trim() === "other") {
+      query.mimeExcludeMatchers = KNOWN_MIME_MATCHERS;
+    } else {
+      const matchers = mimeMatchersForType(input.type);
+      if (matchers) query.mimeMatchers = matchers;
+    }
   }
 
   if (input.from) {
     const from = new Date(input.from);
-    if (!Number.isNaN(from.getTime())) query.from = from;
+    if (Number.isNaN(from.getTime())) {
+      throw new ValidationError(`Invalid "from" date: ${input.from}`);
+    }
+    query.from = from;
   }
   if (input.to) {
     const to = new Date(input.to);
-    if (!Number.isNaN(to.getTime())) query.to = to;
+    if (Number.isNaN(to.getTime())) {
+      throw new ValidationError(`Invalid "to" date: ${input.to}`);
+    }
+    query.to = to;
   }
 
   if (input.folderName) {

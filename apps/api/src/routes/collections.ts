@@ -1,5 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { ValidationError } from "@omnicloud/core";
+import {
+  ValidationError,
+  isActivityAction,
+  mergePagedResults,
+  resolveItemQuery,
+  type FileRecord,
+  type FolderRecord,
+} from "@omnicloud/core";
 import type { Container } from "../container";
 import { parseListQuery } from "../validation";
 import { toActivityDTO, toFileDTO, toFolderDTO } from "../mappers";
@@ -62,17 +69,22 @@ export function registerCollectionRoutes(app: FastifyInstance, container: Contai
     const raw = request.query as Record<string, unknown>;
     const { query, page, limit } = parseListQuery(raw);
     const merged = { ...query, starred: true, folderId: undefined };
+    const itemQuery = await resolveItemQuery(container.repos.folders, request.user.id, merged);
+    const result = await mergePagedResults(
+      (pageRequest) => container.repos.files.query(request.user.id, itemQuery, pageRequest),
+      (pageRequest) => container.repos.folders.query(request.user.id, itemQuery, pageRequest),
+      itemQuery,
+      { page, limit },
+    );
 
-    const [fileResult, folderResult] = await Promise.all([
-      container.files.query(request.user.id, merged, { page, limit }),
-      container.folders.query(request.user.id, merged, { page, limit }),
-    ]);
-
-    const total = fileResult.total + folderResult.total;
     return {
-      files: fileResult.items.map(toFileDTO),
-      folders: folderResult.items.map(toFolderDTO),
-      pagination: { page, limit, total, hasMore: page * limit < total },
+      files: result.items
+        .filter((item): item is FileRecord => "parentId" in item === false)
+        .map(toFileDTO),
+      folders: result.items
+        .filter((item): item is FolderRecord => "parentId" in item)
+        .map(toFolderDTO),
+      pagination: result.pagination,
     };
   });
 
@@ -100,8 +112,27 @@ export function registerCollectionRoutes(app: FastifyInstance, container: Contai
 
   // ── Activity feed ─────────────────────────────────────────────────────────
   app.get("/api/activity", async (request) => {
-    const { page, limit } = parseListQuery(request.query as Record<string, unknown>);
-    const result = await container.activity.list(request.user.id, { page, limit });
+    const raw = request.query as Record<string, unknown>;
+    const { page, limit } = parseListQuery(raw);
+    const action =
+      typeof raw.action === "string" && isActivityAction(raw.action) ? raw.action : undefined;
+    if (raw.action !== undefined && action === undefined) {
+      throw new ValidationError("Unknown activity action");
+    }
+    const parseDate = (value: unknown, field: string): Date | undefined => {
+      if (value === undefined) return undefined;
+      if (typeof value !== "string") throw new ValidationError(`${field} must be an ISO date`);
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) throw new ValidationError(`${field} must be an ISO date`);
+      return date;
+    };
+    const from = parseDate(raw.from, "from");
+    const to = parseDate(raw.to, "to");
+    const result = await container.activity.list(
+      request.user.id,
+      { page, limit },
+      { ...(action ? { action } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) },
+    );
     return {
       events: result.items.map(toActivityDTO),
       pagination: { page, limit, total: result.total, hasMore: page * limit < result.total },

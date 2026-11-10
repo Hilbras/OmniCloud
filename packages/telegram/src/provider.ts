@@ -84,28 +84,29 @@ export class TelegramStorageProvider implements StorageProvider {
       const file = input.data
         ? new CustomFile(input.name, total, "", input.data)
         : new CustomFile(input.name, total, input.path!);
+      // Surface transport-level progress to the caller. GramJS reports a
+      // 0..1 fraction and reads `isCanceled` after every part, so it must be a
+      // live getter: `Object.assign` would copy the value once and never see
+      // an abort.
+      const progressCallback = (fraction: number): void => {
+        const clamped = Math.max(0, Math.min(1, fraction));
+        control.onProgress?.({
+          transferred: Math.round(clamped * total),
+          total,
+          percent: Math.round(clamped * 100),
+        });
+      };
+      Object.defineProperty(progressCallback, "isCanceled", {
+        configurable: true,
+        get: () => control.signal?.aborted === true,
+      });
+
       const message = await this.client.sendFile(this.peer, {
         file,
         forceDocument: true,
         workers: 1,
         caption: input.caption,
-        // Surface transport-level progress to the caller. GramJS reports a
-        // 0..1 fraction. `isCanceled` lets us abort an in-flight upload.
-        progressCallback: Object.assign(
-          (fraction: number) => {
-            const clamped = Math.max(0, Math.min(1, fraction));
-            control.onProgress?.({
-              transferred: Math.round(clamped * total),
-              total,
-              percent: Math.round(clamped * 100),
-            });
-          },
-          {
-            get isCanceled(): boolean {
-              return control.signal?.aborted === true;
-            },
-          },
-        ),
+        progressCallback,
       });
 
       if (!(message instanceof Api.Message)) {
@@ -147,6 +148,7 @@ export class TelegramStorageProvider implements StorageProvider {
     try {
       data = await this.client.downloadMedia(message, {
         progressCallback: (downloaded: bigInt.BigInteger, total: bigInt.BigInteger) => {
+          if (control.signal?.aborted) throw new OperationCancelledError();
           const transferred = Number(downloaded.toString());
           const totalBytes = Number(total.toString());
           control.onProgress?.({
@@ -160,6 +162,7 @@ export class TelegramStorageProvider implements StorageProvider {
       throw mapTelegramError(error, "Telegram download failed");
     }
 
+    this.throwIfAborted(control.signal);
     if (!data || typeof data === "string") {
       throw new TelegramFileNotFoundError("Telegram did not return file content");
     }
@@ -177,7 +180,11 @@ export class TelegramStorageProvider implements StorageProvider {
    * by one chunk regardless of file size. The first request happens here so
    * that a missing message fails before the caller starts consuming bytes.
    */
-  async getStream(ref: StoredRef, control: TransferControl = {}): Promise<Readable> {
+  async getStream(
+    ref: StoredRef,
+    control: TransferControl = {},
+    range?: { start: number; length: number },
+  ): Promise<Readable> {
     const message = await this.requireMessage(ref);
     this.throwIfAborted(control.signal);
 
@@ -191,6 +198,9 @@ export class TelegramStorageProvider implements StorageProvider {
       file: media,
       fileSize: bigInt(size),
       requestSize: DOWNLOAD_CHUNK_BYTES,
+      ...(range
+        ? { offset: bigInt(range.start), limit: Math.max(0, Math.floor(range.length)) }
+        : {}),
     });
 
     let transferred = 0;

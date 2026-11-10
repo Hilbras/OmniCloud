@@ -15,6 +15,8 @@
 export interface ReferenceSet {
   /** Message ids referenced by live file rows and version rows. */
   fileMessageIds: Set<number>;
+  /** Historical version message ids, mapped to the row that owns them. */
+  versionByMessageId?: Map<number, { fileId: string; versionId: string }>;
   /** Message ids referenced by upload operations that have stored an object. */
   pendingUploadMessageIds: Set<number>;
 }
@@ -22,7 +24,13 @@ export interface ReferenceSet {
 export type ReconciliationFinding =
   | { kind: "referenced"; messageId: number }
   | { kind: "unknown"; messageId: number; sizeBytes: number | null }
-  | { kind: "dangling"; messageId: number; recordedBy: "file" | "upload" };
+  | {
+      kind: "dangling";
+      messageId: number;
+      recordedBy: "file" | "version" | "upload";
+      fileId?: string;
+      versionId?: string;
+    };
 
 export interface ReconciliationReport {
   scannedMessages: number;
@@ -66,13 +74,29 @@ export function reconcile(
   }
 
   const dangling: ReconciliationReport["dangling"] = [];
-  for (const messageId of references.fileMessageIds) {
-    if (!inChannel.has(messageId))
-      dangling.push({ kind: "dangling", messageId, recordedBy: "file" });
-  }
-  for (const messageId of references.pendingUploadMessageIds) {
-    if (!inChannel.has(messageId)) {
-      dangling.push({ kind: "dangling", messageId, recordedBy: "upload" });
+  // A capped listing says nothing about older messages: every one of them would
+  // look missing. Report unknowns from the scanned window, but never dangling
+  // references until the whole channel was read.
+  if (!scan.truncated) {
+    for (const messageId of references.fileMessageIds) {
+      if (inChannel.has(messageId)) continue;
+      const version = references.versionByMessageId?.get(messageId);
+      dangling.push(
+        version
+          ? {
+              kind: "dangling",
+              messageId,
+              recordedBy: "version",
+              fileId: version.fileId,
+              versionId: version.versionId,
+            }
+          : { kind: "dangling", messageId, recordedBy: "file" },
+      );
+    }
+    for (const messageId of references.pendingUploadMessageIds) {
+      if (!inChannel.has(messageId)) {
+        dangling.push({ kind: "dangling", messageId, recordedBy: "upload" });
+      }
     }
   }
 

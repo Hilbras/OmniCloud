@@ -17,6 +17,14 @@ export function uploadRequestFingerprint(input: FileUploadInput): string {
     replaceFileId: input.replaceFileId ?? null,
     contentHash,
     size: input.spooled?.size ?? input.data?.byteLength ?? 0,
+    encryption: input.encryption
+      ? {
+          format: input.encryption.format,
+          wrappedKey: input.encryption.wrappedKey,
+          metadataBlob: input.encryption.metadataBlob,
+          keyEpoch: input.encryption.keyEpoch,
+        }
+      : null,
   });
   return createHash("sha256").update(canonical).digest("hex");
 }

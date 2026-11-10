@@ -69,6 +69,45 @@ describe("storage statistics", () => {
     expect(result.largestFiles.map((f) => f.name)).toEqual(["big.txt", "mid.txt", "small.txt"]);
   });
 
+  it("reports subtree usage for the largest folders", async () => {
+    const parent = await folders.create(user.id, { name: "Docs", parentId: null });
+    const child = await folders.create(user.id, { name: "Nested", parentId: parent.id });
+    await files.upload(user.id, { folderId: child.id, name: "deep.txt", data: Buffer.alloc(100) });
+    await files.upload(user.id, { folderId: parent.id, name: "top.txt", data: Buffer.alloc(50) });
+    await files.upload(user.id, { folderId: null, name: "root.txt", data: Buffer.alloc(200) });
+
+    const result = await stats.stats(user.id);
+    const docs = result.folderUsage.find((row) => row.folderId === parent.id);
+    const nested = result.folderUsage.find((row) => row.folderId === child.id);
+    const root = result.folderUsage.find((row) => row.folderId === null);
+
+    expect(docs).toMatchObject({ bytes: 150, fileCount: 2 });
+    expect(nested).toMatchObject({ bytes: 100, fileCount: 1 });
+    expect(root).toMatchObject({ bytes: 200, fileCount: 1 });
+  });
+
+  it("groups active files with identical content and counts the waste", async () => {
+    const same = Buffer.from("identical bytes");
+    await files.upload(user.id, { folderId: null, name: "a.txt", data: same });
+    await files.upload(user.id, { folderId: null, name: "b.txt", data: same });
+    await files.upload(user.id, {
+      folderId: null,
+      name: "c.txt",
+      data: Buffer.from("different bytes"),
+    });
+
+    const result = await stats.stats(user.id);
+
+    expect(result.duplicateGroups).toHaveLength(1);
+    const [group] = result.duplicateGroups;
+    expect(group).toMatchObject({
+      size: same.length,
+      fileCount: 2,
+      wastedBytes: same.length,
+    });
+    expect(group!.names.sort()).toEqual(["a.txt", "b.txt"]);
+  });
+
   it("carries the quota through when configured", async () => {
     const result = await stats.stats(user.id, 1024 ** 3);
     expect(result.quotaBytes).toBe(1024 ** 3);
@@ -154,6 +193,54 @@ describe("recent view", () => {
     expect(page.items[0]!.lastAction).toBe("download");
   });
 
+  it("includes the encryption metadata so the client can decrypt", async () => {
+    const record = await files.upload(user.id, {
+      folderId: null,
+      name: "secret.bin",
+      data: Buffer.from("ciphertext"),
+      encryption: {
+        format: "OCE1",
+        wrappedKey: "A".repeat(96),
+        metadataBlob: "B".repeat(88),
+        keyEpoch: 2,
+      },
+    });
+
+    const page = await recent.list(user.id, { page: 1, limit: 10 });
+    expect(page.items[0]!.file).toMatchObject({
+      id: record.id,
+      encryptionFormat: "OCE1",
+      wrappedKey: "A".repeat(96),
+      metadataBlob: "B".repeat(88),
+      keyEpoch: 2,
+    });
+  });
+
+  it("deduplicates before paging, so totals and pages stay stable", async () => {
+    const created = [];
+    for (const name of ["one.txt", "two.txt", "three.txt"]) {
+      created.push(
+        await files.upload(user.id, {
+          folderId: null,
+          name,
+          data: Buffer.from(name),
+        }),
+      );
+    }
+    for (const record of created) {
+      await files.download(user.id, record.id);
+      await files.download(user.id, record.id);
+    }
+
+    const first = await recent.list(user.id, { page: 1, limit: 2 });
+    const second = await recent.list(user.id, { page: 2, limit: 2 });
+    expect(first.pagination.total).toBe(3);
+    expect(first.items).toHaveLength(2);
+    expect(second.items).toHaveLength(1);
+    const ids = [...first.items, ...second.items].map((item) => item.file.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+
   it("deduplicates repeated actions on the same file", async () => {
     const record = await files.upload(user.id, {
       folderId: null,
@@ -233,6 +320,9 @@ describe("integrity checks: historical versions", () => {
     });
     const report = await integrity.check(user.id, { deep: false });
     expect(report.issues).toHaveLength(0);
+    // Healthy versions must not inflate the per-file counters.
+    expect(report.filesChecked).toBe(1);
+    expect(report.healthy).toBe(1);
   });
 });
 

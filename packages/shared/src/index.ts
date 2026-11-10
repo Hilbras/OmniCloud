@@ -62,6 +62,8 @@ export interface FileDTO {
   mimeType: string;
   sha256: string;
   folderId: string | null;
+  /** Channel holding this file's objects; null/absent = the account default. */
+  storageId?: string | null;
   starred: boolean;
   trashed: boolean;
   deletedAt: string | null;
@@ -76,10 +78,55 @@ export interface FileDTO {
   updatedAt: string;
 }
 
+export interface KeyPairingCreatedDTO {
+  id: string;
+  expiresAt: string;
+}
+
+export interface KeyPairingPayloadDTO {
+  id: string;
+  wrappedUrk: string;
+  fileId: string;
+  versionId: string;
+  keyEpoch: number;
+  expiresAt: string;
+}
+
+export interface ShareLinkDTO {
+  id: string;
+  fileId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  createdAt: string;
+  expiresAt: string | null;
+  maxDownloads: number | null;
+  downloadCount: number;
+  revokedAt: string | null;
+  hasPassword: boolean;
+}
+
+export interface CreateShareResponse {
+  share: ShareLinkDTO;
+  /** Shown once. Put it in the URL; the server only stores its hash. */
+  token: string;
+}
+
+export interface ShareMetaDTO {
+  file: FileDTO;
+  downloadCount: number;
+  maxDownloads: number | null;
+  expiresAt: string | null;
+  hasPassword: boolean;
+  sharedWrappedKey: string | null;
+}
+
 export interface FolderDTO {
   id: string;
   name: string;
   parentId: string | null;
+  /** Storage channel this folder targets; null inherits the parent/default. */
+  storageId: string | null;
   starred: boolean;
   trashed: boolean;
   deletedAt: string | null;
@@ -126,8 +173,6 @@ export interface EmptyTrashResultDTO {
 // Pagination, sorting & filtering
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { ListQuery } from "./query";
-
 export type { ListQuery, SortField, SortOrder, ItemStatus } from "./query";
 
 export interface PaginationDTO {
@@ -152,9 +197,6 @@ export interface TrashPageDTO {
   folders: FolderDTO[];
   pagination: PaginationDTO;
 }
-
-/** Alias so callers can name the query shape as query parameters. */
-export type QueryParams = ListQuery;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Recent & activity
@@ -238,6 +280,20 @@ export interface StorageStatsDTO {
   starredCount: number;
   byType: StorageTypeBreakdownDTO[];
   largestFiles: FileDTO[];
+  folderUsage: Array<{
+    folderId: string | null;
+    name: string;
+    bytes: number;
+    fileCount: number;
+  }>;
+  duplicateGroups: Array<{
+    sha256: string;
+    size: number;
+    fileCount: number;
+    wastedBytes: number;
+    fileIds: string[];
+    names: string[];
+  }>;
   quotaBytes: number | null;
 }
 
@@ -381,6 +437,15 @@ export type EncryptionFormat = (typeof ENCRYPTION_FORMATS)[number];
 /** True when the value is a known encryption format. */
 export function isEncryptionFormat(value: string): value is EncryptionFormat {
   return (ENCRYPTION_FORMATS as readonly string[]).includes(value);
+}
+
+/**
+ * True when the stored bytes are an OCE envelope. OCE2 hides the file name but
+ * stores exactly the same envelope as OCE1, so both must be decrypted and
+ * neither may be fetched as plaintext.
+ */
+export function isEncryptedFormat(format: string | null | undefined): boolean {
+  return format === ENCRYPTION_FORMAT_OCE1 || format === ENCRYPTION_FORMAT_OCE2;
 }
 
 export * from "./mime";

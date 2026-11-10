@@ -57,11 +57,23 @@ export interface BrowserSessionRecord {
   ip: string | null;
 }
 
+/** What a personal API token is allowed to do. */
+export type ApiTokenScope = "full" | "upload" | "webdav";
+
+export const API_TOKEN_SCOPES: readonly ApiTokenScope[] = ["full", "upload", "webdav"];
+
+export function isApiTokenScope(value: unknown): value is ApiTokenScope {
+  return typeof value === "string" && (API_TOKEN_SCOPES as readonly string[]).includes(value);
+}
+
 export interface ApiTokenRecord {
   id: string;
   userId: string;
   name: string;
   tokenHash: string;
+  readOnly: boolean;
+  scope: ApiTokenScope;
+  expiresAt: Date | null;
   createdAt: Date;
   revokedAt: Date | null;
   lastUsedAt: Date | null;
@@ -69,7 +81,14 @@ export interface ApiTokenRecord {
 
 /** Personal API tokens. Holds only token hashes, never raw tokens. */
 export interface ApiTokenRepository {
-  create(input: { userId: string; name: string; tokenHash: string }): Promise<ApiTokenRecord>;
+  create(input: {
+    userId: string;
+    name: string;
+    tokenHash: string;
+    readOnly: boolean;
+    scope: ApiTokenScope;
+    expiresAt: Date | null;
+  }): Promise<ApiTokenRecord>;
   findByTokenHash(tokenHash: string): Promise<ApiTokenRecord | null>;
   findByIdForUser(userId: string, id: string): Promise<ApiTokenRecord | null>;
   listForUser(userId: string): Promise<ApiTokenRecord[]>;
@@ -96,6 +115,10 @@ export interface BrowserSessionRepository {
 
 export interface StorageRepository {
   findByUserAndProvider(userId: string, provider: string): Promise<StorageRecord | null>;
+  /** Looks up a storage by id, scoped to its owner so ids cannot be crossed. */
+  findByIdForUser(userId: string, id: string): Promise<StorageRecord | null>;
+  /** Every storage the user has registered, oldest first. */
+  listByUser(userId: string): Promise<StorageRecord[]>;
   create(input: {
     userId: string;
     provider: string;
@@ -109,6 +132,8 @@ export interface FolderCreateInput {
   userId: string;
   parentId: string | null;
   name: string;
+  /** Channel target for new files; null inherits the parent or the default. */
+  storageId?: string | null;
 }
 
 export interface FolderRepository {
@@ -135,6 +160,7 @@ export interface FolderRepository {
       starred?: boolean;
       deletedAt?: Date | null;
       trashBatchId?: string | null;
+      storageId?: string | null;
     },
   ): Promise<FolderRecord>;
   /** Bulk trash/restore/star without touching files. */
@@ -180,6 +206,8 @@ export interface FileCreateInput {
   mimeType: string;
   sha256: string;
   telegramMessageId: number;
+  /** Channel that holds the object; null = the account default. */
+  storageId?: string | null;
   /** Opaque OCE1 metadata for the first version; omitted = plaintext. */
   encryptionFormat?: string | null;
   wrappedKey?: string | null;
@@ -229,6 +257,8 @@ export interface UploadOperationRepository {
       >
     >,
   ): Promise<UploadOperationRecord>;
+  /** Deletes terminal replay records older than the cutoff; returns the count. */
+  deleteTerminalBefore(before: Date): Promise<number>;
 }
 
 /** Opaque OCE1 encryption metadata. Null fields mean plaintext for that slot. */
@@ -331,7 +361,39 @@ export interface FileRepository {
     trashFileCount: number;
     starredCount: number;
   }>;
+  /** Deletes files and every version they own, atomically. */
   deleteMany(ids: string[]): Promise<void>;
+  /**
+   * Points a file and all of its versions at objects in another channel, in one
+   * transaction. Used only after every object has been copied and verified.
+   */
+  migrateStorage(
+    fileId: string,
+    input: {
+      storageId: string;
+      telegramMessageId: number;
+      versions: Array<{ id: string; telegramMessageId: number }>;
+    },
+  ): Promise<FileRecord>;
+  /**
+   * Stores re-wrapped encryption metadata for a file and all of its versions,
+   * in one transaction. The server only validates shape and epoch monotonicity;
+   * the blobs stay opaque.
+   */
+  rotateEncryption(
+    fileId: string,
+    input: {
+      wrappedKey: string;
+      metadataBlob: string;
+      keyEpoch: number;
+      versions: Array<{
+        id: string;
+        wrappedKey: string;
+        metadataBlob: string;
+        keyEpoch: number;
+      }>;
+    },
+  ): Promise<FileRecord>;
 
   // ── Versioning foundation ────────────────────────────────────────────────
   /**
@@ -347,7 +409,6 @@ export interface FileRepository {
   listVersionsForFiles(fileIds: string[]): Promise<Map<string, FileVersionRecord[]>>;
   findVersionById(versionId: string): Promise<FileVersionRecord | null>;
   countVersions(fileId: string): Promise<number>;
-  deleteVersionsByFileIds(fileIds: string[]): Promise<void>;
   /**
    * Replaces a version's encrypted metadata blob.
    *
@@ -375,8 +436,12 @@ export interface ActivityRepository {
     resourceName?: string | null;
     metadata?: Record<string, unknown> | null;
   }): Promise<void>;
-  /** Newest-first activity for a user. */
-  list(userId: string, page: PageRequest): Promise<Paged<ActivityEventRecord>>;
+  /** Newest-first activity for a user, optionally filtered. */
+  list(
+    userId: string,
+    page: PageRequest,
+    filters?: { action?: ActivityAction; from?: Date; to?: Date },
+  ): Promise<Paged<ActivityEventRecord>>;
   /**
    * Most recent distinct files for the given actions, newest first. Only
    * events whose action is listed are considered, so a file whose latest
@@ -385,11 +450,68 @@ export interface ActivityRepository {
   recentFiles(
     userId: string,
     actions: readonly ActivityAction[],
-    limit: number,
-  ): Promise<ActivityEventRecord[]>;
+    page: PageRequest,
+  ): Promise<Paged<ActivityEventRecord>>;
   countByUser(userId: string): Promise<number>;
   /** Housekeeping: drop events older than the retention window. */
   pruneOlderThan(cutoff: Date): Promise<number>;
+}
+
+export interface ShareLinkRecord {
+  id: string;
+  userId: string;
+  fileId: string;
+  tokenHash: string;
+  passwordHash: string | null;
+  sharedWrappedKey: string | null;
+  expiresAt: Date | null;
+  maxDownloads: number | null;
+  downloadCount: number;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface ShareLinkRepository {
+  create(input: {
+    userId: string;
+    fileId: string;
+    tokenHash: string;
+    passwordHash: string | null;
+    sharedWrappedKey: string | null;
+    expiresAt: Date | null;
+    maxDownloads: number | null;
+  }): Promise<ShareLinkRecord>;
+  findByIdForUser(userId: string, id: string): Promise<ShareLinkRecord | null>;
+  findByTokenHash(tokenHash: string): Promise<ShareLinkRecord | null>;
+  listForUser(userId: string): Promise<ShareLinkRecord[]>;
+  revoke(id: string, at: Date): Promise<void>;
+  recordDownload(id: string): Promise<void>;
+}
+
+export interface KeyPairingRecord {
+  id: string;
+  userId: string;
+  wrappedUrk: string;
+  fileId: string;
+  versionId: string;
+  keyEpoch: number;
+  expiresAt: Date;
+  claimedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface KeyPairingRepository {
+  create(input: {
+    userId: string;
+    wrappedUrk: string;
+    fileId: string;
+    versionId: string;
+    keyEpoch: number;
+    expiresAt: Date;
+  }): Promise<KeyPairingRecord>;
+  findByIdForUser(userId: string, id: string): Promise<KeyPairingRecord | null>;
+  /** Atomically claims a pairing; false when it was already used. */
+  claim(id: string, at: Date): Promise<boolean>;
 }
 
 export interface Repos {
@@ -402,4 +524,6 @@ export interface Repos {
   folders: FolderRepository;
   files: FileRepository;
   activity: ActivityRepository;
+  shareLinks: ShareLinkRepository;
+  keyPairings: KeyPairingRepository;
 }

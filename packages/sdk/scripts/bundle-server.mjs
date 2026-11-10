@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,13 +17,15 @@ const NPM_EXTERNALS = [
   "@fastify/multipart",
   "@fastify/static",
   "@prisma/client",
-  "prisma",
-  "telegram",
-  "big-integer",
 ];
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
+
+// The bundle is ESM. Node picks the module type from the nearest package.json,
+// and outside this repo (e.g. app resources/) there is no parent one to
+// inherit "type": "module" from — ship the marker alongside index.js.
+writeFileSync(join(out, "package.json"), JSON.stringify({ type: "module" }, null, 2) + "\n");
 
 await esbuild.build({
   entryPoints: [join(repoRoot, "apps/api/src/index.ts")],

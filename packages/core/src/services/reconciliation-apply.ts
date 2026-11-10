@@ -31,6 +31,8 @@ export class ReconciliationApplier {
       try {
         if (action.kind === "detach-dangling") {
           await this.detach(action);
+        } else if (action.kind === "remove-dangling-version") {
+          await this.repos.files.deleteVersion(action.fileId, action.versionId);
         } else {
           await this.adopt(action);
         }
@@ -46,11 +48,6 @@ export class ReconciliationApplier {
   }
 
   private async detach(action: Extract<RepairAction, { kind: "detach-dangling" }>): Promise<void> {
-    // Only a file record can be detached by marking it. A dangling upload operation
-    // cannot be repaired here, and reporting it as applied would be a false success.
-    if (action.recordedBy !== "file") {
-      throw new Error("This finding belongs to an upload operation, which cannot be detached here");
-    }
     const file = (await this.repos.files.listByUser(this.userId)).find(
       (candidate) => candidate.telegramMessageId === action.messageId,
     );

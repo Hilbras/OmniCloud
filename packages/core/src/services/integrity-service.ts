@@ -59,15 +59,18 @@ export class IntegrityService {
           version.id,
         );
         if (versionIssue) issues.push(versionIssue);
-        else healthy += 1;
       }
     }
 
-    const missing = issues.filter((issue) => issue.kind === "missing").length;
-    const inconsistent = issues.filter(
+    // Counters describe the files checked, not every historical version: the
+    // UI renders them together, and `healthy` used to exceed `filesChecked`.
+    // Version issues remain in `issues` for the detailed list.
+    const currentIssues = issues.filter((issue) => issue.versionId === undefined);
+    const missing = currentIssues.filter((issue) => issue.kind === "missing").length;
+    const inconsistent = currentIssues.filter(
       (issue) => issue.kind === "size_mismatch" || issue.kind === "hash_mismatch",
     ).length;
-    const unreadable = issues.filter((issue) => issue.kind === "unreadable").length;
+    const unreadable = currentIssues.filter((issue) => issue.kind === "unreadable").length;
 
     return {
       checkedAt: new Date().toISOString(),

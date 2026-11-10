@@ -14,6 +14,10 @@ import { useUploads } from "../hooks/useUploads";
 import { useUpdateCheck } from "../hooks/useUpdateCheck";
 import { invalidateDriveQueries, ME_QUERY_KEY, SIGNED_OUT_SESSION } from "../lib/queries";
 import { clearThumbnails } from "../lib/thumbnails";
+import { clearPersistedThumbnails } from "../lib/thumbnail-cache";
+import { clearOfflineFiles } from "../lib/offline-files";
+import { clear as clearCryptoSession } from "../lib/crypto-session";
+import { clearNameIndex, forgetLoadedIndex } from "../lib/name-index-session";
 import { usePageMeta } from "../lib/seo";
 import type { DriveItem } from "../lib/drive";
 import { NameDialog } from "./NameDialog";
@@ -24,6 +28,17 @@ import { TopBar } from "./TopBar";
 import { useToast } from "./Toasts";
 import { UploadsPanel } from "./UploadsPanel";
 
+declare global {
+  interface Window {
+    omnicloudDesktop?: {
+      desktopUpload?: {
+        onPaths: (listener: (paths: string[]) => void) => () => void;
+        read: (path: string) => Promise<{ name: string; data: ArrayBuffer } | null>;
+      };
+    };
+  }
+}
+
 /** Authenticated app shell: sidebar, topbar, search overlay and uploads panel. */
 export default function DriveLayout() {
   const me = useMe();
@@ -32,6 +47,7 @@ export default function DriveLayout() {
   const location = useLocation();
   const toast = useToast();
   const uploads = useUploads();
+
   // Loads the client's index of the names the server cannot see, and keeps it
   // in step with uploads and deletions.
   useNameIndex();
@@ -56,6 +72,22 @@ export default function DriveLayout() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const bridge = window.omnicloudDesktop?.desktopUpload;
+    if (bridge === undefined) return;
+    return bridge.onPaths((paths) => {
+      void (async () => {
+        const files: File[] = [];
+        for (const path of paths) {
+          const file = await bridge.read(path);
+          if (file !== null) files.push(new File([file.data], file.name));
+        }
+        if (files.length > 0) uploads.enqueue(files, activeFolderId);
+      })();
+    });
+  }, [uploads.enqueue, activeFolderId]);
+
   const [pageShortcuts, setPageShortcuts] = useState<PageShortcuts | null>(null);
   const pageShortcutsRef = useRef<PageShortcuts | null>(null);
   pageShortcutsRef.current = pageShortcuts;
@@ -73,8 +105,14 @@ export default function DriveLayout() {
   const logoutMutation = useMutation({
     mutationFn: api.auth.logout,
     onSuccess: () => {
-      // Decrypted thumbnails must not outlive the session that unlocked them.
+      // The root key, decrypted thumbnails and the name index must not outlive
+      // the session that unlocked them.
+      clearCryptoSession();
+      clearNameIndex();
+      forgetLoadedIndex();
       clearThumbnails();
+      void clearPersistedThumbnails();
+      void clearOfflineFiles();
       queryClient.setQueryData(ME_QUERY_KEY, SIGNED_OUT_SESSION);
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "me" });
     },
@@ -211,12 +249,17 @@ export default function DriveLayout() {
             signingOut={logoutMutation.isPending}
           />
           <main id="main" className="relative flex-1 overflow-y-auto">
-            <div
-              key={`${location.pathname}${location.search}`}
-              className={reduceMotion ? "" : "drive-section-enter"}
-            >
-              <Outlet />
-            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={`${location.pathname}${location.search}`}
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
           </main>
         </div>
 
@@ -233,6 +276,8 @@ export default function DriveLayout() {
         <UploadsPanel
           uploads={uploads.uploads}
           onCancel={uploads.cancel}
+          onPause={uploads.pause}
+          onResume={uploads.resume}
           onRetry={uploads.retry}
           onDismiss={uploads.dismiss}
           onClearFinished={uploads.clearFinished}
@@ -258,6 +303,7 @@ export default function DriveLayout() {
             onClose={clearSearch}
             onOpenFolder={(folder) => openFolderFromSearch(folder.id)}
             onOpenFile={handleSearchFile}
+            onSelectQuery={setSearchInput}
           />
         ) : null}
       </div>

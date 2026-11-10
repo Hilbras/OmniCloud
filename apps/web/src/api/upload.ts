@@ -1,12 +1,11 @@
 import { encryptFile } from "@omnicloud/crypto";
 import type { FileDTO } from "@omnicloud/shared";
 import {
-  ENCRYPTION_FORMAT_OCE1,
   ENCRYPTION_FORMAT_OCE2,
   generateOpaqueName,
   type EncryptionFormat,
 } from "@omnicloud/shared";
-import { getUrk, isEncryptUploadsEnabled } from "../lib/crypto-session";
+import { encryptFormatPref, getUrk, isEncryptUploadsEnabled } from "../lib/crypto-session";
 import { isFileDTO } from "../lib/dto";
 import { bytesToBase64, toArrayBuffer } from "../lib/bytes";
 import {
@@ -60,7 +59,12 @@ export interface UploadOptions {
    * leaves the file's name visible to the server; `OCE2` hides it behind an
    * opaque placeholder and keeps the real name in the client's index.
    */
-  format?: EncryptionFormat;
+  format?: EncryptionFormat | null;
+  /**
+   * A replace of an encrypted file must not fall back to plaintext when the
+   * root key is locked or the preference is off; it fails instead.
+   */
+  requireEncryption?: boolean;
 }
 
 /** The encrypted format's text fields, sent before the file part. */
@@ -72,6 +76,9 @@ export interface UploadEncryption {
   /** Base64 encrypted metadata. */
   metadataBlob: string;
   keyEpoch: number;
+  /** Envelope ids, when the caller already has them (no re-encryption). */
+  cryptoFileId?: string;
+  cryptoVersionId?: string;
 }
 
 export interface UploadResult {
@@ -106,9 +113,20 @@ interface UploadBody {
  * file before it leaves the browser. Any failure rejects — there is never a
  * plaintext fallback. Otherwise returns the original file untouched.
  */
-async function prepareBody(file: File, format: EncryptionFormat): Promise<UploadBody> {
+async function prepareBody(
+  file: File,
+  format: EncryptionFormat | null,
+  requireEncryption = false,
+): Promise<UploadBody> {
   const urk = getUrk();
-  if (urk === null || !isEncryptUploadsEnabled()) {
+  if (format === null || urk === null || !isEncryptUploadsEnabled()) {
+    if (requireEncryption) {
+      throw new ApiError(
+        0,
+        "ENCRYPTION_KEY_REQUIRED",
+        "This file is encrypted. Unlock your encryption key in Settings before uploading a new version.",
+      );
+    }
     return { part: file, filename: file.name, realName: file.name, encryption: null };
   }
   // The name the server will store. Under OCE2 that is an opaque placeholder:
@@ -298,7 +316,8 @@ export async function uploadFile(
   folderId: string | null,
   options: UploadOptions = {},
 ): Promise<UploadResult> {
-  const body = await prepareBody(file, options.format ?? ENCRYPTION_FORMAT_OCE1);
+  const format = options.format === undefined ? encryptFormatPref() : options.format;
+  const body = await prepareBody(file, format, options.requireEncryption ?? false);
   try {
     const uploaded = await xhrUpload("/api/files", body, folderId, options);
     return {
@@ -317,7 +336,8 @@ export async function replaceFile(
   fileId: string,
   options: UploadOptions = {},
 ): Promise<UploadResult> {
-  const body = await prepareBody(file, options.format ?? ENCRYPTION_FORMAT_OCE1);
+  const format = options.format === undefined ? encryptFormatPref() : options.format;
+  const body = await prepareBody(file, format, options.requireEncryption ?? false);
   try {
     const uploaded = await xhrUpload(
       `/api/files/${encodeURIComponent(fileId)}/replace`,
@@ -346,11 +366,18 @@ export async function replaceEncryptedFile(
   filename: string,
   encryption: UploadEncryption,
   options: UploadOptions = {},
-): Promise<FileDTO> {
-  return xhrUpload(
+): Promise<UploadResult> {
+  const uploaded = await xhrUpload(
     `/api/files/${encodeURIComponent(fileId)}/replace`,
     { part: envelope, filename, realName: filename, encryption },
     null,
     options,
   );
+  return {
+    file: uploaded,
+    ...(encryption.cryptoFileId !== undefined ? { cryptoFileId: encryption.cryptoFileId } : {}),
+    ...(encryption.cryptoVersionId !== undefined
+      ? { cryptoVersionId: encryption.cryptoVersionId }
+      : {}),
+  };
 }

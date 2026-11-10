@@ -20,25 +20,35 @@ export class ReconciliationService {
     // The provider returns newest first and stops at the cap. A full page means
     // older messages were not read, so the scan is partial and says so.
     const limit = Math.max(1, options.limit ?? SCAN_LIMIT);
-    const listed = await engine.list(limit);
-    const truncated = listed.length >= limit;
+    // Ask for one more than the cap: an exactly-full page is complete, while a
+    // page of limit+1 proves older messages were left unread.
+    const listed = await engine.list(limit + 1);
+    const truncated = listed.length > limit;
 
+    const files = await this.repos.files.listByUser(userId);
     const fileMessageIds = new Set<number>();
-    for (const file of await this.repos.files.listByUser(userId)) {
-      fileMessageIds.add(file.telegramMessageId);
-    }
-    for (const version of await this.versionMessageIds(userId)) {
-      fileMessageIds.add(version);
+    for (const file of files) fileMessageIds.add(file.telegramMessageId);
+
+    const versionByMessageId = new Map<number, { fileId: string; versionId: string }>();
+    const byFile = await this.repos.files.listVersionsForFiles(files.map((file) => file.id));
+    for (const versions of byFile.values()) {
+      for (const version of versions) {
+        fileMessageIds.add(version.telegramMessageId);
+        versionByMessageId.set(version.telegramMessageId, {
+          fileId: version.fileId,
+          versionId: version.id,
+        });
+      }
     }
 
     const pendingUploadMessageIds = await this.pendingUploadMessageIds(userId);
 
     return reconcile(
-      listed.map((object) => ({
+      listed.slice(0, limit).map((object) => ({
         messageId: Number(object.messageId),
         sizeBytes: object.size,
       })),
-      { fileMessageIds, pendingUploadMessageIds },
+      { fileMessageIds, versionByMessageId, pendingUploadMessageIds },
       { limit, truncated },
     );
   }
@@ -58,12 +68,5 @@ export class ReconciliationService {
       }
     }
     return ids;
-  }
-
-  /** Every version's message id for this user's files, including trashed ones. */
-  private async versionMessageIds(userId: string): Promise<number[]> {
-    const files = await this.repos.files.listByUser(userId);
-    const byFile = await this.repos.files.listVersionsForFiles(files.map((file) => file.id));
-    return [...byFile.values()].flat().map((version) => version.telegramMessageId);
   }
 }

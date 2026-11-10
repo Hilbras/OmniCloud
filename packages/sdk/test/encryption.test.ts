@@ -37,6 +37,7 @@ interface CapturedUpload {
 interface StoredFile {
   name: string;
   envelope: Buffer;
+  format?: FileDTO["encryptionFormat"];
   wrappedKey: string;
   metadataBlob: string;
   keyEpoch: number;
@@ -90,7 +91,7 @@ function encryptionDto(id: string, stored: StoredFile): FileDTO {
     deletedAt: null,
     versionCount: 1,
     currentVersionId: `${id}-v1`,
-    encryptionFormat: "OCE1",
+    encryptionFormat: stored.format ?? "OCE1",
     wrappedKey: stored.wrappedKey,
     metadataBlob: stored.metadataBlob,
     keyEpoch: stored.keyEpoch,
@@ -350,6 +351,20 @@ describe("downloadEncrypted roundtrip", () => {
 
     const uploaded = await uploadEncrypted(client, { data: plaintext }, { name: "s.txt", urk });
     const { plaintext: decrypted } = await downloadEncrypted(client, uploaded.fileId, { urk });
+    expect(Buffer.from(decrypted).equals(Buffer.from(plaintext))).toBe(true);
+  });
+
+  it("decrypts an OCE2 file, whose content envelope is the same as OCE1", async () => {
+    const { client, store } = encryptedServer();
+    const urk = generateUrk();
+    const plaintext = new TextEncoder().encode("hidden name");
+
+    const uploaded = await uploadEncrypted(client, { data: plaintext }, { name: "h.txt", urk });
+    store.get(uploaded.fileId)!.format = "OCE2";
+
+    const { plaintext: decrypted } = await client.files.downloadEncrypted(uploaded.fileId, {
+      urk,
+    });
     expect(Buffer.from(decrypted).equals(Buffer.from(plaintext))).toBe(true);
   });
 

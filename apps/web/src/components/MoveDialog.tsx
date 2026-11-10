@@ -144,18 +144,30 @@ export function MoveDialog({ targets, onClose, onMoved }: MoveDialogProps) {
   }, [tree, targets]);
 
   const moveMutation = useMutation({
-    mutationFn: async (): Promise<void> => {
-      await Promise.all(
+    mutationFn: async (): Promise<{ failed: number; firstError: unknown }> => {
+      const results = await Promise.allSettled(
         targets.map((target) =>
           target.kind === "file"
             ? api.files.move(target.id, selectedId)
             : api.folders.move(target.id, selectedId),
         ),
       );
+      const failed = results.filter((result) => result.status === "rejected");
+      return {
+        failed: failed.length,
+        firstError: failed[0]?.status === "rejected" ? failed[0].reason : null,
+      };
     },
-    onSuccess: () => {
+    onSuccess: ({ failed, firstError }) => {
+      // Some items may have moved even when others failed, so always refresh.
       invalidateDriveQueries(queryClient);
-      toast.success(`Moved ${itemName}`);
+      if (failed === 0) {
+        toast.success(`Moved ${itemName}`);
+      } else if (failed === targets.length) {
+        toast.error(errorMessage(firstError, "Could not move item"));
+      } else {
+        toast.error(`Moved ${targets.length - failed} of ${targets.length} items`);
+      }
       onMoved?.();
       onClose();
     },

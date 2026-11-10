@@ -40,7 +40,7 @@ export class FolderService {
 
   async create(
     userId: string,
-    input: { name: string; parentId: string | null },
+    input: { name: string; parentId: string | null; storageId?: string | null },
   ): Promise<FolderRecord> {
     const name = sanitizeFileName(input.name);
     if (!name) throw new ValidationError("Invalid folder name");
@@ -48,7 +48,12 @@ export class FolderService {
       const parent = await this.get(userId, input.parentId);
       if (parent.deletedAt) throw new ConflictError("The parent folder is in the Trash");
     }
-    const folder = await this.folders.create({ userId, parentId: input.parentId, name });
+    const folder = await this.folders.create({
+      userId,
+      parentId: input.parentId,
+      name,
+      storageId: input.storageId ?? null,
+    });
     await this.activity.record({
       userId,
       action: "create_folder",
@@ -63,6 +68,16 @@ export class FolderService {
   async listChildren(userId: string, parentId: string | null): Promise<FolderRecord[]> {
     if (parentId !== null) await this.get(userId, parentId);
     return this.folders.listChildren(userId, parentId);
+  }
+
+  /** Points new uploads in this folder at a specific storage channel (null = inherit). */
+  async setStorageTarget(
+    userId: string,
+    id: string,
+    storageId: string | null,
+  ): Promise<FolderRecord> {
+    await this.get(userId, id);
+    return this.folders.update(id, { storageId });
   }
 
   async query(userId: string, input: ListQuery, page: PageRequest): Promise<Paged<FolderRecord>> {
@@ -267,7 +282,8 @@ export class FolderService {
       (file) => file.folderId !== null && folderIds.includes(file.folderId),
     );
 
-    const engine = await this.engineFor(userId);
+    // An empty folder subtree needs no storage channel at all.
+    const engine = affected.length > 0 ? await this.engineFor(userId) : null;
     const removedFileIds: string[] = [];
     // Every Telegram object a file owns, current and historical, must go before its
     // metadata: the version rows are the only record of the older messages.
@@ -279,7 +295,7 @@ export class FolderService {
           messageIds.add(String(version.telegramMessageId));
         }
         for (const messageId of messageIds) {
-          await engine.remove({ messageId });
+          await engine!.remove({ messageId });
         }
         removedFileIds.push(file.id);
       } catch {
@@ -288,16 +304,28 @@ export class FolderService {
     }
 
     if (removedFileIds.length > 0) {
-      await this.files.deleteVersionsByFileIds(removedFileIds);
       await this.files.deleteMany(removedFileIds);
     }
 
-    // Only delete folders whose files are all gone, plus empty leaves.
-    const remainingFolderIds = new Set(
-      affected.filter((file) => !removedFileIds.includes(file.id)).map((file) => file.folderId),
+    // Only delete folders whose files are all gone, plus empty leaves. A folder
+    // holding a surviving file must stay, and so must every ancestor of it:
+    // PostgreSQL refuses to delete a parent while a child row remains.
+    const removed = new Set(removedFileIds);
+    const keep = new Set(
+      affected
+        .filter((file) => !removed.has(file.id) && file.folderId !== null)
+        .map((file) => file.folderId!),
     );
+    const parentOf = new Map(subtree.map((folder) => [folder.id, folder.parentId]));
+    for (const folderId of [...keep]) {
+      let cursor = parentOf.get(folderId) ?? null;
+      while (cursor !== null && folderIds.includes(cursor) && !keep.has(cursor)) {
+        keep.add(cursor);
+        cursor = parentOf.get(cursor) ?? null;
+      }
+    }
     const deletable = deepestFirst(
-      folderIds.filter((folderId) => !remainingFolderIds.has(folderId)),
+      folderIds.filter((folderId) => !keep.has(folderId)),
       subtree,
     );
     if (deletable.length > 0) {

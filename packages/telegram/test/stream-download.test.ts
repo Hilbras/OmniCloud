@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Api } from "telegram";
 import bigInt from "big-integer";
-import { TelegramFileNotFoundError } from "@omnicloud/core";
+import { OperationCancelledError, TelegramFileNotFoundError } from "@omnicloud/core";
 import { TelegramStorageProvider } from "../src/provider";
 
 function makeMessage(id: number, size: number): Api.Message {
@@ -56,6 +56,31 @@ async function collect(stream: NodeJS.ReadableStream): Promise<Buffer[]> {
   for await (const chunk of stream) out.push(Buffer.from(chunk as Uint8Array));
   return out;
 }
+
+describe("TelegramStorageProvider.get", () => {
+  it("stops a buffered download when the caller aborts", async () => {
+    const controller = new AbortController();
+    const client = {
+      connected: true,
+      async getMessages() {
+        return [makeMessage(5, 4)];
+      },
+      async downloadMedia(_message: unknown, options: { progressCallback?: () => void }) {
+        controller.abort();
+        options.progressCallback?.();
+        return Buffer.from("data");
+      },
+    };
+    const provider = new TelegramStorageProvider(client as never, {
+      chatId: "10",
+      accessHash: "20",
+    });
+
+    await expect(
+      provider.get({ messageId: "5" }, { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+  });
+});
 
 describe("TelegramStorageProvider.getStream", () => {
   it("yields the object as the chunks Telegram returns, without concatenating them", async () => {

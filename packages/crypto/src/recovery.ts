@@ -3,7 +3,7 @@ import { randomBytes } from "@noble/hashes/utils";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { AuthenticationError, UnsupportedFormatError, ValidationError } from "./errors";
-import { KEY_BYTES, assertKeyMaterial } from "./keys";
+import { KEY_BYTES, assertKeyEpoch, assertKeyMaterial } from "./keys";
 import { KEY_EPOCH_V1, NONCE_BYTES, SUITE, TAG_BYTES, MAGIC } from "./envelope";
 
 /**
@@ -19,9 +19,9 @@ export const RECOVERY_CODE_BYTES = 32;
 const AAD_TYPE_RECOVERY = 0x04;
 const HKDF_INFO_RECOVERY = "omnicloud/e2ee/v1/recovery";
 
-function recoveryAad(keyEpoch: number): Uint8Array {
+function recoveryAad(rawEpoch: number): Uint8Array {
   const epoch = new Uint8Array(4);
-  new DataView(epoch.buffer).setUint32(0, keyEpoch, false);
+  new DataView(epoch.buffer).setUint32(0, assertKeyEpoch(rawEpoch), false);
   const out = new Uint8Array(MAGIC.length + 2 + 4 + 1);
   out.set(MAGIC, 0);
   out[MAGIC.length] = 1; // format version
@@ -88,9 +88,6 @@ export function createRecoveryBlob(
   const out = new Uint8Array(NONCE_BYTES + sealed.length);
   out.set(actualNonce, 0);
   out.set(sealed, NONCE_BYTES);
-  if (out.length !== RECOVERY_BLOB_BYTES) {
-    throw new ValidationError("recovery blob has unexpected length");
-  }
   return out;
 }
 
@@ -112,7 +109,6 @@ export function openRecoveryBlob(
       blob.subarray(0, NONCE_BYTES),
       recoveryAad(keyEpoch),
     ).decrypt(blob.subarray(NONCE_BYTES));
-    if (urk.length !== KEY_BYTES) throw new AuthenticationError("recovery failed");
     return urk;
   } catch (error) {
     if (error instanceof AuthenticationError) throw error;

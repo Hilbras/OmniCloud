@@ -6,12 +6,14 @@
 
 export interface WebDavConfig {
   enabled: boolean;
+  host: string;
   port: number;
   writeEnabled: boolean;
 }
 
 export interface AppConfig {
   webDavEnabled: boolean;
+  webDavHost: string;
   webDavPort: number;
   webDavWriteEnabled: boolean;
 }
@@ -19,6 +21,7 @@ export interface AppConfig {
 export function loadWebDavConfig(config: AppConfig): WebDavConfig {
   return {
     enabled: config.webDavEnabled,
+    host: config.webDavHost,
     port: config.webDavPort,
     writeEnabled: config.webDavWriteEnabled,
   };

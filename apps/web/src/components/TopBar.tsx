@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import type { RefObject } from "react";
 import type { StorageDTO } from "@omnicloud/shared";
 import { ThemeToggle } from "./ThemeToggle";
+import { WindowControls } from "./WindowControls";
 
 interface TopBarSearch {
   value: string;
@@ -62,6 +63,7 @@ export function TopBar({
 
   return (
     <header className="nav-blur sticky top-0 z-50 flex h-16 shrink-0 items-center gap-3 border-b px-4 md:gap-5 md:px-8">
+      <WindowControls />
       <button
         type="button"
         aria-label="Open navigation"

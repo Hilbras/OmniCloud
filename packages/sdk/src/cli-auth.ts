@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { generateUrk, sha256Hex } from "@omnicloud/crypto";
@@ -133,8 +133,17 @@ interface KeyfileContents {
  * gets the key. Prefer entering the key interactively or restoring it from a
  * recovery code on machines you do not fully control.
  */
-export function writeKeyfile(path: string, urk: Uint8Array): void {
+export function writeKeyfile(
+  path: string,
+  urk: Uint8Array,
+  options: { force?: boolean } = {},
+): void {
   const target = resolve(path);
+  if (existsSync(target) && options.force !== true) {
+    throw new Error(
+      `Keyfile ${target} already exists. Overwriting it destroys the only copy of that root key; pass --force to replace it.`,
+    );
+  }
   mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
   const contents: KeyfileContents = { version: 1, urkHex: bytesToHex(urk) };
   writeFileSync(target, `${JSON.stringify(contents, null, 2)}\n`, { mode: 0o600 });

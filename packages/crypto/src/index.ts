@@ -72,3 +72,5 @@ export {
   parseRecoveryCode,
 } from "./recovery";
 export { sha256Hex } from "./hash";
+export { rotateVersionKeys } from "./rotation";
+export type { RotateVersionKeysOptions, RotatedVersionKeys } from "./rotation";

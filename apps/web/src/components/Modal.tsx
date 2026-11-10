@@ -12,8 +12,8 @@ interface ModalProps {
 /**
  * Generic dialog in the house style: blurred backdrop, glass panel with a
  * subtle scale/fade entrance and a close button top-right. Overlay click and
- * Escape close it; the panel receives focus unless a child (e.g. an
- * autofocused input) already has it.
+ * Escape close it; focus moves to the first control unless a child already has
+ * it, Tab cycles inside the dialog, and focus returns to the trigger on close.
  */
 export function Modal({ title, onClose, children }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -21,23 +21,64 @@ export function Modal({ title, onClose, children }: ModalProps) {
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+    const panel = panelRef.current;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusable = (): HTMLElement[] => {
+      if (panel === null) return [];
+      return Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.offsetParent !== null);
     };
+
+    if (panel !== null && !panel.contains(document.activeElement)) {
+      const first = focusable()[0];
+      (first ?? panel).focus();
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || panel === null) return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === panel)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previous?.focus();
+    };
   }, [onClose]);
 
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (panel === null) return;
-    if (panel.contains(document.activeElement)) return;
-    panel.focus();
-  }, []);
-
   return (
-    <div
+    <motion.div
       className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.16, ease: "easeOut" }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -50,7 +91,11 @@ export function Modal({ title, onClose, children }: ModalProps) {
         tabIndex={-1}
         initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
+        transition={
+          reduceMotion
+            ? { duration: 0.12 }
+            : { type: "spring", stiffness: 420, damping: 32, mass: 0.7 }
+        }
         className="glass-strong w-full max-w-md rounded-2xl border border-line p-6 outline-none"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
@@ -68,6 +113,6 @@ export function Modal({ title, onClose, children }: ModalProps) {
         </div>
         {children}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

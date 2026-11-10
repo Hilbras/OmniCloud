@@ -19,20 +19,23 @@ const listeners = new Set<() => void>();
  * index again and could overwrite an entry that was just added in memory.
  */
 let loadedAccount: string | null = null;
+let loadedKey: Uint8Array | null = null;
 
-/** True when this account's index still has to be read. */
-export function shouldLoadIndex(accountId: string): boolean {
-  return loadedAccount !== accountId;
+/** True when this account/key pair's index still has to be read. */
+export function shouldLoadIndex(accountId: string, key: Uint8Array | null = null): boolean {
+  return loadedAccount !== accountId || loadedKey !== key;
 }
 
-/** Marks an account's index as loaded. */
-export function markIndexLoaded(accountId: string): void {
+/** Marks an account's index as loaded for a specific key. */
+export function markIndexLoaded(accountId: string, key: Uint8Array | null = null): void {
   loadedAccount = accountId;
+  loadedKey = key;
 }
 
 /** Forgets which account was loaded, so the next one is read afresh. */
 export function forgetLoadedIndex(): void {
   loadedAccount = null;
+  loadedKey = null;
 }
 
 function notify(): void {

@@ -8,6 +8,19 @@ import { APP_VERSION } from "./version";
 import { loadWebDavConfig } from "./webdav/config";
 import { startWebDavServer } from "./webdav/server";
 
+// Background jobs and per-request streams must never take the API down. Log
+// the failure with enough detail to diagnose it, then keep serving.
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "Unhandled promise rejection:",
+    reason instanceof Error ? (reason.stack ?? reason.message) : reason,
+  );
+});
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error.stack ?? error.message);
+  process.exit(1);
+});
+
 const config = loadConfig();
 const operationLogTarget: { log: OperationSink | null } = { log: null };
 const container = buildContainer(config, {
@@ -45,9 +58,10 @@ appLogTarget.log = app.log;
 const webdavConfig = loadWebDavConfig(config);
 let webdavStop: (() => Promise<void>) | null = null;
 if (webdavConfig.enabled) {
-  webdavStop = await startWebDavServer(app, container, webdavConfig);
+  const started = await startWebDavServer(app, container, webdavConfig);
+  webdavStop = started.stop;
   app.log.info(
-    { port: webdavConfig.port, write: webdavConfig.writeEnabled },
+    { host: webdavConfig.host, port: started.port, write: webdavConfig.writeEnabled },
     "WebDAV server started",
   );
 }
@@ -124,6 +138,36 @@ try {
   };
   void purgeTrash();
   setInterval(purgeTrash, 6 * 60 * 60 * 1000).unref();
+
+  // ── Activity retention ────────────────────────────────────────────────────
+  // ActivityService.prune() was never scheduled, so activity_event grew
+  // without bound even though a retention window existed.
+  const pruneActivity = () =>
+    container.activity.prune().then(
+      (removed) => {
+        if (removed > 0) app.log.info({ removed }, "Pruned old activity events");
+      },
+      (error: unknown) => app.log.warn({ err: error }, "Could not prune activity events"),
+    );
+  void pruneActivity();
+  setInterval(pruneActivity, 24 * 60 * 60 * 1000).unref();
+
+  // ── Upload-operation retention ────────────────────────────────────────────
+  // Terminal replay records are only useful for the retry window; keeping them
+  // forever grows the table with old operation ids.
+  const pruneUploadOperations = async () => {
+    const days = config.uploadOperationRetentionDays;
+    if (days <= 0) return;
+    const before = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    try {
+      const removed = await container.repos.uploadOperations.deleteTerminalBefore(before);
+      if (removed > 0) app.log.info({ removed }, "Pruned terminal upload operations");
+    } catch (error) {
+      app.log.warn({ err: error }, "Could not prune upload operations");
+    }
+  };
+  void pruneUploadOperations();
+  setInterval(pruneUploadOperations, 24 * 60 * 60 * 1000).unref();
 } catch (error) {
   app.log.error({ err: error }, "Failed to start");
   await container.shutdown();

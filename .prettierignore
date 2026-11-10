@@ -4,3 +4,5 @@ packages/sdk/server
 coverage
 pnpm-lock.yaml
 packages/database/prisma/migrations
+apps/desktop/out
+apps/desktop/release
