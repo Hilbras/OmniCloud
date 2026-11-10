@@ -135,7 +135,7 @@ const en = {
         formats: ".exe",
       },
     },
-    note: "Artifacts come from the Desktop Build & Release workflow on GitHub. Unsigned builds show the usual OS warning — the source is public, so you can build your own.",
+    note: "Buttons link straight to the file from the newest published desktop build; until one exists they open the release page. Unsigned builds show the usual OS warning — the source is public, so you can build your own.",
     cli: {
       kicker: "CLI & SDK",
       title: "Prefer the terminal?",
@@ -305,7 +305,7 @@ const ar: Translation = {
         formats: ".exe",
       },
     },
-    note: "الملفات تأتي من سير عمل بناء وإصدار سطح المكتب على GitHub. النسخ غير الموقّعة تُظهر تحذير النظام المعتاد — والمصدر عام، فيمكنك البناء بنفسك.",
+    note: "تفتح الأزرار ملف أحدث إصدار منشور مباشرة، وإلى صفحة الإصدارات إن لم يكن هناك إصدار بعد. النسخ غير الموقّعة تُظهر تحذير النظام المعتاد — والمصدر عام، فيمكنك البناء بنفسك.",
     cli: {
       kicker: "سطر الأوامر وSDK",
       title: "تفضّل الطرفية؟",
@@ -477,7 +477,7 @@ const ru: Translation = {
         formats: ".exe",
       },
     },
-    note: "Файлы публикует workflow Desktop Build & Release на GitHub. Неподписанные сборки показывают обычное предупреждение ОС — исходники открыты, можно собрать самому.",
+    note: "Кнопки ведут прямо к файлу последней опубликованной сборки, а пока её нет — на страницу релизов. Неподписанные сборки показывают обычное предупреждение ОС — исходники открыты, можно собрать самому.",
     cli: {
       kicker: "CLI И SDK",
       title: "Предпочитаете терминал?",
