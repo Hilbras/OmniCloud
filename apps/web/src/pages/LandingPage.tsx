@@ -16,6 +16,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { GitHubButtons } from "../components/GitHubButtons";
 import { LANGS, setLang, useLang, type Lang } from "../i18n";
 import { usePageMeta } from "../lib/seo";
 
@@ -366,8 +367,11 @@ export default function LandingPage() {
                 {t.hero.secondary}
               </a>
             </motion.div>
+            <motion.div {...heroItem(4)} className="mt-4">
+              <GitHubButtons />
+            </motion.div>
             <motion.ul
-              {...heroItem(4)}
+              {...heroItem(5)}
               className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-xs muted"
             >
               {t.hero.trust.map((item, index) => {

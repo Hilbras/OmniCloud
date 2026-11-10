@@ -12,6 +12,7 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 import { SiteFooter, SiteHeader } from "../components/SiteShell";
+import { GitHubButtons } from "../components/GitHubButtons";
 import { useLang } from "../i18n";
 import { usePageMeta } from "../lib/seo";
 
@@ -149,6 +150,7 @@ export default function DownloadPage() {
                 {t.download.source}
               </a>
             </div>
+            <GitHubButtons className="mt-4" />
           </motion.div>
         </section>
 
