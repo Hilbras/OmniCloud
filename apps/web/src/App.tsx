@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { onUnauthorized } from "./api/client";
 import DriveLayout from "./components/DriveLayout";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { useMe } from "./hooks/useMe";
 import { ME_QUERY_KEY, SIGNED_OUT_SESSION } from "./lib/queries";
 import { clear as clearCryptoSession } from "./lib/crypto-session";
@@ -86,41 +87,44 @@ export default function App() {
   );
 
   return (
-    <Suspense fallback={<FullPageSpinner />}>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/download" element={<DownloadPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/faq" element={<FaqPage />} />
-        <Route path="/welcome" element={<Navigate to="/" replace />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/s/:token" element={<ShareRoute />} />
-        <Route
-          path="/pair/:id"
-          element={
-            <RequireAuth>
-              <PairRoute />
-            </RequireAuth>
-          }
-        />
-        <Route
-          element={
-            <RequireAuth>
-              <DriveLayout />
-            </RequireAuth>
-          }
-        >
-          <Route path="/drive" element={<DrivePage />} />
-          <Route path="/recent" element={<RecentPage />} />
-          <Route path="/starred" element={<StarredPage />} />
-          <Route path="/trash" element={<TrashPage />} />
-          <Route path="/storage" element={<StoragePage />} />
-          <Route path="/settings/tokens" element={<TokensPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+    <>
+      <Suspense fallback={<FullPageSpinner />}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/download" element={<DownloadPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/faq" element={<FaqPage />} />
+          <Route path="/welcome" element={<Navigate to="/" replace />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/s/:token" element={<ShareRoute />} />
+          <Route
+            path="/pair/:id"
+            element={
+              <RequireAuth>
+                <PairRoute />
+              </RequireAuth>
+            }
+          />
+          <Route
+            element={
+              <RequireAuth>
+                <DriveLayout />
+              </RequireAuth>
+            }
+          >
+            <Route path="/drive" element={<DrivePage />} />
+            <Route path="/recent" element={<RecentPage />} />
+            <Route path="/starred" element={<StarredPage />} />
+            <Route path="/trash" element={<TrashPage />} />
+            <Route path="/storage" element={<StoragePage />} />
+            <Route path="/settings/tokens" element={<TokensPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+      <InstallPrompt />
+    </>
   );
 }

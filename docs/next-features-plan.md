@@ -42,19 +42,22 @@ plaintext file; nothing outside the folder is reachable.
 
 ## Phase 2 — Installable PWA
 
+Status: **implemented** except Web Share Target (not started).
+
 Goal: the web app installs like an app and opens offline.
 
-- `manifest.webmanifest` with icons, theme colour, start URL, display standalone.
-- Service worker: precache the app shell, network-first for API, cache-first for
-  static assets, explicit offline page for navigations.
-- Install prompt in the header on supported browsers (dismissible, remembered).
-- Web Share Target so a phone can send files into OmniCloud (stored in Inbox).
-- Tests: manifest shape, service-worker routing table, install-prompt
-  preferences; manual checklist for iOS/Android install.
-- Docs: `docs/pwa.md`.
+- `manifest.webmanifest` with 192/512 any + maskable icons, `/drive` start URL,
+  standalone display, shortcuts.
+- Service worker: app-shell precache, cache-first static assets, network-first
+  navigations, `/api/` never cached, `offline.html` fallback.
+- Install card in the app (bottom-left), only when `beforeinstallprompt` fires,
+  hidden in standalone mode and remembered after “Not now”.
+- Tests (4): manifest completeness, document links, worker cache rules,
+  self-contained offline page.
+- Docs: [`pwa.md`](pwa.md) with desktop/Android/iOS manual checks.
 
 Acceptance: install prompt appears, the installed app opens the drive shell
-offline and shows the cached listing, and a shared file lands in the drive.
+offline and shows the cached listing. Share Target is a follow-up.
 
 ## Phase 3 — Background uploads in the Electron main process
 
