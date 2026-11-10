@@ -5,7 +5,7 @@ import type { Plugin } from "vite";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const DEFAULT_SITE_URL = "https://omnicloud-chi.vercel.app";
+const DEFAULT_SITE_URL = "https://omnicloud.hilbras.com";
 
 /**
  * Rewrites the origin in the built `index.html` and regenerates the SEO files
@@ -38,6 +38,8 @@ Disallow: /starred
 Disallow: /trash
 Disallow: /storage
 Disallow: /settings
+Disallow: /pair/
+Disallow: /s/
 
 Sitemap: ${siteUrl}/sitemap.xml
 `,
@@ -46,16 +48,24 @@ Sitemap: ${siteUrl}/sitemap.xml
         resolve(outDir, "sitemap.xml"),
         `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${siteUrl}/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${siteUrl}/login</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
+${[
+  ["/", "weekly", "1.0"],
+  ["/download", "weekly", "0.9"],
+  ["/faq", "monthly", "0.7"],
+  ["/about", "monthly", "0.6"],
+  ["/privacy", "yearly", "0.4"],
+  ["/terms", "yearly", "0.4"],
+  ["/login", "monthly", "0.5"],
+]
+  .map(
+    ([path, changefreq, priority]) => `  <url>
+    <loc>${siteUrl}${path}</loc>
+    <lastmod>2026-11-11</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`,
+  )
+  .join("\n")}
 </urlset>
 `,
       );
