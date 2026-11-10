@@ -38,7 +38,9 @@ interface ReleaseInfo {
 
 function hasArch(name: string, arch: "x64" | "arm64"): boolean {
   const lower = name.toLowerCase();
-  if (arch === "x64") return lower.includes("x64") || lower.includes("amd64");
+  if (arch === "x64") {
+    return /x64|amd64|x86_64|x86-64/.test(lower);
+  }
   return lower.includes("arm64") || lower.includes("aarch64");
 }
 
@@ -50,6 +52,11 @@ function findAsset(
   return assets.find(
     (asset) => asset.kind === kind && (arch === undefined || hasArch(asset.name, arch)),
   );
+}
+
+/** Drops the product and version prefix so alternate links stay readable. */
+function shortName(name: string): string {
+  return name.replace(/^OmniCloud-[^-]+-/, "");
 }
 
 export default function DownloadPage() {
@@ -79,16 +86,15 @@ export default function DownloadPage() {
   const platformLinks = (key: (typeof PLATFORM_KEYS)[number]) => {
     if (key === "linux") {
       const appImage = findAsset(assets, "appimage", "x64") ?? findAsset(assets, "appimage");
-      const deb = findAsset(assets, "deb", "x64") ?? findAsset(assets, "deb");
-      return { primary: appImage, alternates: deb ? [deb] : [] };
+      const rest = assets.filter(
+        (asset) => ["appimage", "deb"].includes(asset.kind) && asset !== appImage,
+      );
+      return { primary: appImage, alternates: rest };
     }
     if (key === "macos") {
       const dmg = findAsset(assets, "dmg", "arm64") ?? findAsset(assets, "dmg");
-      const other =
-        findAsset(assets, "dmg", "x64") ??
-        findAsset(assets, "zip", "arm64") ??
-        findAsset(assets, "zip");
-      return { primary: dmg, alternates: other && other !== dmg ? [other] : [] };
+      const rest = assets.filter((asset) => ["dmg", "zip"].includes(asset.kind) && asset !== dmg);
+      return { primary: dmg, alternates: rest };
     }
     const exe = findAsset(assets, "exe", "x64") ?? findAsset(assets, "exe");
     return { primary: exe, alternates: [] };
@@ -183,7 +189,7 @@ export default function DownloadPage() {
                           download
                           className="muted underline-offset-2 hover:text-text hover:underline"
                         >
-                          {asset.name}
+                          {shortName(asset.name)}
                         </a>
                       ))}
                     </div>
