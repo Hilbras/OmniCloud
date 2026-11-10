@@ -42,8 +42,13 @@ export function ShareDialog({ item, onClose, onChanged }: ShareDialogProps) {
   }, [item.id]);
 
   const existing = useMemo(
-    () => shares.filter((share) => share.fileId === item.id && share.revokedAt === null),
-    [shares, item.id],
+    () =>
+      shares.filter(
+        (share) =>
+          share.revokedAt === null &&
+          (item.kind === "file" ? share.fileId === item.id : share.folderId === item.id),
+      ),
+    [shares, item.id, item.kind],
   );
 
   async function encryptedShareKey(): Promise<{
@@ -82,18 +87,21 @@ export function ShareDialog({ item, onClose, onChanged }: ShareDialogProps) {
     setCreating(true);
     setError(null);
     try {
-      const keyMaterial = await encryptedShareKey();
+      const keyMaterial = item.kind === "file" ? await encryptedShareKey() : null;
       const expiresAt =
         days === "never"
           ? undefined
           : new Date(Date.now() + Number(days) * 24 * 60 * 60 * 1000).toISOString();
       const max = maxDownloads.trim() === "" ? null : Number(maxDownloads);
-      const result = await api.shares.create(item.id, {
-        ...(expiresAt ? { expiresAt } : {}),
-        ...(max !== null ? { maxDownloads: max } : {}),
-        ...(password.trim() !== "" ? { password: password.trim() } : {}),
-        ...(keyMaterial !== null ? { sharedWrappedKey: keyMaterial.sharedWrappedKey } : {}),
-      });
+      const result = await api.shares.create(
+        item.kind === "file" ? { fileId: item.id } : { folderId: item.id },
+        {
+          ...(expiresAt ? { expiresAt } : {}),
+          ...(max !== null ? { maxDownloads: max } : {}),
+          ...(password.trim() !== "" ? { password: password.trim() } : {}),
+          ...(keyMaterial !== null ? { sharedWrappedKey: keyMaterial.sharedWrappedKey } : {}),
+        },
+      );
       const url = `${window.location.origin}/s/${result.token}${keyMaterial?.fragment ?? ""}`;
       setLink(url);
       setShares((await api.shares.list()).shares);
@@ -174,6 +182,13 @@ export function ShareDialog({ item, onClose, onChanged }: ShareDialogProps) {
                 onChange={(event) => setPassword(event.target.value)}
               />
             </label>
+
+            {item.kind === "folder" ? (
+              <p className="muted text-[12px]">
+                Folder links include active subfolders. Encrypted files are listed but stay locked
+                until the per-file key transfer is implemented.
+              </p>
+            ) : null}
 
             {error !== null ? (
               <p role="alert" className="notice notice-error">

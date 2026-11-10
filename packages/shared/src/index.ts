@@ -94,7 +94,10 @@ export interface KeyPairingPayloadDTO {
 
 export interface ShareLinkDTO {
   id: string;
-  fileId: string;
+  kind: "file" | "folder";
+  fileId: string | null;
+  folderId: string | null;
+  /** File or folder name. */
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -106,6 +109,27 @@ export interface ShareLinkDTO {
   hasPassword: boolean;
 }
 
+/** One row in the public folder view. */
+export interface SharedFolderEntryDTO {
+  kind: "file" | "folder";
+  id: string;
+  name: string;
+  parentId: string | null;
+  size: number;
+  mimeType: string;
+  /** Encrypted files cannot be downloaded through a folder link (Phase 1b). */
+  locked: boolean;
+}
+
+export interface SharedFolderDTO {
+  name: string;
+  expiresAt: string | null;
+  maxDownloads: number | null;
+  downloadCount: number;
+  hasPassword: boolean;
+  entries: SharedFolderEntryDTO[];
+}
+
 export interface CreateShareResponse {
   share: ShareLinkDTO;
   /** Shown once. Put it in the URL; the server only stores its hash. */
@@ -113,6 +137,7 @@ export interface CreateShareResponse {
 }
 
 export interface ShareMetaDTO {
+  kind: "file";
   file: FileDTO;
   downloadCount: number;
   maxDownloads: number | null;
@@ -120,6 +145,18 @@ export interface ShareMetaDTO {
   hasPassword: boolean;
   sharedWrappedKey: string | null;
 }
+
+export interface FolderShareMetaDTO {
+  kind: "folder";
+  name: string;
+  downloadCount: number;
+  maxDownloads: number | null;
+  expiresAt: string | null;
+  hasPassword: boolean;
+  entries: SharedFolderEntryDTO[];
+}
+
+export type SharedLinkMetaDTO = ShareMetaDTO | FolderShareMetaDTO;
 
 export interface FolderDTO {
   id: string;

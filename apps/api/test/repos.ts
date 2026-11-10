@@ -792,6 +792,7 @@ export function createInMemoryRepos(): InMemoryRepos {
         id: `share-${shareLinks.length + 1}`,
         userId: input.userId,
         fileId: input.fileId,
+        folderId: input.folderId,
         tokenHash: input.tokenHash,
         passwordHash: input.passwordHash,
         sharedWrappedKey: input.sharedWrappedKey,

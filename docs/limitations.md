@@ -56,6 +56,9 @@ The security controls that _are_ in place are described in
   client flow (re-wrapping the recovery blob, invalidating device pairings,
   re-encrypting the name index, resuming an interrupted rotation) is not
   implemented, so no UI offers it.
+- **Folder share links serve plaintext only.** A folder link lists the whole
+  active subtree, but encrypted files appear as “locked” and cannot be downloaded
+  until per-file key transfer is implemented. OCE2 files are never shareable.
 - **Team spaces are design-only.** Shared folders with per-member keys, roles and
   audit are not implemented. The model, the OCE2 name-hiding conflict and the
   re-wrap requirement are recorded in

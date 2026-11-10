@@ -2716,19 +2716,26 @@ URL fragment (`/s/<token>#k=<secret>`); the server stores only the re-wrapped
 key (`sharedWrappedKey`) and never sees the fragment. OCE2 files are refused
 because the link cannot carry a hidden name safely.
 
-| Endpoint                           | Method | Auth    | Purpose           |
-| ---------------------------------- | ------ | ------- | ----------------- |
-| `/api/shares`                      | POST   | session | Create a link     |
-| `/api/shares`                      | GET    | session | List links        |
-| `/api/shares/:id`                  | DELETE | session | Revoke a link     |
-| `/api/shares/download/:token/meta` | GET    | public  | File metadata     |
-| `/api/shares/download/:token`      | GET    | public  | Download the file |
+| Endpoint                                    | Method | Auth    | Purpose                                |
+| ------------------------------------------- | ------ | ------- | -------------------------------------- |
+| `/api/shares`                               | POST   | session | Create a file or folder link           |
+| `/api/shares`                               | GET    | session | List links                             |
+| `/api/shares/:id`                           | DELETE | session | Revoke a link                          |
+| `/api/shares/download/:token/meta`          | GET    | public  | File or folder metadata                |
+| `/api/shares/download/:token`               | GET    | public  | Download a shared file                 |
+| `/api/shares/download/:token/files/:fileId` | GET    | public  | Download a file inside a shared folder |
 
-`POST /api/shares` body: `{ "fileId": "...", "expiresAt"?: ISO-8601,
-"maxDownloads"?: number, "password"?: string, "sharedWrappedKey"?: base64 }`.
-`sharedWrappedKey` is required for OCE1 files. The response contains the
-token **once**; only its SHA-256 is stored. The web app builds
-`/s/<token>`.
+`POST /api/shares` body: `{ "fileId": "..." }` **or** `{ "folderId": "..." }`
+(exactly one), plus optional `expiresAt` (ISO-8601), `maxDownloads`, `password`
+and `sharedWrappedKey` (base64, files only). `sharedWrappedKey` is required for
+OCE1 files. The response contains the token **once**; only its SHA-256 is stored.
+The web app builds `/s/<token>`.
+
+A folder link exposes the folder and every active descendant. `meta` returns
+`kind: "folder"` with `entries`; download each plaintext file through
+`/files/:fileId`. Files outside the subtree return `404`. Encrypted files are
+listed with `locked: true` and their download returns `409` until per-file key
+transfer is implemented; OCE2 files are always refused.
 
 Public requests are limited to 60/minute per IP. A password-protected link
 requires `x-share-password: <password>`; a wrong or missing password returns

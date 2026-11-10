@@ -151,6 +151,7 @@ model Folder {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   files        File[]
+  shareLinks   ShareLink[]
 
   @@index([userId, parentId, deletedAt])
   /// Leading parentId index: enforces the self-relation and serves child lookups
@@ -247,8 +248,11 @@ model ShareLink {
   id            String    @id @default(cuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fileId        String
-  file          File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  /// Exactly one of fileId/folderId is set; enforced by a database check.
+  fileId        String?
+  file          File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId      String?
+  folder        Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
   tokenHash     String    @unique
   passwordHash  String?
   sharedWrappedKey String?
@@ -260,6 +264,7 @@ model ShareLink {
 
   @@index([userId, createdAt])
   @@index([expiresAt])
+  @@index([folderId])
 }
 
 

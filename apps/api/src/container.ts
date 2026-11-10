@@ -235,7 +235,7 @@ export function buildContainerFromRepos(
     reconciliationFlow: new ReconciliationFlow(repos, engineFor),
     authSessions: new AuthSessionService(repos.browserSessions),
     apiTokens: new ApiTokenService(repos.apiTokens),
-    shares: new ShareService(repos.shareLinks, repos.files),
+    shares: new ShareService(repos.shareLinks, repos.files, repos.folders),
     keyPairings: new KeyPairingService(repos.keyPairings),
     engineFor,
     shutdown: async () => {

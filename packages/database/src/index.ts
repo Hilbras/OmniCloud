@@ -547,7 +547,8 @@ function createShareLinkRepo(prisma: PrismaClient): ShareLinkRepository {
   const map = (row: {
     id: string;
     userId: string;
-    fileId: string;
+    fileId: string | null;
+    folderId: string | null;
     tokenHash: string;
     passwordHash: string | null;
     sharedWrappedKey: string | null;

@@ -321,14 +321,15 @@ export const api = {
   },
   shares: {
     create(
-      fileId: string,
+      target: { fileId: string } | { folderId: string },
       options: {
         expiresAt?: string;
         maxDownloads?: number | null;
         password?: string | null;
+        sharedWrappedKey?: string;
       } = {},
     ): Promise<CreateShareResponse> {
-      return requestJson("POST", "/api/shares", { fileId, ...options });
+      return requestJson("POST", "/api/shares", { ...target, ...options });
     },
     list(): Promise<{ shares: ShareLinkDTO[] }> {
       return requestJson("GET", "/api/shares");

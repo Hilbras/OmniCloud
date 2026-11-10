@@ -460,7 +460,8 @@ export interface ActivityRepository {
 export interface ShareLinkRecord {
   id: string;
   userId: string;
-  fileId: string;
+  fileId: string | null;
+  folderId: string | null;
   tokenHash: string;
   passwordHash: string | null;
   sharedWrappedKey: string | null;
@@ -474,7 +475,8 @@ export interface ShareLinkRecord {
 export interface ShareLinkRepository {
   create(input: {
     userId: string;
-    fileId: string;
+    fileId: string | null;
+    folderId: string | null;
     tokenHash: string;
     passwordHash: string | null;
     sharedWrappedKey: string | null;
