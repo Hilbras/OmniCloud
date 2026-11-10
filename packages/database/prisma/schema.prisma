@@ -159,6 +159,7 @@ model Folder {
   @@index([userId, deletedAt])
   @@index([userId, name])
   @@index([userId, starred])
+  @@index([storageId])
 }
 
 /// File metadata. `telegramMessageId` points at the current version's message
@@ -207,6 +208,7 @@ model File {
   @@index([userId, starred])
   @@index([userId, size])
   @@index([userId, mimeType])
+  @@index([storageId])
 }
 
 /// Version foundation for v0.3's version history. Every upload creates a row;

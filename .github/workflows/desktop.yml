@@ -17,7 +17,7 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: linux
-          - os: macos-14
+          - os: macos-latest
             artifact: macos
           - os: windows-latest
             artifact: windows
@@ -45,6 +45,7 @@ jobs:
       - name: Verify
         if: matrix.artifact == 'linux'
         run: |
+          pnpm build
           pnpm typecheck
           pnpm lint
           pnpm test
@@ -53,7 +54,15 @@ jobs:
       # dependency closure (including the Prisma CLI and platform engines) and
       # runs electron-builder for the host platform.
       - name: Build desktop app
-        run: pnpm --filter @hilbras/omnicloud-desktop dist
+        shell: bash
+        run: |
+          # Empty signing secrets must not be passed through: electron-builder
+          # resolves CSC_LINK/WIN_CSC_LINK as paths and fails on an empty value.
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD \
+            APPLE_TEAM_ID WIN_CSC_LINK WIN_CSC_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then unset "$name"; fi
+          done
+          pnpm --filter @hilbras/omnicloud-desktop dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional signing credentials. Empty secrets produce unsigned
