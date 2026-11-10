@@ -727,7 +727,10 @@ function createFolderRepo(prisma: PrismaClient): FolderRepository {
           );
           return mapFolder(folder);
         } catch (error) {
-          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          const code = (error as { code?: string }).code;
+          if ((code === "P2034" || code === "P2002" || code === "P2028") && attempt < 4) {
+            continue;
+          }
           throw error;
         }
       }
@@ -961,7 +964,9 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
           // P2002 is the unique (fileId, versionNumber) collision that
           // PostgreSQL reports instead of P2034 for concurrent inserts.
           const code = (error as { code?: string }).code;
-          if ((code === "P2034" || code === "P2002") && attempt < 4) continue;
+          if ((code === "P2034" || code === "P2002" || code === "P2028") && attempt < 4) {
+            continue;
+          }
           throw error;
         }
       }
@@ -1202,7 +1207,9 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
           return mapVersion(version);
         } catch (error) {
           const code = (error as { code?: string }).code;
-          if ((code === "P2034" || code === "P2002") && attempt < 4) continue;
+          if ((code === "P2034" || code === "P2002" || code === "P2028") && attempt < 4) {
+            continue;
+          }
           throw error;
         }
       }
@@ -1277,7 +1284,10 @@ function createFileRepo(prisma: PrismaClient): FileRepository {
           );
           return;
         } catch (error) {
-          if ((error as { code?: string }).code === "P2034" && attempt < 4) continue;
+          const code = (error as { code?: string }).code;
+          if ((code === "P2034" || code === "P2002" || code === "P2028") && attempt < 4) {
+            continue;
+          }
           throw error;
         }
       }
