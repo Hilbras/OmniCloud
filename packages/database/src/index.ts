@@ -668,7 +668,7 @@ function createStorageRepo(prisma: PrismaClient): StorageRepository {
       // opt-in targets for specific folders.
       const storage = await prisma.storage.findFirst({
         where: { userId, provider },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       });
       return storage ? mapStorage(storage) : null;
     },

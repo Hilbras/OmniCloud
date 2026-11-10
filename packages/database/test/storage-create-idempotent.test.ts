@@ -6,13 +6,13 @@ const url = process.env.OMNICLOUD_TEST_DATABASE_URL;
 const uniqueTelegramId = () => BigInt(Math.floor(Math.random() * 2 ** 52) + 1);
 
 /**
- * Two concurrent storage creations can both see "no record" and race the
- * unique (userId, provider) insert. The loser must return the winner's row,
- * not a 500 that leaves an orphan channel.
+ * Multiple channels per account are supported, so concurrent creates both
+ * succeed. The contract that matters is that the *default* lookup is stable:
+ * it always resolves to the oldest registration for that provider.
  *
  * Runs only against a real PostgreSQL database given in OMNICLOUD_TEST_DATABASE_URL.
  */
-describe.skipIf(!url)("storage creation is idempotent (PostgreSQL)", () => {
+describe.skipIf(!url)("storage defaults under concurrent creates (PostgreSQL)", () => {
   let prisma: PrismaClient;
   let repos: ReturnType<typeof createPrismaRepos>;
   let userId: string;
@@ -33,7 +33,7 @@ describe.skipIf(!url)("storage creation is idempotent (PostgreSQL)", () => {
     }
   });
 
-  it("returns the same record for concurrent creates", async () => {
+  it("keeps one stable default and allows additional channels", async () => {
     const input = {
       userId,
       provider: "telegram",
@@ -44,10 +44,15 @@ describe.skipIf(!url)("storage creation is idempotent (PostgreSQL)", () => {
 
     const [left, right] = await Promise.all([
       repos.storages.create(input),
-      repos.storages.create(input),
+      repos.storages.create({ ...input, telegramChatId: "101", title: "Archive" }),
     ]);
 
-    expect(left.id).toBe(right.id);
-    expect(await prisma.storage.count({ where: { userId } })).toBe(1);
+    expect(left.id).not.toBe(right.id);
+    expect(await prisma.storage.count({ where: { userId } })).toBe(2);
+
+    const first = await repos.storages.findByUserAndProvider(userId, "telegram");
+    const second = await repos.storages.findByUserAndProvider(userId, "telegram");
+    expect(first).not.toBeNull();
+    expect(second?.id).toBe(first?.id);
   });
 });
