@@ -1,9 +1,9 @@
 import {
+  ChevronsLeft,
+  ChevronsRight,
   Cloud,
   FolderPlus,
   HardDrive,
-  PanelLeftClose,
-  PanelLeftOpen,
   Settings,
   X,
 } from "lucide-react";
@@ -62,43 +62,68 @@ export function Sidebar({
               : "flex items-center justify-between gap-3"
           }
         >
-          <a
-            href="/drive"
-            className="flex items-center gap-2.5 text-sm font-semibold tracking-tight"
-          >
-            <span className="relative h-8 w-8 shrink-0">
-              <img
-                src="/brand/logo-mark.svg"
-                alt=""
-                className="brand-mark-dark absolute inset-0 h-8 w-8"
-              />
-              <img
-                src="/brand/logo-mark-light.svg"
-                alt=""
-                className="brand-mark-light absolute inset-0 h-8 w-8"
-              />
-            </span>
-            {collapsed ? null : (
-              <span>
-                Omni<span className="muted font-normal">Cloud</span>
+          {collapsed ? (
+            <div className="group relative h-8 w-8">
+              <span className="relative block h-8 w-8">
+                <img
+                  src="/brand/logo-mark.svg"
+                  alt="OmniCloud"
+                  className="brand-mark-dark absolute inset-0 h-8 w-8 transition-opacity group-hover:opacity-0"
+                />
+                <img
+                  src="/brand/logo-mark-light.svg"
+                  alt=""
+                  aria-hidden="true"
+                  className="brand-mark-light absolute inset-0 h-8 w-8 transition-opacity group-hover:opacity-0"
+                />
               </span>
-            )}
-          </a>
-          {onToggleCollapsed !== undefined ? (
-            <button
-              type="button"
-              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-              aria-pressed={collapsed}
-              onClick={onToggleCollapsed}
-              className="muted hidden h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-surface hover:text-gold-text md:grid"
-            >
-              {collapsed ? (
-                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          ) : null}
+              {onToggleCollapsed !== undefined ? (
+                <button
+                  type="button"
+                  aria-label="Expand navigation"
+                  aria-pressed={true}
+                  onClick={onToggleCollapsed}
+                  className="absolute inset-0 grid place-items-center rounded-lg bg-surface text-gold-text opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <a
+                href="/drive"
+                className="flex items-center gap-2.5 text-sm font-semibold tracking-tight"
+              >
+                <span className="relative h-8 w-8 shrink-0">
+                  <img
+                    src="/brand/logo-mark.svg"
+                    alt=""
+                    className="brand-mark-dark absolute inset-0 h-8 w-8"
+                  />
+                  <img
+                    src="/brand/logo-mark-light.svg"
+                    alt=""
+                    className="brand-mark-light absolute inset-0 h-8 w-8"
+                  />
+                </span>
+                <span>
+                  Omni<span className="muted font-normal">Cloud</span>
+                </span>
+              </a>
+              {onToggleCollapsed !== undefined ? (
+                <button
+                  type="button"
+                  aria-label="Collapse navigation"
+                  aria-pressed={false}
+                  onClick={onToggleCollapsed}
+                  className="muted hidden h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-surface hover:text-gold-text md:grid"
+                >
+                  <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : null}
+            </>
+          )}
           {onClose !== undefined ? (
             <button
               type="button"
