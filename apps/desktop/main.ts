@@ -1,4 +1,15 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  ipcMain,
+  nativeImage,
+  dialog,
+  shell,
+  session,
+  Notification,
+} from "electron";
 import type { NativeImage } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import {
@@ -15,9 +26,12 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
+import { openAsBlob } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { checkForUpdatesNow, startAutoUpdater } from "./updater";
 import { defaultWindowState, parseWindowState, type WindowState } from "./window-state";
 import { deepLinkPath } from "./deep-link";
+import { UploadQueue } from "./upload-queue";
 import {
   generateEncryptionKey,
   parseEnvFile,
@@ -265,6 +279,68 @@ function saveWindowState(window: BrowserWindow): void {
   windowStateSaveTimer.unref();
 }
 
+let uploadQueue: UploadQueue | null = null;
+
+function uploadOrigin(): string {
+  return `http://${serverHost}:${serverPort}`;
+}
+
+/** Uploads one queued job with the renderer's session cookie. */
+async function uploadJobToServer(job: {
+  path: string;
+  name: string;
+  folderId: string | null;
+  operationId: string;
+}): Promise<void> {
+  const origin = uploadOrigin();
+  const cookies = await session.defaultSession.cookies.get({ url: origin });
+  const auth = cookies.find((cookie) => cookie.name === "omnicloud_session");
+  if (!auth) throw new Error("Sign in to resume background uploads");
+
+  const blob = await openAsBlob(job.path);
+  const form = new FormData();
+  form.append("file", blob, job.name);
+  if (job.folderId !== null) form.append("folderId", job.folderId);
+  form.append("operationId", job.operationId);
+
+  const response = await fetch(`${origin}/api/files`, {
+    method: "POST",
+    headers: { cookie: `omnicloud_session=${auth.value}` },
+    body: form,
+  });
+  if (!response.ok) throw new Error(`Upload failed (${response.status})`);
+}
+
+function initUploadQueue(logFile: (line: string) => void): void {
+  uploadQueue = new UploadQueue({
+    storePath: join(app.getPath("userData"), "upload-queue.json"),
+    upload: uploadJobToServer,
+    onChange: (jobs) => {
+      const active = jobs.filter(
+        (job) => job.status === "queued" || job.status === "uploading",
+      ).length;
+      tray?.setToolTip(active > 0 ? `OmniCloud — ${active} uploading` : "OmniCloud");
+      mainWindow?.webContents.send("omnicloud:upload-queue", jobs);
+    },
+    onFinished: (job) => {
+      if (job.status === "done") {
+        new Notification({ title: "Upload complete", body: job.name }).show();
+      } else {
+        new Notification({
+          title: "Upload failed",
+          body: `${job.name}: ${job.error ?? "unknown error"}`,
+        }).show();
+      }
+      logFile(`upload ${job.status}: ${job.path}${job.error ? ` (${job.error})` : ""}`);
+      mainWindow?.webContents.send("omnicloud:files-changed");
+    },
+  });
+  void uploadQueue
+    .load()
+    .then(() => uploadQueue?.run())
+    .catch(() => undefined);
+}
+
 function driveUrl(path = "/drive"): string {
   return `http://${serverHost}:${serverPort}${path}`;
 }
@@ -417,6 +493,13 @@ async function requestUploadDialog(): Promise<void> {
     title: "Upload to OmniCloud",
   });
   if (result.canceled || result.filePaths.length === 0) return;
+  if (uploadQueue !== null) {
+    for (const path of result.filePaths) {
+      void uploadQueue.enqueue(path, null, randomUUID());
+    }
+    mainWindow?.webContents.send("omnicloud:upload-queue-start");
+    return;
+  }
   for (const path of result.filePaths) approvedUploadPaths.add(path);
   mainWindow?.show();
   mainWindow?.focus();
@@ -652,6 +735,7 @@ async function boot(): Promise<void> {
   createWindow();
   createMenu(logFile);
   createTray(logFile);
+  initUploadQueue(logFile);
   startAutoUpdater(logFile);
 }
 
@@ -703,6 +787,13 @@ ipcMain.handle("setup:cancel", (event) => {
 // --- IPC handlers ---
 
 ipcMain.handle("omnicloud:getVersion", () => app.getVersion());
+
+ipcMain.handle("omnicloud:upload-queue-list", () => uploadQueue?.list() ?? []);
+
+ipcMain.handle("omnicloud:upload-queue-cancel", (_event, id: unknown) => {
+  if (typeof id !== "string") return;
+  void uploadQueue?.cancel(id);
+});
 
 ipcMain.handle("omnicloud:window-control", (event, action: unknown) => {
   if (mainWindow === null || event.sender.id !== mainWindow.webContents.id) return;

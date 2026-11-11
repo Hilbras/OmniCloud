@@ -61,24 +61,26 @@ offline and shows the cached listing. Share Target is a follow-up.
 
 ## Phase 3 — Background uploads in the Electron main process
 
+Status: **implemented** (tray uploads; per-folder targeting and progress are
+follow-ups).
+
 Goal: uploads continue after the window is closed or the app is quit.
 
 - Main-process queue persisted as JSON in `userData`, one job per file with path,
-  folder, operation id and status.
-- Authenticated API calls from main using the existing session cookie (read from
-  the Electron session store) or a short-lived upload token issued by the
-  renderer.
-- Spool the file path; resume after relaunch by re-reading the spool; Telegram
-  has no resumable session, so the bytes restart but the operation id prevents
-  duplicates.
-- Tray menu shows active jobs; OS notification on completion/failure.
-- Renderer queue becomes a view over the main queue for uploads started in the
-  desktop app; browser keeps the IndexedDB queue.
-- Tests: queue persistence, dedupe by operation id, restart resumes, cancel.
-- Docs: `docs/desktop-uploads.md`; checklist items in `desktop-checklist.md`.
+  folder, operation id and status; atomic writes; crash recovery.
+- Authenticated API calls from main using the renderer's `omnicloud_session`
+  cookie read from the Electron session store; files stream via `openAsBlob`.
+- Retry with 1s → 4s backoff, three attempts; native notification on
+  completion/failure; tray tooltip shows the active count.
+- Preload bridge: `queue()`, `cancel(id)`, `onQueueChange`.
+- Tests (5): persistence + restart resume, retry success, attempt limit, cancel,
+  stable job fields.
+- Docs: [`desktop-uploads.md`](desktop-uploads.md), checklist items in
+  `desktop-checklist.md`.
 
-Acceptance: start a large upload, close the window, quit the app, relaunch — the
-upload finishes exactly once and notifies.
+Acceptance: kill the app mid-upload, relaunch, the upload finishes once. The
+queue unit tests cover the state machine; the manual checklist covers the live
+Electron run.
 
 ## Phase 4 — Storage provider adapters (local disk first)
 

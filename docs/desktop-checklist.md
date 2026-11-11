@@ -10,6 +10,7 @@ listed first so the manual list stays short.
 | Window state persistence | `apps/desktop/test/window-state.test.ts` (bounds validation/fallback)          |
 | Deep links               | `apps/desktop/test/deep-link.test.ts` (`omnicloud://drive`, `/file/<id>`)      |
 | Upload notifications     | `apps/web/test/notifications.test.ts`                                          |
+| Background upload queue  | `apps/desktop/test/upload-queue.test.ts`                                       |
 | Folder upload paths      | `apps/web/test/folder-upload.test.ts`                                          |
 | Drag-to-move logic       | `apps/web/test/drag-move.test.ts`                                              |
 | Reduced motion           | `prefers-reduced-motion` honoured in every `motion/react` component and in CSS |
@@ -28,6 +29,7 @@ listed first so the manual list stays short.
 - [ ] Launch at login toggles on/off and survives a reboot.
 - [ ] An upload completes/fails while the window is hidden and raises an OS
       notification.
+- [ ] Quit mid-upload and relaunch: the tray upload resumes and finishes once.
 - [ ] Window controls (minimize, maximize, close) work in the custom title bar;
       no native title bar is shown.
 - [ ] Drag a file from the desktop onto the drive: it uploads to the open folder.

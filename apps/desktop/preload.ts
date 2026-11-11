@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld("omnicloudDesktop", {
       return () => ipcRenderer.removeListener("omnicloud:upload-paths", handler);
     },
     read: (path: string) => ipcRenderer.invoke("omnicloud:read-upload-path", path),
+    queue: () => ipcRenderer.invoke("omnicloud:upload-queue-list"),
+    cancel: (id: string) => ipcRenderer.invoke("omnicloud:upload-queue-cancel", id),
+    onQueueChange: (listener: (jobs: unknown[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, jobs: unknown[]): void => listener(jobs);
+      ipcRenderer.on("omnicloud:upload-queue", handler);
+      return () => ipcRenderer.removeListener("omnicloud:upload-queue", handler);
+    },
   },
   desktopSettings: {
     getLaunchAtLogin: () => ipcRenderer.invoke("omnicloud:get-login-item"),
@@ -50,6 +57,9 @@ export type OmniCloudDesktop = {
   desktopUpload: {
     onPaths: (listener: (paths: string[]) => void) => () => void;
     read: (path: string) => Promise<{ name: string; data: ArrayBuffer } | null>;
+    queue: () => Promise<unknown[]>;
+    cancel: (id: string) => Promise<void>;
+    onQueueChange: (listener: (jobs: unknown[]) => void) => () => void;
   };
   desktopSettings: {
     getLaunchAtLogin: () => Promise<boolean>;
