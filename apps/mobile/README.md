@@ -26,6 +26,24 @@ needs the bridge.
 `https://cloud.example.com`. A multi-server build (first-run server picker)
 needs cookie/CORS work and is a later phase.
 
+## Building the Android APK locally
+
+Capacitor 7 / Gradle 8.11 rejects newer JDKs. Use JDK 21 and the Android SDK
+(command-line tools are enough):
+
+```bash
+export JAVA_HOME=$HOME/android-sdk/jdk21
+export ANDROID_HOME=$HOME/android-sdk
+echo "sdk.dir=$ANDROID_HOME" > apps/mobile/android/local.properties
+
+MOBILE_SERVER_URL=https://cloud.example.com pnpm --filter @hilbras/omnicloud-mobile sync:android
+cd apps/mobile/android && ./gradlew assembleDebug
+```
+
+The APK is at `app/build/outputs/apk/debug/app-debug.apk`; install it with
+`adb install -r <apk>`. Debug builds need no keystore. Release builds need a
+keystore and the `MOBILE_SERVER_URL` of your instance.
+
 ## Phases
 
 1. **Scaffold** — `apps/mobile` package, Capacitor config, Android + iOS
