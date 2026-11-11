@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { MenuItem } from "./ItemMenu";
 
 export interface ContextMenuState {
@@ -46,16 +47,28 @@ export function ContextMenu({ menu, onClose }: ContextMenuProps) {
   }, [menu, onClose]);
 
   const shift = reduceMotion ? 0 : -4;
-  const width = 224;
-  const style =
-    menu === null
-      ? undefined
-      : {
-          left: Math.min(menu.x, Math.max(0, window.innerWidth - width - 8)),
-          top: Math.min(menu.y, Math.max(0, window.innerHeight - 240)),
-        };
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
-  return (
+  // Measure the real menu: action lists grew well past the old 240px guess, and
+  // clamping to a guessed height still pushed the bottom off-screen.
+  useLayoutEffect(() => {
+    if (menu === null) {
+      setPosition(null);
+      return;
+    }
+    const element = menuRef.current;
+    const width = element?.offsetWidth ?? 224;
+    const height = element?.offsetHeight ?? 260;
+    const margin = 8;
+    setPosition({
+      left: Math.max(margin, Math.min(menu.x, window.innerWidth - width - margin)),
+      top: Math.max(margin, Math.min(menu.y, window.innerHeight - height - margin)),
+    });
+  }, [menu]);
+
+  const style = menu === null ? undefined : (position ?? { left: menu.x, top: menu.y });
+
+  return createPortal(
     <AnimatePresence>
       {menu !== null ? (
         <motion.div
@@ -87,6 +100,7 @@ export function ContextMenu({ menu, onClose }: ContextMenuProps) {
           ))}
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
