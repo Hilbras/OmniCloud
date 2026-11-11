@@ -611,7 +611,7 @@ CLI looks for `server/index.js` before it starts anything.
 1. Reinstall the package:
 
    ```bash
-   npm install @hilbras/omnicloud@0.5.0
+   npm install @hilbras/omnicloud@0.6.0
    ```
 
 2. Confirm the bundle is there:

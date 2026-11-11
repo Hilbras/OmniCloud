@@ -269,7 +269,7 @@ curl -sS https://omnicloud.example.com/api/health
   "database": "healthy",
   "storage": "unknown",
   "uptimeSeconds": 3600,
-  "version": "0.5.0"
+  "version": "0.6.0"
 }
 ```
 
@@ -2889,7 +2889,7 @@ curl -sS https://omnicloud.example.com/api/update/check
 ```json
 {
   "status": "update_available",
-  "currentVersion": "0.5.0",
+  "currentVersion": "0.6.0",
   "latestVersion": "0.4.1",
   "packageName": "@hilbras/omnicloud",
   "checkedAt": "2026-08-01T09:00:00.000Z",

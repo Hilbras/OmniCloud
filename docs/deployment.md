@@ -221,7 +221,7 @@ WORKDIR /app
 
 # Pin the version so an upgrade is a deliberate change.
 RUN npm init -y \
-  && npm install --omit=dev @hilbras/omnicloud@0.5.0 \
+  && npm install --omit=dev @hilbras/omnicloud@0.6.0 \
   && chown -R node:node /app
 
 ENV NODE_ENV=production \
@@ -328,7 +328,7 @@ Points worth getting right:
   in the working directory. Use one, not both, or make sure they agree.
 - **Keep the file readable only by the service user.** It holds
   `OMNICLOUD_ENCRYPTION_KEY` and the Telegram credentials.
-- **Pin the version** (`npm install @hilbras/omnicloud@0.5.0`) so upgrades
+- **Pin the version** (`npm install @hilbras/omnicloud@0.6.0`) so upgrades
   happen deliberately.
 
 Check the unit and follow the logs:
@@ -692,7 +692,7 @@ To update an installation:
 
 ```bash
 cd /srv/omnicloud-app
-npm install @hilbras/omnicloud@0.5.0   # pin the version you want
+npm install @hilbras/omnicloud@0.6.0   # pin the version you want
 systemctl restart omnicloud            # or: docker compose up -d --force-recreate omnicloud
 ```
 
@@ -770,7 +770,7 @@ Telegram yet and sign-in must keep working.
   "database": "healthy",
   "storage": "unknown",
   "uptimeSeconds": 3600,
-  "version": "0.5.0"
+  "version": "0.6.0"
 }
 ```
 

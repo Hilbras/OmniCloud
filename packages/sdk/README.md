@@ -53,6 +53,20 @@ docker run -d --name omnicloud-postgres -p 127.0.0.1:5432:5432 \
 
 On a server without a desktop, use `npx omnicloud start --no-open`.
 
+### Deployment modes
+
+- **Telegram storage (default).** `STORAGE_PROVIDER=telegram`; file bytes live in
+  a private channel, PostgreSQL holds the index.
+- **Local disk.** `STORAGE_PROVIDER=local` + `LOCAL_STORAGE_DIR` stores objects
+  on the server; Telegram credentials become optional when auth is local too.
+- **Local sign-in.** `AUTH_MODE=local` with `LOCAL_AUTH_EMAIL` and
+  `LOCAL_AUTH_PASSWORD` runs a single-account instance without Telegram login.
+- **WebDAV.** `WEBDAV_ENABLED=true` (and `WEBDAV_WRITE=true` for uploads) exposes
+  the drive to rclone and other DAV clients on a second port.
+
+Details and the full environment table:
+[deployment](https://github.com/Hilbras/OmniCloud/blob/main/docs/deployment.md).
+
 ---
 
 ## Use the SDK
@@ -89,6 +103,21 @@ npx omnicloud versions <fileId> --restore <versionId>
 
 Secrets are read from muted interactive prompts only. They are never accepted as
 arguments, never written to the environment, and never printed.
+
+---
+
+## Browser entry
+
+Browsers import a separate entry that has no static `node:` imports and no
+server-only Telegram code:
+
+```ts
+import { OmniCloudClient, uploadEncrypted } from "@hilbras/omnicloud/browser";
+```
+
+It ships the client, the in-memory OCE1 helpers, the crypto primitives and the
+shared DTOs. The CLI, the spool helpers and the Telegram provider stay on the
+package root.
 
 ---
 

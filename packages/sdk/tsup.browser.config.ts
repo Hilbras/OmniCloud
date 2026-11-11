@@ -27,5 +27,5 @@ export default defineConfig({
     "node:stream",
     "node:stream/promises",
   ],
-  dts: { resolve: true },
+  // Declarations are bundled by scripts/build-dts.mjs; the tsup worker OOMs.
 });

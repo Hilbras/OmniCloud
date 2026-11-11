@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-11
+
+**Folder sharing, multi-storage, local mode, offline app and the mobile shells.**
+
+### Added
+
+- **Folder share links.** A share targets a file or a folder; the public page
+  lists the active subtree and only allows downloads from inside it. Encrypted
+  files are listed as locked until per-file key transfer lands.
+- **Multi-storage channels.** Create extra private channels, target them per
+  folder, and migrate a file's objects between channels with copy → verify →
+  transactional repoint → cleanup.
+- **Local storage mode.** `STORAGE_PROVIDER=local` stores objects in a directory
+  with metadata sidecars; `AUTH_MODE=local` adds a single-account sign-in.
+- **Installable PWA.** Manifest, maskable icons, service-worker app shell,
+  offline page and an install card.
+- **Desktop background uploads.** The Electron main process persists a queue,
+  uploads with the session cookie, retries with backoff, resumes after relaunch
+  and notifies on completion.
+- **iOS/Android shells.** Capacitor projects bundle the web build, ask for the
+  server on first launch, and use bearer session tokens for API calls.
+- **Key-rotation groundwork.** `rotateVersionKeys` and
+  `POST /api/files/:id/rotate` re-wrap metadata under a new epoch with guards.
+- API token scopes (`full`, `upload`, `webdav`), duplicate-content reports,
+  quota alerts, folder usage, and storage-channel management.
+- WebDAV write methods (PUT, MKCOL, MOVE, COPY, overwrite rules).
+
+### Changed
+
+- Landing and download pages sell the product and the download first; sign-in
+  is secondary.
+- README rewritten around architecture, clients, costs and verification.
+- Session bearers are accepted in addition to cookies for native shells.
+
+### Fixed
+
+- Context menus and item menus are portaled and clamped to the viewport.
+- Tall dialogs scroll inside the viewport; share links wrap.
+- Collapsible sidebar with a persisted state and hover-to-expand logo.
+- macOS/Windows desktop builds no longer fail on empty signing variables.
+
+### Known limits
+
+- Client-side encryption and key rotation remain unreviewed; rotation UI and
+  team spaces wait for an independent review.
+- Mobile store builds need signing accounts; iOS needs macOS/Xcode.
+
 ## [0.5.0] - 2026-10-21
 
 **A documentation rewrite, a package README, and a configuration fix found

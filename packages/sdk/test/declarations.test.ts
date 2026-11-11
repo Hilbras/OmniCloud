@@ -17,20 +17,21 @@ function readClassBody(source: string, className: string): string {
   return end === -1 ? source.slice(start) : source.slice(start, end);
 }
 
-/** The names the built declarations export, read from its export block. */
+/** The names the built declarations export, from every export block. */
 function readDeclaredNames(source: string): Set<string> {
-  const block = /export \{([^}]*)\};?\s*$/.exec(source);
-  if (block === null) return new Set();
-  return new Set(
-    block[1]!
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry !== "")
-      // Drop the "type " prefix and any renaming: "ERROR_CODES$1 as ERROR_CODES".
-      .map((entry) => entry.replace(/^type\s+/, ""))
-      .map((entry) => entry.split(/\s+as\s+/).pop()!)
-      .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name)),
-  );
+  const names = new Set<string>();
+  // Bundlers may emit values and types in separate blocks, in either order.
+  for (const block of source.matchAll(/export (?:type )?\{([^}]*)\}/g)) {
+    for (const entry of block[1]!.split(",")) {
+      const name = entry
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)
+        .pop();
+      if (name !== undefined && /^[A-Za-z_$][\w$]*$/.test(name)) names.add(name);
+    }
+  }
+  return names;
 }
 
 // Locally the declarations may not be built yet, so the check is skipped. In CI it
