@@ -153,8 +153,9 @@ export function TelegramQrLogin({
             Connect with Telegram
           </h2>
           <p className="muted mt-1 text-sm">
-            Send the login request to the Telegram app installed on this device. Approve it there
-            and you are in — no camera required.
+            Opens the login request (<code className="text-[11px]">tg://login?token=…</code>) in the
+            Telegram app on this device. Telegram documents this link for its QR login flow, so some
+            clients may only accept it by scanning the code.
           </p>
         </div>
 
@@ -189,8 +190,18 @@ export function TelegramQrLogin({
                 Open Telegram
               </a>
               <p className="muted text-xs">
-                Approve the “OmniCloud” login in Telegram, then come back to this tab.
+                Approve the login in Telegram, then return to this tab. Nothing is sent until you
+                confirm inside Telegram.
               </p>
+              {onUseQr !== undefined ? (
+                <button
+                  type="button"
+                  className="btn-secondary w-full justify-center text-xs"
+                  onClick={onUseQr}
+                >
+                  Scan the QR code instead
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -205,14 +216,8 @@ export function TelegramQrLogin({
         ) : null}
 
         <p className="muted text-xs">
-          Telegram not installed on this device?{" "}
-          {onUseQr !== undefined ? (
-            <button type="button" className="font-semibold underline" onClick={onUseQr}>
-              Scan the QR code instead
-            </button>
-          ) : (
-            "Use the QR code instead."
-          )}
+          If the button does nothing, Telegram is not installed or does not handle the link on this
+          device — use the QR code tab instead.
         </p>
       </section>
     );

@@ -107,6 +107,18 @@ token. The token itself was issued by Telegram; only the rendering failed.
 3. If the form also fails, see
    ["Could not start Telegram sign-in"](#could-not-start-telegram-sign-in--could-not-start-telegram-qr-sign-in).
 
+### "Open Telegram" does nothing
+
+**Cause.** The login page hands `tg://login?token=…` to the operating system. If
+Telegram is not installed, or the installed client does not register a handler
+for that link, the browser stays on the page and nothing happens. Telegram
+documents the link as part of the QR login flow, not as a guaranteed
+same-device sign-in API.
+
+**Fix.** Use the **QR code** tab: open Telegram → Settings → Devices → Link
+Desktop Device and scan the code. The phone-number tab is the other documented
+path.
+
 ### "This Telegram QR sign-in has ended. Start again." / "The QR sign-in expired. Start again."
 
 **Cause.** The QR flow is gone from the server's memory. Flows live for five
