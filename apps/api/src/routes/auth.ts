@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { ForbiddenError, UnauthorizedError, ValidationError } from "@omnicloud/core";
 import { SESSION_COOKIE } from "@omnicloud/shared";
 import type { Container } from "../container";
-import { currentUser, currentUserWithToken, issueSessionCookie } from "../auth";
+import { currentUser, currentUserWithToken, issueSessionCookie, wantsSessionToken } from "../auth";
 import { isAllowedOrigin } from "../http";
 import { createRateLimiter } from "../rate-limit";
 import { parseRecoveryBlob, requireBody, requireString } from "../validation";
@@ -62,14 +62,18 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
       lastName: null,
       phone: null,
     });
-    await issueSessionCookie(
+    const sessionToken = await issueSessionCookie(
       container.authSessions,
       request,
       reply,
       user.id,
       container.config.cookieSecure,
     );
-    return reply.send({ status: "ok", user: toUserDTO(user) });
+    return reply.send({
+      status: "ok",
+      user: toUserDTO(user),
+      ...(wantsSessionToken(request) ? { sessionToken } : {}),
+    });
   });
 
   // ── Start: send the Telegram confirmation code ───────────────────────────
@@ -100,14 +104,18 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
       return reply.send(response);
     }
 
-    await issueSessionCookie(
+    const sessionToken = await issueSessionCookie(
       container.authSessions,
       request,
       reply,
       result.user.id,
       container.config.cookieSecure,
     );
-    const response: TelegramVerifyResponse = { status: "ok", user: toUserDTO(result.user) };
+    const response: TelegramVerifyResponse = {
+      status: "ok",
+      user: toUserDTO(result.user),
+      ...(wantsSessionToken(request) ? { sessionToken } : {}),
+    };
     return reply.send(response);
   });
 
@@ -127,14 +135,18 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
       throw new ValidationError("Sign-in incomplete");
     }
 
-    await issueSessionCookie(
+    const sessionToken = await issueSessionCookie(
       container.authSessions,
       request,
       reply,
       result.user.id,
       container.config.cookieSecure,
     );
-    return reply.send({ status: "ok", user: toUserDTO(result.user) });
+    return reply.send({
+      status: "ok",
+      user: toUserDTO(result.user),
+      ...(wantsSessionToken(request) ? { sessionToken } : {}),
+    });
   });
 
   // ── QR sign-in: the phone approves a token shown as a QR code ────────────
@@ -162,14 +174,18 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
     const flowId = requireString(body, "flowId");
     const result = await container.connection.pollQrLogin(flowId);
     if (result.status === "approved") {
-      await issueSessionCookie(
+      const sessionToken = await issueSessionCookie(
         container.authSessions,
         request,
         reply,
         result.user.id,
         container.config.cookieSecure,
       );
-      return reply.send({ status: "ok", user: toUserDTO(result.user) });
+      return reply.send({
+        status: "ok",
+        user: toUserDTO(result.user),
+        ...(wantsSessionToken(request) ? { sessionToken } : {}),
+      });
     }
     return reply.send(result);
   });
@@ -180,22 +196,32 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
     const flowId = requireString(body, "flowId");
     const password = requireString(body, "password");
     const result = await container.connection.submitQrPassword(flowId, password);
-    await issueSessionCookie(
+    const sessionToken = await issueSessionCookie(
       container.authSessions,
       request,
       reply,
       result.user.id,
       container.config.cookieSecure,
     );
-    return reply.send({ status: "ok", user: toUserDTO(result.user) });
+    return reply.send({
+      status: "ok",
+      user: toUserDTO(result.user),
+      ...(wantsSessionToken(request) ? { sessionToken } : {}),
+    });
   });
 
   // ── Current session (public: returns nulls when signed out) ──────────────
   app.get("/api/auth/me", async (request) => {
-    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "")?.[1];
+    const bearerSession =
+      bearer === undefined ? null : await container.authSessions.resolve(bearer);
+    const user = bearerSession
+      ? await container.repos.users.findById(bearerSession.userId)
+      : await currentUser(container.repos, container.authSessions, request.cookies);
     if (!user) return { user: null, storage: null, health: null };
 
-    const storage = await container.repos.storages.findByUserAndProvider(user.id, "telegram");
+    const provider = container.config.storageProvider === "local" ? "local" : "telegram";
+    const storage = await container.repos.storages.findByUserAndProvider(user.id, provider);
     if (!storage) return { user: toUserDTO(user), storage: null, health: null };
 
     // A light status read (no Telegram round-trip) keeps /me fast.
@@ -204,7 +230,7 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
       user: toUserDTO(user),
       storage: toStorageDTO(storage),
       health: toStorageHealthDTO({
-        provider: "telegram",
+        provider,
         state: status.state,
         healthy: status.healthy,
         latencyMs: status.latencyMs,
@@ -265,7 +291,12 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
 
   // ── Sign out everywhere: revokes every browser session for this account ──
   app.post("/api/auth/logout-all", async (request, reply) => {
-    const user = await currentUser(container.repos, container.authSessions, request.cookies);
+    const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "")?.[1];
+    const session =
+      bearer === undefined
+        ? await container.authSessions.resolve(request.cookies[SESSION_COOKIE])
+        : await container.authSessions.resolve(bearer);
+    const user = session ? await container.repos.users.findById(session.userId) : null;
     if (!user)
       return reply.status(401).send({ error: { code: "AUTH_REQUIRED", message: "Sign in first" } });
     const revoked = await container.authSessions.revokeAll(user.id);
@@ -275,8 +306,11 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
 
   // ── Logout ────────────────────────────────────────────────────────────────
   app.post("/api/auth/logout", async (request, reply) => {
-    const user = await currentUser(container.repos, container.authSessions, request.cookies);
-    await container.authSessions.revoke(request.cookies[SESSION_COOKIE]);
+    const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "")?.[1];
+    const rawToken = bearer ?? request.cookies[SESSION_COOKIE];
+    const session = await container.authSessions.resolve(rawToken);
+    const user = session ? await container.repos.users.findById(session.userId) : null;
+    await container.authSessions.revoke(rawToken);
     if (user) await container.storageHealth.disconnect(user.id);
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
     return { ok: true };

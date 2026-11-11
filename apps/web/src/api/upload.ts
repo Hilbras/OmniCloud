@@ -9,6 +9,13 @@ import { encryptFormatPref, getUrk, isEncryptUploadsEnabled } from "../lib/crypt
 import { isFileDTO } from "../lib/dto";
 import { bytesToBase64, toArrayBuffer } from "../lib/bytes";
 import {
+  apiUrl,
+  isNativeRuntime,
+  nativeAuthHeaders,
+  nativeClientHeaders,
+  setNativeSessionToken,
+} from "../lib/api-base";
+import {
   ApiError,
   apiErrorFromText,
   ERROR_CODES,
@@ -218,9 +225,10 @@ async function fetchUpload(
   const formData = buildFormData(body, folderId, options);
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetch(apiUrl(url), {
       method: "POST",
-      credentials: "same-origin",
+      credentials: isNativeRuntime() ? "omit" : "same-origin",
+      headers: { ...nativeClientHeaders(), ...nativeAuthHeaders() },
       body: formData,
       signal: options.signal,
     });
@@ -244,6 +252,8 @@ async function fetchUpload(
     total: body.part.size,
     percent: 100,
   });
+  const data = JSON.parse(text) as { sessionToken?: unknown };
+  if (typeof data.sessionToken === "string") setNativeSessionToken(data.sessionToken);
   return parseFileResponse(response.status, text);
 }
 
@@ -260,7 +270,10 @@ function xhrUpload(
   }
   return new Promise<FileDTO>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
+    xhr.open("POST", apiUrl(url));
+    xhr.withCredentials = !isNativeRuntime();
+    const headers = { ...nativeClientHeaders(), ...nativeAuthHeaders() };
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
 
     const formData = buildFormData(body, folderId, options);
 

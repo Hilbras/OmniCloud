@@ -6,6 +6,8 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { onUnauthorized } from "./api/client";
 import DriveLayout from "./components/DriveLayout";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { NativeServerSetup } from "./components/NativeServerSetup";
+import { getServerUrl, isNativeRuntime } from "./lib/api-base";
 import { useMe } from "./hooks/useMe";
 import { ME_QUERY_KEY, SIGNED_OUT_SESSION } from "./lib/queries";
 import { clear as clearCryptoSession } from "./lib/crypto-session";
@@ -85,6 +87,10 @@ export default function App() {
       }),
     [queryClient],
   );
+
+  if (isNativeRuntime() && getServerUrl() === null) {
+    return <NativeServerSetup />;
+  }
 
   return (
     <>

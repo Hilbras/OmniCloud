@@ -1,30 +1,33 @@
-# Mobile apps — plan
+# OmniCloud mobile apps
 
-iOS and Android apps that reuse the existing web drive instead of a second
-client implementation.
+Standalone iOS and Android apps built with Capacitor. The UI is bundled inside
+the app — nothing is loaded from a website — and the first screen asks for the
+OmniCloud server to use.
 
-## Decision: Capacitor shell
+## How it works
 
-- **Capacitor 7** wraps the built web app; the native projects live in
-  `apps/mobile/android` and `apps/mobile/ios`.
-- The app is configured for **one OmniCloud server at build time**
-  (`MOBILE_SERVER_URL`). The WebView loads that origin, so API calls stay
-  same-origin: session cookies, `<video>` range requests, share pages and WebDAV
-  links all behave exactly as in the browser. No CORS or token changes.
-- Bundled `apps/web/dist` is the offline shell fallback.
-- Native plugins: App (deep links, Android back), Browser (external links),
-  StatusBar, SplashScreen, Keyboard, Share, Filesystem, Haptics.
+- `apps/web` is built and copied into `android/` and `ios/` by `cap sync`.
+- The WebView always runs the bundled assets (`capacitor://localhost` on
+  Android, `capacitor://localhost`/`https://localhost` on iOS).
+- First launch shows **Connect to your server**; the origin is stored locally
+  and every API call is made absolute against it.
+- Native shells exchange the login cookie for a bearer session token
+  (`x-omnicloud-client: native` header) because third-party cookies are not
+  reliable in WebViews. The token is stored in local storage and sent as
+  `Authorization: Bearer`.
+- Cookies remain the mechanism on the normal website.
+- Native extras: Android back button, external links in the system browser,
+  deep links `omnicloud://`, brand icon/splash.
 
-Why not a rewrite: the drive already runs on mobile browsers; a second client
-would duplicate sync, crypto, upload and offline logic. Why not remote-only:
-App Review rejects a pure website wrapper, and offline/back/share integration
-needs the bridge.
+## Commands
 
-## Runtime configuration
-
-`MOBILE_SERVER_URL` is required when building the native project, e.g.
-`https://cloud.example.com`. A multi-server build (first-run server picker)
-needs cookie/CORS work and is a later phase.
+```bash
+pnpm --filter @hilbras/omnicloud-mobile sync        # build web + copy into both
+pnpm --filter @hilbras/omnicloud-mobile sync:android
+pnpm --filter @hilbras/omnicloud-mobile sync:ios
+pnpm --filter @hilbras/omnicloud-mobile open:android
+pnpm --filter @hilbras/omnicloud-mobile open:ios
+```
 
 ## Building the Android APK locally
 
@@ -36,42 +39,40 @@ export JAVA_HOME=$HOME/android-sdk/jdk21
 export ANDROID_HOME=$HOME/android-sdk
 echo "sdk.dir=$ANDROID_HOME" > apps/mobile/android/local.properties
 
-MOBILE_SERVER_URL=https://cloud.example.com pnpm --filter @hilbras/omnicloud-mobile sync:android
+pnpm --filter @hilbras/omnicloud-mobile sync:android
 cd apps/mobile/android && ./gradlew assembleDebug
 ```
 
 The APK is at `app/build/outputs/apk/debug/app-debug.apk`; install it with
-`adb install -r <apk>`. Debug builds need no keystore. Release builds need a
-keystore and the `MOBILE_SERVER_URL` of your instance.
+`adb install -r <apk>`. Debug builds need no keystore.
 
-## Phases
+## iOS
 
-1. **Scaffold** — `apps/mobile` package, Capacitor config, Android + iOS
-   projects, scripts, README.
-2. **Native shell** — splash/status bar/theme, safe-area handling, Android back,
-   external links in the system browser, download/share of files.
-3. **Deep links** — `omnicloud://file/<id>` and `/drive` open the app; share
-   links open in the in-app browser.
-4. **Builds** — GitHub Actions: Android on Ubuntu (SDK), iOS on macOS (Xcode);
-   unsigned artifacts for testing, signing secrets for stores.
-5. **Store readiness** — icons/screenshots, privacy declarations, account
-   deletion policy for local-mode servers.
+Requires macOS + Xcode:
 
-## Verification
+```bash
+pnpm --filter @hilbras/omnicloud-mobile sync:ios
+pnpm --filter @hilbras/omnicloud-mobile open:ios
+```
 
-- Web build must stay green (`pnpm typecheck/lint/test`).
-- `pnpm --filter @hilbras/omnicloud-mobile sync` copies the web build and
-  refreshes native projects.
-- Android: `./gradlew assembleDebug` + install on a device/emulator.
-- iOS: `xcodebuild` on macOS + simulator run.
-- Manual matrix: sign-in (QR, app, phone, local), upload/download, offline
-  shell, back button, share sheet, deep link.
+CI builds an unsigned simulator app on `macos-latest`; a device/TestFlight build
+needs an Apple Developer account and signing.
 
-## External blockers
+## Server requirements
 
-- **iOS build/signing** needs macOS + Xcode and an Apple Developer account.
-- **Android signing** needs a keystore; debug builds run without it.
-- **Store submission** needs developer accounts; the build still produces
-  installable artifacts.
-- This Linux environment has no Android SDK or Xcode, so native compilation
-  cannot be verified here — CI/device steps are documented instead.
+- HTTPS is recommended. Cleartext HTTP is allowed for LAN testing
+  (`usesCleartextTraffic` on Android, ATS exception on iOS).
+- The API accepts Capacitor origins (`capacitor://localhost`,
+  `https://localhost`) for CORS and CSRF; bearer session tokens carry auth, not
+  cookies.
+- The server version must include the native-session changes in
+  `apps/api/src/auth.ts` (`x-omnicloud-client: native`).
+
+## Limitations
+
+- One server per install; changing it is done by clearing app data (a settings
+  action is a follow-up).
+- Store signing is external: Android keystore / Play Console, Apple Developer
+  account.
+- Native compilation cannot run in this Linux environment; use the documented
+  commands or the CI workflow.

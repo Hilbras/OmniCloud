@@ -310,6 +310,12 @@ importers:
       '@capacitor/core':
         specifier: ^7.6.10
         version: 7.6.10
+      '@capacitor/filesystem':
+        specifier: ^7.1.9
+        version: 7.1.9(@capacitor/core@7.6.10)
+      '@capacitor/share':
+        specifier: ^7.0.4
+        version: 7.0.4(@capacitor/core@7.6.10)
       '@omnicloud/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto

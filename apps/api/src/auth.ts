@@ -51,7 +51,17 @@ export function registerAuthHook(
     const bearer = bearerToken(request.headers.authorization);
     if (bearer !== undefined) {
       const token = await apiTokens.resolve(bearer);
-      if (!token) throw new UnauthorizedError();
+      if (!token) {
+        // Native session tokens use the same header; an unknown bearer is
+        // rejected rather than falling back to the cookie.
+        const session = await authSessions.resolve(bearer);
+        if (!session) throw new UnauthorizedError();
+        const owner = await repos.users.findById(session.userId);
+        if (!owner) throw new AuthInvalidError("Account no longer exists");
+        request.user = { id: owner.id };
+        request.authSessionId = session.id;
+        return;
+      }
       const owner = await repos.users.findById(token.userId);
       if (!owner) throw new AuthInvalidError("Account no longer exists");
       if (token.readOnly && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
@@ -110,7 +120,7 @@ export async function issueSessionCookie(
   reply: { setCookie(name: string, value: string, options: object): unknown },
   userId: string,
   cookieSecure: boolean,
-): Promise<void> {
+): Promise<string> {
   const { token } = await authSessions.issue(userId, {
     userAgent: request.headers["user-agent"] ?? null,
     ip: request.ip,
@@ -122,6 +132,15 @@ export async function issueSessionCookie(
     path: "/",
     maxAge: DEFAULT_SESSION_TTL_DAYS * 24 * 60 * 60,
   });
+  return token;
+}
+
+/**
+ * Native shells cannot use a SameSite cookie across origins, so they ask for
+ * the session token in the JSON body and send it as a bearer token instead.
+ */
+export function wantsSessionToken(request: FastifyRequest): boolean {
+  return request.headers["x-omnicloud-client"] === "native";
 }
 
 /** Resolves the signed-in user for the public /api/auth/me endpoint. */

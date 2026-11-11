@@ -55,12 +55,17 @@ export function applySecurityHeaders(reply: HttpReplyLike): void {
  * Origin allowlist for state-changing requests. With SameSite=Lax cookies and
  * same-origin deployments this is defense-in-depth against CSRF.
  */
+const NATIVE_ORIGINS = new Set(["capacitor://localhost", "https://localhost", "http://localhost"]);
+
 export function isAllowedOrigin(
   origin: string | undefined,
   host: string | undefined,
   allowed: string[],
 ): boolean {
   if (!origin) return true; // non-browser clients (curl, SDK) send no Origin
+  // Capacitor WebViews are app origins; bearer tokens, not cookies, are used
+  // there, so allowing them does not widen the CSRF surface.
+  if (NATIVE_ORIGINS.has(origin)) return true;
   if (allowed.length > 0) return allowed.includes(origin);
   if (!host) return false;
   try {

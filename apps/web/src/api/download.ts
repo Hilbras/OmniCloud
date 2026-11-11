@@ -8,6 +8,8 @@ import {
 import { isEncryptedFormat, type FileDTO } from "@omnicloud/shared";
 import { base64ToBytes } from "../lib/bytes";
 import { getUrk } from "../lib/crypto-session";
+import { apiUrl, isNativeRuntime, nativeAuthHeaders, nativeSessionToken } from "../lib/api-base";
+import { saveBlobOnDevice } from "../lib/native-files";
 import {
   createThumbnailCache,
   isCacheableThumbnail,
@@ -92,6 +94,12 @@ export const PREVIEW_MAX_BYTES = 64 * 1024 * 1024;
 
 /** Saves decrypted bytes via a Blob URL anchor. */
 function saveBlob(blob: Blob, name: string): void {
+  if (isNativeRuntime()) {
+    // Blob downloads do not work in the WebView; write to the app cache and
+    // open the system share sheet instead.
+    void saveBlobOnDevice(blob, name);
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -109,7 +117,11 @@ function saveBlob(blob: Blob, name: string): void {
 export async function fetchFileBytes(id: string): Promise<Uint8Array> {
   let response: Response;
   try {
-    response = await fetch(downloadPath(id), { method: "GET", credentials: "same-origin" });
+    response = await fetch(apiUrl(downloadPath(id)), {
+      method: "GET",
+      credentials: isNativeRuntime() ? "omit" : "same-origin",
+      headers: nativeAuthHeaders(),
+    });
   } catch {
     throw new ApiError(
       0,
@@ -256,7 +268,11 @@ export async function fetchDecryptedPreview(
 
   let response: Response;
   try {
-    response = await fetch(downloadPath(file.id), { method: "GET", credentials: "same-origin" });
+    response = await fetch(apiUrl(downloadPath(file.id)), {
+      method: "GET",
+      credentials: isNativeRuntime() ? "omit" : "same-origin",
+      headers: nativeAuthHeaders(),
+    });
   } catch {
     throw new ApiError(
       0,
@@ -357,6 +373,15 @@ export async function downloadFile(id: string, knownFile?: FileDTO | null): Prom
         return;
       }
     }
+    if (isNativeRuntime() && nativeSessionToken() !== null) {
+      const response = await fetch(apiUrl(downloadPath(file.id)), {
+        headers: nativeAuthHeaders(),
+      });
+      if (response.ok) {
+        saveBlob(await response.blob(), file.name);
+        return;
+      }
+    }
     api.files.download(file.id);
     return;
   }
@@ -384,7 +409,11 @@ export async function downloadFile(id: string, knownFile?: FileDTO | null): Prom
 
   let response: Response;
   try {
-    response = await fetch(downloadPath(file.id), { method: "GET", credentials: "same-origin" });
+    response = await fetch(apiUrl(downloadPath(file.id)), {
+      method: "GET",
+      credentials: isNativeRuntime() ? "omit" : "same-origin",
+      headers: nativeAuthHeaders(),
+    });
   } catch {
     throw new ApiError(
       0,

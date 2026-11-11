@@ -31,8 +31,6 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: pnpm install --frozen-lockfile
       - name: Sync web build into the Android project
-        env:
-          MOBILE_SERVER_URL: ${{ vars.MOBILE_SERVER_URL }}
         run: |
           pnpm --filter @omnicloud/web build
           pnpm --filter @hilbras/omnicloud-mobile exec cap sync android
@@ -57,8 +55,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Sync web build into the iOS project
-        env:
-          MOBILE_SERVER_URL: ${{ vars.MOBILE_SERVER_URL }}
         run: |
           pnpm --filter @omnicloud/web build
           pnpm --filter @hilbras/omnicloud-mobile exec cap sync ios

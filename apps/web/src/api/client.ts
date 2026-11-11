@@ -3,6 +3,13 @@ import { ERROR_CODES } from "@omnicloud/shared";
 // Re-exported so UI code can compare against stable server error codes
 // without a second import site.
 export { ERROR_CODES };
+import {
+  apiUrl,
+  isNativeRuntime,
+  nativeAuthHeaders,
+  nativeClientHeaders,
+  setNativeSessionToken,
+} from "../lib/api-base";
 import type {
   ActivityPageDTO,
   ApiErrorBody,
@@ -123,14 +130,17 @@ function folderPath(id: string, suffix = ""): string {
 }
 
 async function send(method: string, url: string, body?: unknown): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    ...nativeClientHeaders(),
+    ...nativeAuthHeaders(),
+  };
   if (body !== undefined) headers["content-type"] = "application/json";
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetch(apiUrl(url), {
       method,
-      credentials: "same-origin",
+      credentials: isNativeRuntime() ? "omit" : "same-origin",
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
@@ -157,7 +167,10 @@ async function send(method: string, url: string, body?: unknown): Promise<Respon
 
 async function requestJson<T>(method: string, url: string, body?: unknown): Promise<T> {
   const response = await send(method, url, body);
-  return (await response.json()) as T;
+  const data = (await response.json()) as T & { sessionToken?: unknown };
+  // Native shells exchange a cookie for a bearer token at sign-in.
+  if (typeof data.sessionToken === "string") setNativeSessionToken(data.sessionToken);
+  return data;
 }
 
 async function requestEmpty(method: string, url: string, body?: unknown): Promise<void> {
@@ -281,8 +294,10 @@ export const api = {
     submitQrPassword(flowId: string, password: string): Promise<{ status: "ok"; user: UserDTO }> {
       return requestJson("POST", "/api/auth/telegram/qr/password", { flowId, password });
     },
-    logout(): Promise<{ ok: boolean }> {
-      return requestJson("POST", "/api/auth/logout");
+    async logout(): Promise<{ ok: boolean }> {
+      const result = await requestJson<{ ok: boolean }>("POST", "/api/auth/logout");
+      setNativeSessionToken(null);
+      return result;
     },
   },
 

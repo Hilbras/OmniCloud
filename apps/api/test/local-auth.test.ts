@@ -37,10 +37,12 @@ describe("local single-account sign-in", () => {
     const res = await h.app.inject({
       method: "POST",
       url: "/api/auth/local",
+      headers: { "x-omnicloud-client": "native" },
       payload: { email: "owner@example.com", password: "correct horse battery" },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("ok");
+    expect(typeof res.json().sessionToken).toBe("string");
     const cookie = res.cookies.find((entry) => entry.name === "omnicloud_session");
     expect(cookie?.value).toBeTruthy();
 
@@ -51,6 +53,21 @@ describe("local single-account sign-in", () => {
     });
     expect(me.statusCode).toBe(200);
     expect(me.json().user.username).toBe("owner@example.com");
+
+    const bearerMe = await h.app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      headers: { authorization: `Bearer ${res.json().sessionToken}` },
+    });
+    expect(bearerMe.statusCode).toBe(200);
+    expect(bearerMe.json().user.username).toBe("owner@example.com");
+
+    const files = await h.app.inject({
+      method: "GET",
+      url: "/api/files",
+      headers: { authorization: `Bearer ${res.json().sessionToken}` },
+    });
+    expect(files.statusCode).toBe(200);
   });
 
   it("rejects a wrong password or email", async () => {

@@ -68,7 +68,10 @@ export async function createApp(
     // configured allowlist is echoed; every other origin gets no CORS header
     // and is still blocked by the browser.
     const origin = request.headers.origin;
-    if (origin !== undefined && container.config.allowedOrigins.includes(origin)) {
+    if (
+      origin !== undefined &&
+      isAllowedOrigin(origin, undefined, container.config.allowedOrigins)
+    ) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");
       reply.header("Vary", "Origin");
@@ -76,7 +79,7 @@ export async function createApp(
         reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
         reply.header(
           "Access-Control-Allow-Headers",
-          "content-type, authorization, idempotency-key, x-request-id",
+          "content-type, authorization, idempotency-key, x-request-id, x-omnicloud-client",
         );
         reply.header("Access-Control-Max-Age", "600");
         return reply.code(204).send();
