@@ -17,6 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { GitHubButtons } from "../components/GitHubButtons";
+import { IS_PUBLIC_SITE } from "../lib/public-site";
 import { LANGS, setLang, useLang, type Lang } from "../i18n";
 import { usePageMeta } from "../lib/seo";
 
@@ -312,6 +313,9 @@ export default function LandingPage() {
             <a href="#open-source" className="transition-colors hover:text-text">
               {t.nav.openSource}
             </a>
+            <a href="/docs" className="transition-colors hover:text-text">
+              {t.nav.docs}
+            </a>
             <a href="/download" className="transition-colors hover:text-text">
               {t.nav.download}
             </a>
@@ -598,9 +602,11 @@ export default function LandingPage() {
             >
               {t.footer.github}
             </a>
-            <a href="/login" className="transition-colors hover:text-text">
-              {t.footer.signIn}
-            </a>
+            {IS_PUBLIC_SITE ? null : (
+              <a href="/login" className="transition-colors hover:text-text">
+                {t.footer.signIn}
+              </a>
+            )}
           </nav>
           <p className="text-xs muted">{t.footer.license}</p>
         </div>

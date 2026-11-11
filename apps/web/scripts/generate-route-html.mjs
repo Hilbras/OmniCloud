@@ -21,6 +21,12 @@ const routes = [
       "Download the OmniCloud desktop app for Linux, macOS and Windows, or install the CLI and SDK from npm.",
   },
   {
+    path: "docs",
+    title: "Documentation — OmniCloud",
+    description:
+      "Setup, architecture, API, SDK, security, desktop and mobile documentation for OmniCloud.",
+  },
+  {
     path: "about",
     title: "About OmniCloud — open-source storage you control",
     description:

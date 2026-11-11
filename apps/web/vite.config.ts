@@ -50,6 +50,7 @@ Sitemap: ${siteUrl}/sitemap.xml
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[
   ["/", "weekly", "1.0"],
+  ["/docs", "weekly", "0.8"],
   ["/download", "weekly", "0.9"],
   ["/faq", "monthly", "0.7"],
   ["/about", "monthly", "0.6"],

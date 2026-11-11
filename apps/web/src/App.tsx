@@ -9,6 +9,7 @@ import { InstallPrompt } from "./components/InstallPrompt";
 import { NativeServerHint } from "./components/NativeServerHint";
 import { NativeServerSetup } from "./components/NativeServerSetup";
 import { getServerUrl, isNativeRuntime } from "./lib/api-base";
+import { IS_PUBLIC_SITE } from "./lib/public-site";
 import { useMe } from "./hooks/useMe";
 import { ME_QUERY_KEY, SIGNED_OUT_SESSION } from "./lib/queries";
 import { clear as clearCryptoSession } from "./lib/crypto-session";
@@ -19,6 +20,7 @@ import { clearOfflineFiles } from "./lib/offline-files";
 const DrivePage = lazy(() => import("./pages/DrivePage"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const DownloadPage = lazy(() => import("./pages/DownloadPage"));
+const DocsPage = lazy(() => import("./pages/DocsPage").then((m) => ({ default: m.DocsPage })));
 const AboutPage = lazy(() => import("./pages/InfoPages").then((m) => ({ default: m.AboutPage })));
 const PrivacyPage = lazy(() =>
   import("./pages/InfoPages").then((m) => ({ default: m.PrivacyPage })),
@@ -97,39 +99,50 @@ export default function App() {
     <>
       <Suspense fallback={<FullPageSpinner />}>
         <Routes>
-          <Route path="/setup-server" element={<NativeServerSetup />} />
           <Route path="/" element={<LandingPage />} />
           <Route path="/download" element={<DownloadPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/faq" element={<FaqPage />} />
+          <Route path="/docs" element={<DocsPage />} />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/s/:token" element={<ShareRoute />} />
-          <Route
-            path="/pair/:id"
-            element={
-              <RequireAuth>
-                <PairRoute />
-              </RequireAuth>
-            }
-          />
-          <Route
-            element={
-              <RequireAuth>
-                <DriveLayout />
-              </RequireAuth>
-            }
-          >
-            <Route path="/drive" element={<DrivePage />} />
-            <Route path="/recent" element={<RecentPage />} />
-            <Route path="/starred" element={<StarredPage />} />
-            <Route path="/trash" element={<TrashPage />} />
-            <Route path="/storage" element={<StoragePage />} />
-            <Route path="/settings/tokens" element={<TokensPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {IS_PUBLIC_SITE ? (
+            <>
+              {/* Marketing deployment: no drive, no login. */}
+              <Route path="/login" element={<Navigate to="/download" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          ) : (
+            <>
+              <Route path="/setup-server" element={<NativeServerSetup />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/s/:token" element={<ShareRoute />} />
+              <Route
+                path="/pair/:id"
+                element={
+                  <RequireAuth>
+                    <PairRoute />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                element={
+                  <RequireAuth>
+                    <DriveLayout />
+                  </RequireAuth>
+                }
+              >
+                <Route path="/drive" element={<DrivePage />} />
+                <Route path="/recent" element={<RecentPage />} />
+                <Route path="/starred" element={<StarredPage />} />
+                <Route path="/trash" element={<TrashPage />} />
+                <Route path="/storage" element={<StoragePage />} />
+                <Route path="/settings/tokens" element={<TokensPage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          )}
         </Routes>
       </Suspense>
       <InstallPrompt />

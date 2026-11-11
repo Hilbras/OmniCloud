@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LANGS, setLang, useLang, type Lang } from "../i18n";
+import { IS_PUBLIC_SITE } from "../lib/public-site";
 
 export function SiteBrand({ href = "/" }: { href?: string }) {
   return (
@@ -68,12 +69,14 @@ export function SiteHeader({ active = null }: { active?: ActiveNav }) {
             ))}
           </select>
           <ThemeToggle />
-          <a
-            href="/login"
-            className="hidden rounded-xl border border-line bg-surface/70 px-3.5 py-2 text-sm font-medium hover:bg-surface sm:block"
-          >
-            {t.nav.signIn}
-          </a>
+          {IS_PUBLIC_SITE ? null : (
+            <a
+              href="/login"
+              className="hidden rounded-xl border border-line bg-surface/70 px-3.5 py-2 text-sm font-medium hover:bg-surface sm:block"
+            >
+              {t.nav.signIn}
+            </a>
+          )}
           <a href="/download" className="btn-gold px-3.5 py-2 text-sm">
             {t.nav.getApp}
             <ArrowRight className="h-3.5 w-3.5 rtl:-scale-x-100" aria-hidden="true" />
@@ -109,9 +112,11 @@ export function SiteFooter() {
           >
             {t.footer.github}
           </a>
-          <a href="/login" className="transition-colors hover:text-text">
-            {t.footer.signIn}
-          </a>
+          {IS_PUBLIC_SITE ? null : (
+            <a href="/login" className="transition-colors hover:text-text">
+              {t.footer.signIn}
+            </a>
+          )}
         </nav>
         <p className="text-xs muted">{t.footer.license}</p>
       </div>
