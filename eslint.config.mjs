@@ -9,6 +9,8 @@ export default tseslint.config(
       "**/dist/**",
       "apps/desktop/out/**",
       "apps/desktop/release/**",
+      "apps/mobile/android/**",
+      "apps/mobile/ios/**",
       "packages/sdk/server/**",
       "**/node_modules/**",
       "**/coverage/**",

@@ -5,9 +5,11 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ToastProvider } from "./components/Toasts";
 import { initPwa } from "./lib/pwa";
+import { initNative } from "./lib/native";
 import "./index.css";
 
 initPwa();
+initNative();
 
 const queryClient = new QueryClient({
   defaultOptions: {

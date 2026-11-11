@@ -1,0 +1,75 @@
+name: Mobile Builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - "apps/web/**"
+      - ".github/workflows/mobile.yml"
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: pnpm install --frozen-lockfile
+      - name: Sync web build into the Android project
+        env:
+          MOBILE_SERVER_URL: ${{ vars.MOBILE_SERVER_URL }}
+        run: |
+          pnpm --filter @omnicloud/web build
+          pnpm --filter @hilbras/omnicloud-mobile exec cap sync android
+      - name: Assemble debug
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omnicloud-android-debug
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS simulator build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Sync web build into the iOS project
+        env:
+          MOBILE_SERVER_URL: ${{ vars.MOBILE_SERVER_URL }}
+        run: |
+          pnpm --filter @omnicloud/web build
+          pnpm --filter @hilbras/omnicloud-mobile exec cap sync ios
+      - name: Build for the simulator (no signing)
+        working-directory: apps/mobile/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

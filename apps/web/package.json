@@ -13,6 +13,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/browser": "^7.0.5",
+    "@capacitor/core": "^7.6.10",
     "@omnicloud/crypto": "workspace:*",
     "@omnicloud/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.0",

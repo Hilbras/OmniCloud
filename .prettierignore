@@ -6,3 +6,5 @@ pnpm-lock.yaml
 packages/database/prisma/migrations
 apps/desktop/out
 apps/desktop/release
+apps/mobile/android
+apps/mobile/ios
