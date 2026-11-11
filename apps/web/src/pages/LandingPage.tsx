@@ -1,24 +1,21 @@
 import {
   ArrowRight,
   Braces,
-  Check,
   CodeXml,
   Database,
   FolderTree,
   Globe,
   History,
-  Languages,
   LockKeyhole,
   Send,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { ThemeToggle } from "../components/ThemeToggle";
+import { useEffect, useState } from "react";
+import { SiteFooter, SiteHeader } from "../components/SiteShell";
 import { GitHubButtons } from "../components/GitHubButtons";
-import { IS_PUBLIC_SITE } from "../lib/public-site";
-import { LANGS, setLang, useLang, type Lang } from "../i18n";
+import { useLang } from "../i18n";
 import { usePageMeta } from "../lib/seo";
 
 const FEATURE_ICONS = [Send, FolderTree, History, LockKeyhole, Braces, ShieldCheck] as const;
@@ -27,98 +24,6 @@ const SECURITY_ICONS = [LockKeyhole, ShieldCheck, Send, Braces] as const;
 const STEP_NUMBERS = ["01", "02", "03"] as const;
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-
-function Brand({ href = "/" }: { href?: string }) {
-  return (
-    <a href={href} className="flex items-center gap-3" aria-label="OmniCloud">
-      <span className="relative h-9 w-9 shrink-0">
-        <img
-          src="/brand/logo-mark.svg"
-          alt=""
-          className="brand-mark-dark absolute inset-0 h-9 w-9"
-        />
-        <img
-          src="/brand/logo-mark-light.svg"
-          alt=""
-          className="brand-mark-light absolute inset-0 h-9 w-9"
-        />
-      </span>
-      <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">
-        Omni<span className="muted font-normal">Cloud</span>
-      </span>
-    </a>
-  );
-}
-
-function LanguageSwitcher({ label }: { label: string }) {
-  const [lang, t] = useLang();
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-        onClick={() => setOpen((value) => !value)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-surface/70 px-3 text-sm font-medium hover:bg-surface"
-      >
-        <Languages className="h-4 w-4 text-gold-text" aria-hidden="true" />
-        <span className="uppercase">{lang}</span>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            role="menu"
-            aria-label={label}
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.97 }}
-            transition={{ duration: 0.16, ease: EASE }}
-            className="absolute end-0 top-11 z-40 w-40 origin-top overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-raised)]"
-          >
-            {LANGS.map((code) => (
-              <button
-                key={code}
-                type="button"
-                role="menuitemradio"
-                aria-checked={code === lang}
-                onClick={() => {
-                  setLang(code as Lang);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center justify-between px-3.5 py-2.5 text-sm hover:bg-bg-soft"
-              >
-                <span>{t.langSwitcher[code]}</span>
-                {code === lang && (
-                  <Check className="h-3.5 w-3.5 text-gold-text" aria-hidden="true" />
-                )}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 function IntroOverlay({ onDone }: { onDone: () => void }) {
   return (
@@ -229,7 +134,6 @@ export default function LandingPage() {
   const [lang, t] = useLang();
   const reduceMotion = useReducedMotion();
   const [intro, setIntro] = useState(() => !reduceMotion);
-  const [scrolled, setScrolled] = useState(false);
   usePageMeta({ title: t.seo.title, description: t.seo.description });
 
   // Give the intro a bounded lifetime even if animation callbacks misfire.
@@ -243,13 +147,6 @@ export default function LandingPage() {
     document.documentElement.lang = lang;
     document.documentElement.dir = t.meta.dir;
   }, [lang, t.meta.dir]);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   useEffect(() => {
     if (!intro) return;
@@ -294,48 +191,7 @@ export default function LandingPage() {
         <div className="absolute top-[38%] -left-40 h-[26rem] w-[26rem] rounded-full bg-gold/5 blur-3xl" />
       </div>
 
-      <header
-        className={`sticky top-0 z-30 transition-all duration-300 ${
-          scrolled
-            ? "border-b border-line bg-bg/80 backdrop-blur-xl"
-            : "border-b border-transparent"
-        }`}
-      >
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          <Brand />
-          <nav className="hidden items-center gap-7 text-sm muted md:flex" aria-label="Primary">
-            <a href="#features" className="transition-colors hover:text-text">
-              {t.nav.features}
-            </a>
-            <a href="#security" className="transition-colors hover:text-text">
-              {t.nav.security}
-            </a>
-            <a href="#open-source" className="transition-colors hover:text-text">
-              {t.nav.openSource}
-            </a>
-            <a href="/docs" className="transition-colors hover:text-text">
-              {t.nav.docs}
-            </a>
-            <a href="/download" className="transition-colors hover:text-text">
-              {t.nav.download}
-            </a>
-          </nav>
-          <div className="flex items-center gap-2.5">
-            <LanguageSwitcher label={t.langSwitcher.label} />
-            <ThemeToggle />
-            <a
-              href="/login"
-              className="hidden rounded-xl border border-line bg-surface/70 px-3.5 py-2 text-sm font-medium hover:bg-surface sm:block"
-            >
-              {t.nav.signIn}
-            </a>
-            <a href="/download" className="btn-gold px-3.5 py-2 text-sm">
-              {t.nav.getApp}
-              <ArrowRight className="h-3.5 w-3.5 rtl:-scale-x-100" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main id="main" className="relative z-10">
         <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-5 pb-16 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-24 lg:pt-16">
@@ -571,46 +427,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-line">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 sm:flex-row sm:px-8">
-          <Brand />
-          <nav className="flex items-center gap-5 text-xs muted" aria-label="Footer">
-            <a href="#features" className="transition-colors hover:text-text">
-              {t.footer.features}
-            </a>
-            <a
-              href="https://github.com/Hilbras/OmniCloud/blob/main/SECURITY.md"
-              className="transition-colors hover:text-text"
-            >
-              {t.footer.security}
-            </a>
-            <a href="/about" className="transition-colors hover:text-text">
-              {t.nav.openSource}
-            </a>
-            <a href="/privacy" className="transition-colors hover:text-text">
-              {t.footer.privacy}
-            </a>
-            <a href="/terms" className="transition-colors hover:text-text">
-              {t.footer.terms}
-            </a>
-            <a href="/faq" className="transition-colors hover:text-text">
-              FAQ
-            </a>
-            <a
-              href="https://github.com/Hilbras/OmniCloud"
-              className="transition-colors hover:text-text"
-            >
-              {t.footer.github}
-            </a>
-            {IS_PUBLIC_SITE ? null : (
-              <a href="/login" className="transition-colors hover:text-text">
-                {t.footer.signIn}
-              </a>
-            )}
-          </nav>
-          <p className="text-xs muted">{t.footer.license}</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

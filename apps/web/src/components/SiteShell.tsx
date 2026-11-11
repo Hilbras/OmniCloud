@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LANGS, setLang, useLang, type Lang } from "../i18n";
 import { IS_PUBLIC_SITE } from "../lib/public-site";
@@ -29,8 +30,21 @@ type ActiveNav = "download" | null;
 
 export function SiteHeader({ active = null }: { active?: ActiveNav }) {
   const [lang, t] = useLang();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-xl">
+    <header
+      className={`sticky top-0 z-30 transition-all duration-300 ${
+        scrolled ? "border-b border-line bg-bg/80 backdrop-blur-xl" : "border-b border-transparent"
+      }`}
+    >
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
         <SiteBrand />
         <nav className="hidden items-center gap-7 text-sm muted md:flex" aria-label="Primary">
@@ -42,6 +56,9 @@ export function SiteHeader({ active = null }: { active?: ActiveNav }) {
           </a>
           <a href="/#open-source" className="transition-colors hover:text-text">
             {t.nav.openSource}
+          </a>
+          <a href="/docs" className="transition-colors hover:text-text">
+            {t.nav.docs}
           </a>
           <a
             href="/download"
@@ -99,6 +116,18 @@ export function SiteFooter() {
         >
           <a href="/#features" className="transition-colors hover:text-text">
             {t.footer.features}
+          </a>
+          <a
+            href="https://github.com/Hilbras/OmniCloud/blob/main/SECURITY.md"
+            className="transition-colors hover:text-text"
+          >
+            {t.footer.security}
+          </a>
+          <a href="/about" className="transition-colors hover:text-text">
+            {t.nav.openSource}
+          </a>
+          <a href="/faq" className="transition-colors hover:text-text">
+            FAQ
           </a>
           <a href="/privacy" className="transition-colors hover:text-text">
             {t.footer.privacy}
