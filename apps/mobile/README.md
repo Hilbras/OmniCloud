@@ -9,8 +9,12 @@ OmniCloud server to use.
 - `apps/web` is built and copied into `android/` and `ios/` by `cap sync`.
 - The WebView always runs the bundled assets (`capacitor://localhost` on
   Android, `capacitor://localhost`/`https://localhost` on iOS).
-- First launch shows **Connect to your server**; the origin is stored locally
-  and every API call is made absolute against it.
+- Build with `VITE_DEFAULT_SERVER=https://your-server` to skip the setup screen:
+  the app opens directly on the sign-in page, like web/desktop. Without that
+  variable, first launch shows **Connect to your server**; either way the
+  origin is stored locally and every API call is absolute against it.
+- A native-only footer (`Server: host · Change`) links to `/setup-server`,
+  where the address can be replaced.
 - Native shells exchange the login cookie for a bearer session token
   (`x-omnicloud-client: native` header) because third-party cookies are not
   reliable in WebViews. The token is stored in local storage and sent as
@@ -22,7 +26,8 @@ OmniCloud server to use.
 ## Commands
 
 ```bash
-pnpm --filter @hilbras/omnicloud-mobile sync        # build web + copy into both
+VITE_DEFAULT_SERVER=https://cloud.example.com \
+  pnpm --filter @hilbras/omnicloud-mobile sync      # build web + copy into both
 pnpm --filter @hilbras/omnicloud-mobile sync:android
 pnpm --filter @hilbras/omnicloud-mobile sync:ios
 pnpm --filter @hilbras/omnicloud-mobile open:android
