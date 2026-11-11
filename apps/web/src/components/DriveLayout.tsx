@@ -69,6 +69,21 @@ export default function DriveLayout() {
   const query = debouncedSearch.trim();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem("omnicloud.sidebar.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("omnicloud.sidebar.collapsed", sidebarCollapsed ? "1" : "0");
+    } catch {
+      // A blocked storage only means the choice is not remembered.
+    }
+  }, [sidebarCollapsed]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -190,13 +205,19 @@ export default function DriveLayout() {
         </a>
 
         {/* Sidebar (desktop) */}
-        <aside className="hidden w-64 shrink-0 border-r border-line bg-bg-soft/55 md:block">
+        <aside
+          className={`hidden shrink-0 overflow-hidden border-r border-line bg-bg-soft/55 transition-[width] duration-200 ease-out md:block ${
+            sidebarCollapsed ? "w-16" : "w-64"
+          }`}
+        >
           <Sidebar
             storage={storage}
             health={health}
             username={username}
             update={update}
             onCreateFolder={() => setCreateFolderOpen(true)}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
           />
         </aside>
 

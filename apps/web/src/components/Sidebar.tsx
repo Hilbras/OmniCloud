@@ -1,4 +1,12 @@
-import { Cloud, FolderPlus, HardDrive, Settings, X } from "lucide-react";
+import {
+  Cloud,
+  FolderPlus,
+  HardDrive,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  X,
+} from "lucide-react";
 import { NavLink } from "react-router-dom";
 import type { StorageHealthDTO } from "@omnicloud/shared";
 import type { StorageDTO } from "@omnicloud/shared";
@@ -16,6 +24,10 @@ interface SidebarProps {
   onCreateFolder: () => void;
   /** Rendered inside a mobile drawer; shows a close button. */
   onClose?: () => void;
+  /** Desktop icon-only mode. */
+  collapsed?: boolean;
+  /** Renders the collapse/expand control; omitted in the mobile drawer. */
+  onToggleCollapsed?: () => void;
 }
 
 function StateDot({ tone, label }: { tone: string; label: string }) {
@@ -35,13 +47,21 @@ export function Sidebar({
   update,
   onCreateFolder,
   onClose,
+  collapsed = false,
+  onToggleCollapsed,
 }: SidebarProps) {
   const state = healthVisual(health);
 
   return (
     <div className="flex h-full flex-col bg-transparent">
-      <div className="px-5 pt-5 pb-4">
-        <div className="flex items-center justify-between gap-3">
+      <div className={collapsed ? "px-3 pt-5 pb-4" : "px-5 pt-5 pb-4"}>
+        <div
+          className={
+            collapsed
+              ? "flex flex-col items-center gap-3"
+              : "flex items-center justify-between gap-3"
+          }
+        >
           <a
             href="/drive"
             className="flex items-center gap-2.5 text-sm font-semibold tracking-tight"
@@ -58,10 +78,27 @@ export function Sidebar({
                 className="brand-mark-light absolute inset-0 h-8 w-8"
               />
             </span>
-            <span>
-              Omni<span className="muted font-normal">Cloud</span>
-            </span>
+            {collapsed ? null : (
+              <span>
+                Omni<span className="muted font-normal">Cloud</span>
+              </span>
+            )}
           </a>
+          {onToggleCollapsed !== undefined ? (
+            <button
+              type="button"
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+              aria-pressed={collapsed}
+              onClick={onToggleCollapsed}
+              className="muted hidden h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-surface hover:text-gold-text md:grid"
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          ) : null}
           {onClose !== undefined ? (
             <button
               type="button"
@@ -73,7 +110,7 @@ export function Sidebar({
             </button>
           ) : null}
         </div>
-        <UpdateNotice result={update} />
+        {collapsed ? null : <UpdateNotice result={update} />}
       </div>
 
       <nav aria-label="Main" className="px-3">
@@ -87,18 +124,22 @@ export function Sidebar({
                   end={section.path === "/drive"}
                   onClick={() => onClose?.()}
                   className={({ isActive }) =>
-                    `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px]  ${
+                    `group flex items-center gap-3 rounded-xl py-2.5 text-[13px]  ${
+                      collapsed ? "justify-center px-0" : "px-3"
+                    } ${
                       isActive
                         ? "bg-gold-soft font-semibold text-gold-text"
                         : "muted hover:bg-surface hover:text-text"
                     }`
                   }
+                  title={collapsed ? section.label : undefined}
+                  aria-label={collapsed ? section.label : undefined}
                 >
                   <Icon
                     className="h-4 w-4 shrink-0  group-hover:text-gold-text"
                     aria-hidden="true"
                   />
-                  {section.label}
+                  {collapsed ? null : section.label}
                 </NavLink>
               </li>
             );
@@ -108,63 +149,87 @@ export function Sidebar({
               to="/settings/tokens"
               onClick={() => onClose?.()}
               className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px]  ${
+                `group flex items-center gap-3 rounded-xl py-2.5 text-[13px]  ${
+                  collapsed ? "justify-center px-0" : "px-3"
+                } ${
                   isActive
                     ? "bg-gold-soft font-semibold text-gold-text"
                     : "muted hover:bg-surface hover:text-text"
                 }`
               }
+              title={collapsed ? "Settings" : undefined}
+              aria-label={collapsed ? "Settings" : undefined}
             >
               <Settings
                 className="h-4 w-4 shrink-0  group-hover:text-gold-text"
                 aria-hidden="true"
               />
-              Settings
+              {collapsed ? null : "Settings"}
             </NavLink>
           </li>
         </ul>
       </nav>
 
-      <div className="px-4 pt-4">
+      <div className={collapsed ? "px-3 pt-4" : "px-4 pt-4"}>
         <button
           type="button"
           className="btn-secondary w-full justify-center"
           onClick={onCreateFolder}
+          title={collapsed ? "New folder" : undefined}
+          aria-label={collapsed ? "New folder" : undefined}
         >
           <FolderPlus className="h-4 w-4" aria-hidden="true" />
-          New folder
+          {collapsed ? null : "New folder"}
         </button>
       </div>
 
-      <div className="mt-auto p-4">
-        <div className="drive-surface p-4">
+      <div className={collapsed ? "mt-auto p-2" : "mt-auto p-4"}>
+        <div
+          className={collapsed ? "drive-surface grid place-items-center p-2" : "drive-surface p-4"}
+        >
           <div className="flex items-center gap-2.5">
             <Cloud className="h-5 w-5 shrink-0 text-gold" aria-hidden="true" />
-            <span
-              className="min-w-0 truncate text-sm font-medium"
-              title={storage?.title ?? undefined}
-            >
-              {storage?.title ?? "No storage"}
-            </span>
+            {collapsed ? null : (
+              <span
+                className="min-w-0 truncate text-sm font-medium"
+                title={storage?.title ?? undefined}
+              >
+                {storage?.title ?? "No storage"}
+              </span>
+            )}
           </div>
           <div className="mt-2">
             {health !== null ? (
-              <StateDot tone={state.tone} label={state.label} />
+              collapsed ? (
+                <span
+                  className={`mx-auto block h-2 w-2 rounded-full bg-current ${state.tone}`}
+                  title={state.label}
+                  aria-label={`Storage status: ${state.label}`}
+                />
+              ) : (
+                <StateDot tone={state.tone} label={state.label} />
+              )
             ) : (
-              <span className="muted text-[11px]">Status unknown</span>
+              <span className="muted text-[11px]">{collapsed ? "?" : "Status unknown"}</span>
             )}
           </div>
-          {state.hint !== null ? (
-            <p className={`mt-1.5 text-[11px] leading-snug ${state.tone}`}>{state.hint}</p>
-          ) : null}
-          <p className="muted mt-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide">
-            <HardDrive className="h-3 w-3" aria-hidden="true" />
-            {storage?.provider ?? "—"}
-          </p>
-          <div className="hairline mt-3" />
-          {username !== null && username !== "" ? (
-            <p className="muted mt-2.5 truncate font-mono text-[11px] select-all">@{username}</p>
-          ) : null}
+          {collapsed ? null : (
+            <>
+              {state.hint !== null ? (
+                <p className={`mt-1.5 text-[11px] leading-snug ${state.tone}`}>{state.hint}</p>
+              ) : null}
+              <p className="muted mt-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide">
+                <HardDrive className="h-3 w-3" aria-hidden="true" />
+                {storage?.provider ?? "—"}
+              </p>
+              <div className="hairline mt-3" />
+              {username !== null && username !== "" ? (
+                <p className="muted mt-2.5 truncate font-mono text-[11px] select-all">
+                  @{username}
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>
