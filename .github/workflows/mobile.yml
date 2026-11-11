@@ -62,6 +62,9 @@ jobs:
         run: |
           pnpm --filter @omnicloud/web build
           pnpm --filter @hilbras/omnicloud-mobile exec cap sync ios
+      - name: Install CocoaPods dependencies
+        working-directory: apps/mobile/ios/App
+        run: pod install
       - name: Build for the simulator (no signing)
         working-directory: apps/mobile/ios/App
         run: |
