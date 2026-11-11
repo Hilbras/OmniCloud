@@ -257,6 +257,12 @@ export const api = {
     me(): Promise<SessionInfo> {
       return requestJson("GET", "/api/auth/me");
     },
+    mode(): Promise<{ authMode: "telegram" | "local"; storageProvider: "telegram" | "local" }> {
+      return requestJson("GET", "/api/auth/mode");
+    },
+    localLogin(email: string, password: string): Promise<{ status: "ok"; user: UserDTO }> {
+      return requestJson("POST", "/api/auth/local", { email, password });
+    },
     startLogin(phone: string): Promise<{ ok: boolean }> {
       return requestJson("POST", "/api/auth/telegram/start", { phone });
     },

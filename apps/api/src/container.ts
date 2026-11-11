@@ -10,6 +10,7 @@ import {
   ShareService,
   StatsService,
   StorageEngine,
+  LocalStorageProvider,
   StorageNotInitializedError,
   TrashService,
 } from "@omnicloud/core";
@@ -82,6 +83,8 @@ export interface Container {
   config: AppConfig;
   repos: Repos;
   connection: ConnectionService;
+  /** Creates/returns the account's default storage, regardless of backend. */
+  ensureStorage(userId: string): Promise<StorageRecord>;
   storageHealth: StorageHealthService;
   files: FileService;
   folders: FolderService;
@@ -140,6 +143,9 @@ export function buildContainerFromRepos(
   const connection =
     overrides.connection ?? new TelegramConnectionService(repos, clientManager, credentials);
 
+  const localStorage =
+    config.storageProvider === "local" ? new LocalStorageProvider(config.localStorageDir) : null;
+
   const engineCache = new Map<string, Promise<StorageEngine>>();
   // A cached engine holds the client it was built with. Drop it whenever the
   // manager installs or disconnects a client, so logout/re-login/reconnect
@@ -159,6 +165,7 @@ export function buildContainerFromRepos(
       }
     }
     const promise = (async () => {
+      if (localStorage !== null) return new StorageEngine(localStorage);
       const storage =
         storageId === null
           ? await repos.storages.findByUserAndProvider(userId, TELEGRAM_PROVIDER)
@@ -186,6 +193,10 @@ export function buildContainerFromRepos(
 
   const defaultStorageHealth: StorageHealthService = {
     async health(userId, deep = false) {
+      if (localStorage !== null) {
+        const probe = await localStorage.healthCheck();
+        return { ...probe, state: probe.healthy ? "CONNECTED" : "ERROR" };
+      }
       const status = clientManager.statusForUser(userId);
       const storage = await repos.storages.findByUserAndProvider(userId, TELEGRAM_PROVIDER);
       if (!storage) {
@@ -211,10 +222,24 @@ export function buildContainerFromRepos(
 
   const activity = new ActivityService(repos.activity);
 
+  const ensureStorage = async (userId: string): Promise<StorageRecord> => {
+    if (localStorage === null) return connection.ensureStorage(userId);
+    const existing = await repos.storages.findByUserAndProvider(userId, "local");
+    if (existing) return existing;
+    return repos.storages.create({
+      userId,
+      provider: "local",
+      title: "Local storage",
+      telegramChatId: userId,
+      telegramAccessHash: "0",
+    });
+  };
+
   return {
     config,
     repos,
     connection,
+    ensureStorage,
     storageHealth: overrides.storageHealth ?? defaultStorageHealth,
     files: new FileService(
       repos.files,

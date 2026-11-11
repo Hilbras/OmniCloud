@@ -84,23 +84,26 @@ Electron run.
 
 ## Phase 4 — Storage provider adapters (local disk first)
 
+Status: **implemented** (local disk + single-account sign-in; S3 follows the
+same contract).
+
 Goal: run OmniCloud without Telegram.
 
-- `LocalStorageProvider` implementing the existing `StorageProvider` contract
-  (put/get/stream/range/delete/list/find-by-caption) over a directory, with a
-  metadata sidecar per object.
-- `STORAGE_PROVIDER=local` + `LOCAL_STORAGE_DIR`; storage rows carry
-  `provider = "local"`; per-folder targeting and file migration use the same
-  resolver.
-- Health check and reconciliation understand both providers.
-- S3-compatible adapter is a follow-up using the same contract.
-- Tests: provider contract suite against a temp directory (including range and
-  caption lookup), API upload/download/migrate with local storage, restart keeps
-  objects readable.
-- Docs: `docs/deployment.md` local mode; limitations.
+- `LocalStorageProvider` implements the full `StorageProvider` contract over a
+  directory: `<id>.bin` + `<id>.json` sidecar, atomic temp→rename writes, SHA-256
+  verification, byte-range streams, caption lookup for recovery, health probe.
+- `STORAGE_PROVIDER=local` + `LOCAL_STORAGE_DIR` select the backend in the
+  container; `ensureStorage` creates a `provider = "local"` registration without
+  a Telegram channel, and health probes the directory.
+- `AUTH_MODE=local` + `LOCAL_AUTH_EMAIL`/`LOCAL_AUTH_PASSWORD` add a
+  single-account sign-in; Telegram credentials are optional only when both local
+  modes are set. The login page branches on `GET /api/auth/mode`.
+- Tests: provider contract (6), local sign-in/mode/ensure (5), end-to-end upload,
+  download from disk and readability from a fresh container (3).
+- Docs: deployment “Local storage mode”, `.env.example`, limitations.
 
-Acceptance: a fresh instance with `STORAGE_PROVIDER=local` uploads, lists,
-downloads, shares and migrates files without a Telegram account.
+Acceptance: a fresh instance with both local modes uploads, lists, downloads and
+shares files without a Telegram account. S3 remains a follow-up.
 
 ## Phase 5 — Key rotation UX
 

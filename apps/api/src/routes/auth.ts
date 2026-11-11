@@ -1,5 +1,6 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { ForbiddenError, ValidationError } from "@omnicloud/core";
+import { ForbiddenError, UnauthorizedError, ValidationError } from "@omnicloud/core";
 import { SESSION_COOKIE } from "@omnicloud/shared";
 import type { Container } from "../container";
 import { currentUser, currentUserWithToken, issueSessionCookie } from "../auth";
@@ -23,6 +24,53 @@ export function registerAuthRoutes(app: FastifyInstance, container: Container): 
   // The status route is a read-only poll the UI repeats every few seconds, so it
   // needs its own, larger budget rather than the sign-in limiter's ten per minute.
   const statusLimiter = createRateLimiter({ windowMs: 60_000, max: 120 });
+
+  // ── Deployment mode (public: the login page branches on it) ──────────────
+  app.get("/api/auth/mode", async () => ({
+    authMode: container.config.authMode,
+    storageProvider: container.config.storageProvider,
+  }));
+
+  // ── Local single-account sign-in (AUTH_MODE=local) ───────────────────────
+  app.post("/api/auth/local", async (request, reply) => {
+    if (container.config.authMode !== "local") {
+      throw new ValidationError("Local sign-in is not enabled");
+    }
+    limiter(request.ip);
+    const body = requireBody(request);
+    const email = requireString(body, "email").trim().toLowerCase();
+    const password = requireString(body, "password");
+    const expectedEmail = container.config.localAuthEmail.trim().toLowerCase();
+    const expectedPassword = container.config.localAuthPassword;
+
+    const digest = (value: string): Buffer => createHash("sha256").update(value).digest();
+    const emailMatches = timingSafeEqual(digest(email), digest(expectedEmail));
+    const passwordMatches = timingSafeEqual(digest(password), digest(expectedPassword));
+    if (!emailMatches || !passwordMatches) {
+      throw new UnauthorizedError("Wrong email or password");
+    }
+
+    // Stable synthetic Telegram id derived from the email; the local account
+    // does not talk to Telegram, but the user row stays compatible.
+    const syntheticId = BigInt(
+      `0x8${createHash("sha256").update(email).digest("hex").slice(0, 12)}`,
+    ).toString();
+    const user = await container.repos.users.upsertFromTelegram({
+      telegramUserId: syntheticId,
+      username: email,
+      firstName: "Local",
+      lastName: null,
+      phone: null,
+    });
+    await issueSessionCookie(
+      container.authSessions,
+      request,
+      reply,
+      user.id,
+      container.config.cookieSecure,
+    );
+    return reply.send({ status: "ok", user: toUserDTO(user) });
+  });
 
   // ── Start: send the Telegram confirmation code ───────────────────────────
   app.post("/api/auth/telegram/start", async (request, reply) => {

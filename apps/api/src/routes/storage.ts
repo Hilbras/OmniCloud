@@ -48,9 +48,9 @@ export function registerStorageRoutes(app: FastifyInstance, container: Container
     return { status: database, database };
   });
 
-  // ── Ensure storage exists (creates the Telegram channel on first use) ────
+  // ── Ensure storage exists (creates the channel or local directory) ───────
   app.post("/api/storage/ensure", async (request) => {
-    const storage = await container.connection.ensureStorage(request.user.id);
+    const storage = await container.ensureStorage(request.user.id);
     return { storage: toStorageDTO(storage) };
   });
 

@@ -153,6 +153,18 @@ The security controls that _are_ in place are described in
   their stored bytes are ciphertext and reading them offline needs the root key;
   bulk “keep this folder offline” is not implemented.
 
+## Local storage backend
+
+- **Local mode is single-node and single-account.** Objects and their sidecars
+  live in one directory on the server, so backups must capture the directory and
+  PostgreSQL together. There is no replication, and S3-compatible storage is not
+  implemented yet.
+- **The local password is an environment secret.** It is compared in constant
+  time but stored in the process environment; rotate it by editing the env and
+  restarting. There is no self-service reset.
+- **Reconciliation reads the directory.** Extra files placed there by hand are
+  reported as orphans; do not use the directory for anything else.
+
 ## Consistency
 
 - **A lost Telegram response is never re-sent automatically.** A failure that

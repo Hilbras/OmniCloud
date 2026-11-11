@@ -35,6 +35,11 @@ export function testConfig(maxUploadBytes = 1024 * 1024, webDistDir?: string): A
     webDavHost: "127.0.0.1",
     webDavPort: 8551,
     webDavWriteEnabled: false,
+    storageProvider: "telegram",
+    localStorageDir: "./data/local-storage",
+    authMode: "telegram",
+    localAuthEmail: "",
+    localAuthPassword: "",
   };
 }
 
@@ -187,6 +192,7 @@ export async function createTestHarness(
   webDavEnabled = false,
   webDavWriteEnabled = false,
   webDavPort = 0,
+  configOverrides: Partial<AppConfig> = {},
 ): Promise<TestHarness> {
   const repos = createInMemoryRepos();
 
@@ -194,6 +200,7 @@ export async function createTestHarness(
   const config = {
     ...testConfig(maxUploadBytes, webDistDir),
     updateCheckEnabled: updateChecker !== null && updateChecker !== undefined,
+    ...configOverrides,
   };
   const container = buildContainerFromRepos(config, repos, {
     operationLog,

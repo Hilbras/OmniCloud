@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api, errorMessage } from "../api/client";
@@ -39,6 +39,20 @@ export default function LoginPage() {
   const [qrFlowId, setQrFlowId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [localMode, setLocalMode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.auth
+      .mode()
+      .then((mode) => {
+        if (!cancelled) setLocalMode(mode.authMode === "local");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const finishSignIn = useCallback(async (): Promise<void> => {
     try {
@@ -143,6 +157,8 @@ export default function LoginPage() {
       <span>Preparing your private storage…</span>
     </div>
   ) : null;
+
+  if (localMode) return <LocalSignIn onSignedIn={finishSignIn} />;
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-bg">
@@ -434,6 +450,93 @@ export default function LoginPage() {
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Single-account sign-in used when the server runs with AUTH_MODE=local.
+ * Credentials are configured by the operator; there is no registration flow.
+ */
+function LocalSignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  usePageMeta({
+    title: "Sign in — OmniCloud",
+    description: "Sign in to this self-hosted OmniCloud instance.",
+    noindex: true,
+    path: "/login",
+  });
+
+  const submit = async (event: React.FormEvent): Promise<void> => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.auth.localLogin(email.trim(), password);
+      await onSignedIn();
+    } catch (cause) {
+      setError(errorMessage(cause, "Wrong email or password"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid min-h-dvh place-items-center bg-bg px-4 py-10">
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-lg">
+        <div className="mb-6 flex items-center justify-between">
+          <a href="/" className="flex items-center gap-2.5" aria-label="OmniCloud home">
+            <img src="/brand/logo-mark.svg" alt="" className="brand-mark-dark h-9 w-9" />
+            <img src="/brand/logo-mark-light.svg" alt="" className="brand-mark-light h-9 w-9" />
+            <span className="text-[15px] font-semibold tracking-tight">
+              Omni<span className="muted font-normal">Cloud</span>
+            </span>
+          </a>
+          <ThemeToggle />
+        </div>
+        <h1 className="text-2xl font-semibold tracking-[-0.035em]">Sign in</h1>
+        <p className="muted mt-1.5 text-sm">
+          This instance uses a local account instead of Telegram.
+        </p>
+        <form onSubmit={submit} className="mt-6 grid gap-3" noValidate>
+          <label htmlFor="local-email" className="grid gap-1.5">
+            <span className="text-[13px] font-medium">Email</span>
+            <input
+              id="local-email"
+              type="email"
+              autoComplete="username"
+              required
+              className="rounded-lg border border-line bg-bg-soft px-3 py-2"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label htmlFor="local-password" className="grid gap-1.5">
+            <span className="text-[13px] font-medium">Password</span>
+            <input
+              id="local-password"
+              type="password"
+              autoComplete="current-password"
+              required
+              className="rounded-lg border border-line bg-bg-soft px-3 py-2"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {error !== null ? (
+            <p role="alert" className="notice notice-error">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="btn-gold mt-1" disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

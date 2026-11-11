@@ -3,6 +3,8 @@ export * from "./types";
 export * from "./repos";
 export * from "./storage/provider";
 export * from "./storage/engine";
+export * from "./storage/provider";
+export * from "./storage/local-provider";
 export * from "./services/query-resolver";
 export * from "./services/auth-session-service";
 export * from "./services/api-token-service";

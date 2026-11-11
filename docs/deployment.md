@@ -565,6 +565,34 @@ rclone config   # choose webdav, point at http://host:8551/dav/
 > Encrypted files cannot be overwritten over WebDAV because the request cannot
 > carry OCE metadata.
 
+## Local storage mode
+
+Run OmniCloud without Telegram: objects live in a directory on the server and
+sign-in uses one configured account.
+
+```bash
+STORAGE_PROVIDER=local
+LOCAL_STORAGE_DIR=/var/lib/omnicloud/storage
+AUTH_MODE=local
+LOCAL_AUTH_EMAIL=owner@example.com
+LOCAL_AUTH_PASSWORD='at least 8 characters'
+# TELEGRAM_API_ID / TELEGRAM_API_HASH are not needed in this mode.
+DATABASE_URL=postgresql://...
+OMNICLOUD_ENCRYPTION_KEY=...
+```
+
+- The directory is created with mode `0700`; each object is `<id>.bin` plus an
+  `<id>.json` sidecar (name, MIME type, size, SHA-256, caption, timestamp).
+- Writes go through a temporary file and a rename, so a crash never leaves a
+  partial object under its final name.
+- Back up the directory with the database; they must be restored together.
+- Sign-in is a single account; there is no registration or password reset. Change
+  the password by editing the environment and restarting.
+- Telegram credentials become optional only when **both** `STORAGE_PROVIDER=local`
+  and `AUTH_MODE=local` are set.
+- Local storage is the first adapter; an S3-compatible provider can reuse the
+  same `StorageProvider` contract.
+
 ## Database migrations
 
 Migrations live in `packages/database/prisma/migrations/` and are applied with

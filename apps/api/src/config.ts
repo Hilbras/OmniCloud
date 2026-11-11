@@ -31,6 +31,14 @@ export interface AppConfig {
   webDavHost: string;
   webDavPort: number;
   webDavWriteEnabled: boolean;
+  /** Storage backend: Telegram (default) or a local directory. */
+  storageProvider: "telegram" | "local";
+  /** Root directory for the local provider. */
+  localStorageDir: string;
+  /** Sign-in mode: Telegram (default) or a single local account. */
+  authMode: "telegram" | "local";
+  localAuthEmail: string;
+  localAuthPassword: string;
 }
 
 function optional(env: NodeJS.ProcessEnv, name: string, fallback: string): string {
@@ -65,9 +73,26 @@ function bool(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean 
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const storageProvider = optional(env, "STORAGE_PROVIDER", "telegram").toLowerCase();
+  if (storageProvider !== "telegram" && storageProvider !== "local") {
+    throw new Error('STORAGE_PROVIDER must be "telegram" or "local"');
+  }
+  const authMode = optional(env, "AUTH_MODE", "telegram").toLowerCase();
+  if (authMode !== "telegram" && authMode !== "local") {
+    throw new Error('AUTH_MODE must be "telegram" or "local"');
+  }
+  const localAuthEmail = optional(env, "LOCAL_AUTH_EMAIL", "");
+  const localAuthPassword = optional(env, "LOCAL_AUTH_PASSWORD", "");
+  if (authMode === "local" && (localAuthEmail === "" || localAuthPassword.length < 8)) {
+    throw new Error(
+      "LOCAL_AUTH_EMAIL and a LOCAL_AUTH_PASSWORD of at least 8 characters are required when AUTH_MODE=local",
+    );
+  }
+
   const telegramApiId = int(env, "TELEGRAM_API_ID", 0);
   const telegramApiHash = optional(env, "TELEGRAM_API_HASH", "");
-  if (telegramApiId === 0 || !telegramApiHash) {
+  const needsTelegram = storageProvider === "telegram" || authMode === "telegram";
+  if (needsTelegram && (telegramApiId === 0 || !telegramApiHash)) {
     throw new Error(
       "TELEGRAM_API_ID and TELEGRAM_API_HASH are required. Create an application at https://my.telegram.org (see .env.example).",
     );
@@ -111,5 +136,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webDavHost: optional(env, "WEBDAV_HOST", "127.0.0.1"),
     webDavPort: int(env, "WEBDAV_PORT", 8551),
     webDavWriteEnabled: bool(env, "WEBDAV_WRITE", false),
+    storageProvider,
+    localStorageDir: optional(env, "LOCAL_STORAGE_DIR", "./data/local-storage"),
+    authMode,
+    localAuthEmail,
+    localAuthPassword,
   };
 }
