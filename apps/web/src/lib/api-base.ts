@@ -3,6 +3,12 @@ import { Capacitor } from "@capacitor/core";
 const SERVER_KEY = "omnicloud.serverUrl";
 const TOKEN_KEY = "omnicloud.sessionToken";
 
+/**
+ * Optional build-time server baked into a standalone build. With it the app
+ * opens on the login page; without it the first screen asks for an address.
+ */
+const DEFAULT_SERVER = normalizeServerUrl(import.meta.env.VITE_DEFAULT_SERVER ?? "");
+
 /** True inside the Capacitor iOS/Android shell. */
 export function isNativeRuntime(): boolean {
   return Capacitor.isNativePlatform();
@@ -21,12 +27,16 @@ export function normalizeServerUrl(raw: string): string | null {
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 }
 
-export function getServerUrl(): string | null {
+export function getStoredServerUrl(): string | null {
   try {
     return normalizeServerUrl(window.localStorage.getItem(SERVER_KEY) ?? "");
   } catch {
     return null;
   }
+}
+
+export function getServerUrl(): string | null {
+  return getStoredServerUrl() ?? DEFAULT_SERVER;
 }
 
 export function setServerUrl(raw: string): string | null {

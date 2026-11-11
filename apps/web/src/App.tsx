@@ -6,6 +6,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { onUnauthorized } from "./api/client";
 import DriveLayout from "./components/DriveLayout";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { NativeServerHint } from "./components/NativeServerHint";
 import { NativeServerSetup } from "./components/NativeServerSetup";
 import { getServerUrl, isNativeRuntime } from "./lib/api-base";
 import { useMe } from "./hooks/useMe";
@@ -96,6 +97,7 @@ export default function App() {
     <>
       <Suspense fallback={<FullPageSpinner />}>
         <Routes>
+          <Route path="/setup-server" element={<NativeServerSetup />} />
           <Route path="/" element={<LandingPage />} />
           <Route path="/download" element={<DownloadPage />} />
           <Route path="/about" element={<AboutPage />} />
@@ -131,6 +133,7 @@ export default function App() {
         </Routes>
       </Suspense>
       <InstallPrompt />
+      <NativeServerHint />
     </>
   );
 }
