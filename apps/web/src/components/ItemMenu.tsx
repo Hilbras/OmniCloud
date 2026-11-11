@@ -1,7 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Ellipsis } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export interface MenuItem {
   label: string;
@@ -35,6 +36,7 @@ export function ItemMenu({
   align = "end",
 }: ItemMenuProps) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const reduceMotion = useReducedMotion();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -43,10 +45,18 @@ export function ItemMenu({
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && rootRef.current?.contains(event.target) === false) {
-        setOpen(false);
+      if (!(event.target instanceof Node)) return;
+      if (
+        menuRef.current?.contains(event.target) === true ||
+        triggerRef.current?.contains(event.target) === true
+      ) {
+        return;
       }
+      setOpen(false);
     };
+    const close = () => setOpen(false);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
@@ -58,8 +68,40 @@ export function ItemMenu({
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
     };
   }, [open]);
+
+  // Position against the viewport, not the card: an absolute menu was clipped by
+  // the scrolling list and by rows stacked below it. Flip above when the bottom
+  // would overflow.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (trigger === null || menu === null) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = menu.offsetWidth || 192;
+    const height = menu.offsetHeight || 260;
+    const margin = 8;
+    const left = Math.max(
+      margin,
+      Math.min(
+        align === "end" ? rect.right - width : rect.left,
+        window.innerWidth - width - margin,
+      ),
+    );
+    const below = rect.bottom + 6;
+    const top =
+      below + height <= window.innerHeight - margin
+        ? below
+        : Math.max(margin, rect.top - height - 6);
+    setPosition({ left, top });
+  }, [open, align, items.length]);
 
   const focusMenuItem = (index: number) => {
     const buttons = menuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']");
@@ -105,47 +147,55 @@ export function ItemMenu({
       >
         {trigger ?? <Ellipsis className="h-4 w-4" aria-hidden="true" />}
       </button>
-      <AnimatePresence>
-        {open ? (
-          <motion.div
-            ref={menuRef}
-            key="item-menu"
-            role="menu"
-            aria-label={label}
-            initial={{ opacity: 0, y: menuShift }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: menuShift }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className={`menu-panel absolute top-full z-20 mt-1.5 w-48 ${align === "end" ? "right-0" : "left-0"}`}
-          >
-            {items.map((item) => (
-              <button
-                key={item.label}
-                role="menuitem"
-                type="button"
-                disabled={item.disabled === true}
-                onClick={() => {
-                  setOpen(false);
-                  item.onSelect();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    moveFocus(event.currentTarget, 1);
-                  } else if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    moveFocus(event.currentTarget, -1);
-                  }
-                }}
-                className={`menu-item text-left ${item.danger === true ? "menu-item-danger" : ""}`}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
+          {open ? (
+            <motion.div
+              ref={menuRef}
+              key="item-menu"
+              role="menu"
+              aria-label={label}
+              initial={{ opacity: 0, y: menuShift }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: menuShift }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              style={{
+                left: position?.left ?? 0,
+                top: position?.top ?? 0,
+                visibility: position === null ? "hidden" : "visible",
+              }}
+              className="menu-panel fixed z-[120] w-48"
+            >
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  role="menuitem"
+                  type="button"
+                  disabled={item.disabled === true}
+                  onClick={() => {
+                    setOpen(false);
+                    item.onSelect();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      moveFocus(event.currentTarget, 1);
+                    } else if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      moveFocus(event.currentTarget, -1);
+                    }
+                  }}
+                  className={`menu-item text-left ${item.danger === true ? "menu-item-danger" : ""}`}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }
