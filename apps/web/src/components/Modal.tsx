@@ -96,7 +96,7 @@ export function Modal({ title, onClose, children }: ModalProps) {
             ? { duration: 0.12 }
             : { type: "spring", stiffness: 420, damping: 32, mass: 0.7 }
         }
-        className="glass-strong w-full max-w-md rounded-2xl border border-line p-6 outline-none"
+        className="glass-strong max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-line p-6 outline-none"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-[15px] font-semibold">
