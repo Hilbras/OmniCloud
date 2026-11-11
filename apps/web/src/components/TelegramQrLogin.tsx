@@ -9,13 +9,35 @@ const POLL_INTERVAL_MS = 2_000;
 interface TelegramQrLoginProps {
   onSignedIn: () => Promise<void> | void;
   onPasswordRequired: (flowId: string) => void;
+  /**
+   * "qr" shows the scannable code. "app" opens the same `tg://login` token in
+   * the Telegram app installed on this device (no camera needed).
+   */
+  mode?: "qr" | "app";
+  /** Offered in app mode when Telegram is not installed. */
+  onUseQr?: () => void;
 }
+
+function TelegramMark({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M21.94 4.31a1.5 1.5 0 0 0-1.53-.25L3.4 11.02c-.55.21-.9.73-.89 1.32.01.59.38 1.1.94 1.28l4.1 1.34 1.52 4.88c.17.54.64.92 1.2.98.57.06 1.1-.22 1.36-.72l2.02-3.83 4.6 3.38c.28.2.6.3.93.3.2 0 .4-.04.6-.12.5-.23.83-.7.88-1.24l1.81-12.8a1.5 1.5 0 0 0-.53-1.4ZM9.4 14.4l-.6 3.1-1.1-3.55 8.4-5.2-6.7 5.65Z" />
+    </svg>
+  );
+}
+
+const TELEGRAM_BLUE = "#229ED9";
 
 /**
  * Shows a QR code for the Telegram app to approve. Polls until the phone
  * approves, then hands control back to the page to finish sign-in.
  */
-export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLoginProps) {
+export function TelegramQrLogin({
+  onSignedIn,
+  onPasswordRequired,
+  mode = "qr",
+  onUseQr,
+}: TelegramQrLoginProps) {
   const [flow, setFlow] = useState<QrStartResponse | null>(null);
   const [token, setToken] = useState<QrToken | null>(null);
   const [image, setImage] = useState<string | null>(null);
@@ -43,7 +65,7 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
   }, []);
 
   useEffect(() => {
-    if (token === null) return;
+    if (token === null || mode === "app") return;
     let cancelled = false;
     QRCode.toDataURL(token.url, { margin: 1, width: 240 })
       .then((dataUrl) => {
@@ -55,7 +77,7 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, mode]);
 
   useEffect(() => {
     if (flow === null) return;
@@ -122,6 +144,79 @@ export function TelegramQrLogin({ onSignedIn, onPasswordRequired }: TelegramQrLo
         setError(errorMessage(startError, "Could not start Telegram sign-in")),
       );
   };
+
+  if (mode === "app") {
+    return (
+      <section aria-labelledby="app-login-heading" className="grid gap-3">
+        <div>
+          <h2 id="app-login-heading" className="text-base font-semibold">
+            Connect with Telegram
+          </h2>
+          <p className="muted mt-1 text-sm">
+            Send the login request to the Telegram app installed on this device. Approve it there
+            and you are in — no camera required.
+          </p>
+        </div>
+
+        <div className="grid min-h-[196px] place-items-center rounded-xl border border-line bg-bg-soft/45 p-4">
+          {finishing ? (
+            <div role="status" className="flex items-center gap-2.5 text-sm">
+              <Loader2
+                className="h-4 w-4 shrink-0 animate-spin text-gold-text"
+                aria-hidden="true"
+              />
+              <span>Approved. Preparing your private storage...</span>
+            </div>
+          ) : expired ? (
+            <div role="status" className="text-center text-sm">
+              <p className="font-medium">This login request expired.</p>
+              <button type="button" className="btn-secondary mt-3" onClick={restart}>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div className="grid w-full max-w-xs gap-3 text-center">
+              <a
+                href={token?.url ?? "#"}
+                aria-disabled={token === null}
+                onClick={(event) => {
+                  if (token === null) event.preventDefault();
+                }}
+                className="inline-flex items-center justify-center gap-2.5 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-lg transition-transform hover:-translate-y-0.5 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                style={{ backgroundColor: TELEGRAM_BLUE }}
+              >
+                <TelegramMark />
+                Open Telegram
+              </a>
+              <p className="muted text-xs">
+                Approve the “OmniCloud” login in Telegram, then come back to this tab.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {error !== null ? (
+          <div role="alert" className="notice notice-error">
+            {error}{" "}
+            <button type="button" className="font-semibold underline" onClick={restart}>
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        <p className="muted text-xs">
+          Telegram not installed on this device?{" "}
+          {onUseQr !== undefined ? (
+            <button type="button" className="font-semibold underline" onClick={onUseQr}>
+              Scan the QR code instead
+            </button>
+          ) : (
+            "Use the QR code instead."
+          )}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section aria-labelledby="qr-login-heading" className="grid gap-3">

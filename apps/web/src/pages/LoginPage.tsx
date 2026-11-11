@@ -14,7 +14,7 @@ import { ME_QUERY_KEY } from "../lib/queries";
 import { usePageMeta } from "../lib/seo";
 
 type Step = "phone" | "code" | "password";
-type SignInMode = "qr" | "phone";
+type SignInMode = "qr" | "app" | "phone";
 
 const CODE_PATTERN = /^\d{3,10}$/;
 
@@ -258,7 +258,7 @@ export default function LoginPage() {
           {step === "phone" ? (
             <>
               <div
-                className="mb-4 grid grid-cols-2 rounded-xl border border-line bg-bg-soft/70 p-1"
+                className="mb-4 grid grid-cols-3 rounded-xl border border-line bg-bg-soft/70 p-1"
                 role="tablist"
                 aria-label="Choose a sign-in method"
               >
@@ -267,21 +267,30 @@ export default function LoginPage() {
                   role="tab"
                   aria-selected={signInMode === "qr"}
                   onClick={() => setSignInMode("qr")}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium  ${signInMode === "qr" ? "bg-surface text-text shadow-sm" : "muted hover:text-text"}`}
+                  className={`rounded-lg px-2 py-2 text-[13px] font-medium  ${signInMode === "qr" ? "bg-surface text-text shadow-sm" : "muted hover:text-text"}`}
                 >
-                  Scan QR code
+                  QR code
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={signInMode === "app"}
+                  onClick={() => setSignInMode("app")}
+                  className={`rounded-lg px-2 py-2 text-[13px] font-medium  ${signInMode === "app" ? "bg-surface text-text shadow-sm" : "muted hover:text-text"}`}
+                >
+                  Telegram app
                 </button>
                 <button
                   type="button"
                   role="tab"
                   aria-selected={signInMode === "phone"}
                   onClick={() => setSignInMode("phone")}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium  ${signInMode === "phone" ? "bg-surface text-text shadow-sm" : "muted hover:text-text"}`}
+                  className={`rounded-lg px-2 py-2 text-[13px] font-medium  ${signInMode === "phone" ? "bg-surface text-text shadow-sm" : "muted hover:text-text"}`}
                 >
-                  Use phone number
+                  Phone
                 </button>
               </div>
-              {signInMode === "qr" ? (
+              {signInMode !== "phone" ? (
                 <Suspense
                   fallback={
                     <div
@@ -291,6 +300,8 @@ export default function LoginPage() {
                   }
                 >
                   <TelegramQrLogin
+                    mode={signInMode === "app" ? "app" : "qr"}
+                    onUseQr={() => setSignInMode("qr")}
                     onSignedIn={finishSignIn}
                     onPasswordRequired={(flowId) => {
                       setQrFlowId(flowId);
