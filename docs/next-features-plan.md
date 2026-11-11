@@ -54,15 +54,17 @@ Goal: the web app installs like an app and opens offline.
   hidden in standalone mode and remembered after “Not now”.
 - Tests (4): manifest completeness, document links, worker cache rules,
   self-contained offline page.
-- Docs: [`pwa.md`](pwa.md) with desktop/Android/iOS manual checks.
+- Docs: [`pwa.md`](pwa.md) with desktop/Android/iOS manual checks. Installing on
+  a device needs a browser/device session and is recorded as a manual check.
 
 Acceptance: install prompt appears, the installed app opens the drive shell
 offline and shows the cached listing. Share Target is a follow-up.
 
 ## Phase 3 — Background uploads in the Electron main process
 
-Status: **implemented** (tray uploads; per-folder targeting and progress are
-follow-ups).
+Status: **implemented**; live GUI run blocked in this environment (no display),
+so the quit/relaunch flow is covered by the queue tests plus the manual
+checklist. Per-folder targeting and progress are follow-ups.
 
 Goal: uploads continue after the window is closed or the app is quit.
 
@@ -80,7 +82,8 @@ Goal: uploads continue after the window is closed or the app is quit.
 
 Acceptance: kill the app mid-upload, relaunch, the upload finishes once. The
 queue unit tests cover the state machine; the manual checklist covers the live
-Electron run.
+Electron run, which needs a desktop session and is recorded as an environment
+blocker for this run.
 
 ## Phase 4 — Storage provider adapters (local disk first)
 
@@ -107,46 +110,40 @@ shares files without a Telegram account. S3 remains a follow-up.
 
 ## Phase 5 — Key rotation UX
 
-Goal: a user can rotate the root key without losing access.
+Status: **accepted with external blocker.** Groundwork exists from the previous
+plan: `rotateVersionKeys` (re-wraps DEK/metadata under a new epoch, content
+untouched) and `POST /api/files/:id/rotate` (all versions in one transaction,
+epoch guards). Tests cover both.
 
-- Version header endpoint: `GET /api/files/:id/versions/:versionId/header`.
-- Client flow: generate a new URK, re-wrap every version with
-  `rotateVersionKeys`, store via `POST /api/files/:id/rotate`, then re-encrypt the
-  local name index and create a new recovery blob (new recovery code shown once).
-- Resumable: a rotation journal records the last completed file; an interrupted
-  run resumes without half-rotated files.
-- Access: while rotating, the client keeps both URKs in memory; after completion
-  the old URK is dropped and device pairings are invalidated.
-- UI: Settings → Encryption → Rotate key, with progress and a clear warning that
-  the recovery code changes.
-- Tests: crypto vectors (already present), journal resume, index re-encryption,
-  recovery blob round-trip, API epoch guards (already present).
-- **External gate:** ships only after the independent cryptographic review
-  recorded in `docs/audits/encryption-review.md`. Until then the UI stays hidden
-  and the API is admin-only.
+Blocked on the independent cryptographic review tracked in
+`docs/audits/encryption-review.md`. The remaining client flow changes how the
+root key, recovery blob, device pairings and local name index relate; shipping
+it before that review would put users' only copy of their keys on an unreviewed
+protocol change. The UI stays hidden and the API is not exposed in the app.
 
-Acceptance: after rotating, every file decrypts with the new key, the old key
-fails, the new recovery code works and an interrupted rotation resumes.
+Remaining after the gate:
+
+- per-version header endpoint (`GET /api/files/:id/versions/:versionId/header`);
+- client re-wrap loop with a resumable journal and dual-URK access;
+- recovery blob re-encryption + new recovery code, pairing invalidation;
+- Settings → Encryption → Rotate key with progress and warnings.
+
+Acceptance (unchanged): after rotating, every file decrypts with the new key,
+the old key fails, the new recovery code works, and an interrupted rotation
+resumes.
 
 ## Phase 6 — Team spaces
 
-Goal: shared folders with roles, per-member keys and audit.
+Status: **accepted with external blocker.** The sharing model, key hierarchy,
+roles, API/DB sketch and the six invariants are documented in
+[`team-spaces-design.md`](team-spaces-design.md). No server-side code exists.
 
-- Resolve the OCE2 name strategy (space name key vs. OCE2 forbidden in spaces) and
-  record the decision in `team-spaces-design.md`.
-- Space key wrapped to each member under their URK; file DEKs wrapped under the
-  space key; resumable re-wrap on member removal.
-- Roles owner/editor/viewer enforced server-side; one-time invites in the URL
-  fragment; audit events.
-- UI: spaces list, member management, role badges, rotation progress.
-- Tests: the six invariants already listed in `team-spaces-design.md`, plus role
-  matrix and invite expiry.
-- **External gate:** cryptographic review, same as Phase 5.
+Blocked on the same cryptographic review, plus the OCE2 name-strategy decision
+recorded in the design (space name key vs. OCE2 forbidden in spaces). Both are
+preconditions in the plan and cannot be resolved by implementation alone.
 
-Acceptance: a removed member cannot decrypt new writes; role enforcement covered
-by API tests; invite link works once.
-
----
+Acceptance (unchanged): a removed member cannot decrypt new writes; role
+enforcement covered by API tests; invite links work once.
 
 ## Verification policy
 
