@@ -74,8 +74,8 @@ export function SiteHeader({ active = null }: { active?: ActiveNav }) {
           >
             {t.nav.signIn}
           </a>
-          <a href="/login" className="btn-gold px-3.5 py-2 text-sm">
-            {t.nav.getStarted}
+          <a href="/download" className="btn-gold px-3.5 py-2 text-sm">
+            {t.nav.getApp}
             <ArrowRight className="h-3.5 w-3.5 rtl:-scale-x-100" aria-hidden="true" />
           </a>
         </div>

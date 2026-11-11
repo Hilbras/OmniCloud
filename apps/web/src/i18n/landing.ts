@@ -11,6 +11,7 @@ const en = {
     openSource: "Open source",
     download: "Download",
     signIn: "Sign in",
+    getApp: "Get the app",
     getStarted: "Get started",
   },
   hero: {
@@ -19,8 +20,8 @@ const en = {
     titleB: "for your files.",
     subtitle:
       "Self-hosted cloud storage backed by a private Telegram channel you control. Organize, search, encrypt, and reach your files from one beautifully simple place — with an open API underneath.",
-    cta: "Start with your Telegram",
-    secondary: "View source",
+    cta: "Download the app",
+    secondary: "View on GitHub",
     trust: ["Open source · MIT", "Runs on your own machine", "Opt-in client-side encryption"],
   },
   mock: {
@@ -105,7 +106,7 @@ const en = {
   cta: {
     title: "Bring your files home.",
     subtitle: "Free, open source, and running on your own machine in minutes.",
-    button: "Get started with Telegram",
+    button: "Download OmniCloud",
   },
   download: {
     seoTitle: "Download OmniCloud — desktop app for Linux, macOS and Windows",
@@ -181,6 +182,7 @@ const ar: Translation = {
     openSource: "المصدر المفتوح",
     download: "التنزيل",
     signIn: "تسجيل الدخول",
+    getApp: "احصل على التطبيق",
     getStarted: "ابدأ الآن",
   },
   hero: {
@@ -275,7 +277,7 @@ const ar: Translation = {
   cta: {
     title: "أعِد ملفاتك إلى بيتها.",
     subtitle: "مجاني، مفتوح المصدر، ويعمل على جهازك الخاص خلال دقائق.",
-    button: "ابدأ مع تيليغرام",
+    button: "نزّل OmniCloud",
   },
   download: {
     seoTitle: "تنزيل OmniCloud — تطبيق سطح المكتب للينكس وماك وويندوز",
@@ -349,6 +351,7 @@ const ru: Translation = {
     openSource: "Открытый код",
     download: "Скачать",
     signIn: "Войти",
+    getApp: "Скачать приложение",
     getStarted: "Начать",
   },
   hero: {
@@ -447,7 +450,7 @@ const ru: Translation = {
   cta: {
     title: "Верните файлы домой.",
     subtitle: "Бесплатно, открытый исходный код, запускается на вашей машине за минуты.",
-    button: "Начать с Telegram",
+    button: "Скачать OmniCloud",
   },
   download: {
     seoTitle: "Скачать OmniCloud — приложение для Linux, macOS и Windows",

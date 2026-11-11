@@ -325,8 +325,8 @@ export default function LandingPage() {
             >
               {t.nav.signIn}
             </a>
-            <a href="/login" className="btn-gold px-3.5 py-2 text-sm">
-              {t.nav.getStarted}
+            <a href="/download" className="btn-gold px-3.5 py-2 text-sm">
+              {t.nav.getApp}
               <ArrowRight className="h-3.5 w-3.5 rtl:-scale-x-100" aria-hidden="true" />
             </a>
           </div>
@@ -355,12 +355,14 @@ export default function LandingPage() {
               {t.hero.subtitle}
             </motion.p>
             <motion.div {...heroItem(3)} className="mt-7 flex flex-wrap items-center gap-3">
-              <a href="/login" className="btn-gold px-5 py-2.5 text-sm">
+              <a href="/download" className="btn-gold px-5 py-2.5 text-sm">
                 {t.hero.cta}
                 <ArrowRight className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
               </a>
               <a
-                href="#open-source"
+                href="https://github.com/Hilbras/OmniCloud"
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-sm font-medium hover:bg-surface"
               >
                 <CodeXml className="h-4 w-4" aria-hidden="true" />
@@ -556,7 +558,7 @@ export default function LandingPage() {
               {t.cta.subtitle}
             </p>
             <div className="relative mt-6">
-              <a href="/login" className="btn-gold px-5 py-2.5 text-sm">
+              <a href="/download" className="btn-gold px-5 py-2.5 text-sm">
                 {t.cta.button}
                 <ArrowRight className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
               </a>

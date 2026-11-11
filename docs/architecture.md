@@ -87,6 +87,20 @@ shared ← core ← (database, telegram) ← api
 | `apps/web`          | `shared`, `crypto`                       | The React single-page application                                 |
 | `packages/sdk`      | `core`, `crypto`, `shared`, `telegram`   | The published `@hilbras/omnicloud` client, CLI and bundled server |
 
+### Other clients
+
+- **Desktop** (`apps/desktop`) starts the same API locally and loads the web
+  build; Electron adds the tray, updater and a main-process upload queue.
+- **Mobile** (`apps/mobile`) bundles the web build with Capacitor. It talks to
+  one OmniCloud server over HTTPS; login returns a bearer session token because
+  cross-origin WebView cookies are unreliable. The server is otherwise unchanged.
+- **WebDAV** is a second listener in `apps/api`, not a separate service.
+
+The storage engine is provider-agnostic: `StorageProvider` is implemented by
+Telegram (MTProto) and by `LocalStorageProvider` (a directory with sidecars) for
+`STORAGE_PROVIDER=local`. Authentication can be Telegram or a single local
+account (`AUTH_MODE=local`).
+
 `packages/shared` has no workspace dependencies at all. That is what lets the
 web app and the SDK reuse the DTOs and the query parser without pulling in any
 server code, and it keeps the browser bundle free of Prisma and MTProto.
@@ -713,7 +727,9 @@ reported rather than hidden.
 OmniCloud/
 ├── apps/
 │   ├── api/                 Fastify HTTP server (routes, auth, container, config)
-│   └── web/                 React SPA
+│   ├── web/                 React SPA + PWA
+│   ├── desktop/             Electron shell, tray, updater, upload queue
+│   └── mobile/              Capacitor Android/iOS projects
 ├── packages/
 │   ├── shared/              DTOs, ERROR_CODES, query language, MIME helpers
 │   ├── crypto/              The OCE1/OCE2 client-side encryption protocol

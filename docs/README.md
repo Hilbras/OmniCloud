@@ -14,7 +14,7 @@ put it on a server.
 TypeScript client.
 
 **I want to know what it protects.** [What the server and Telegram can
-see](../README.md#what-the-server-can-see) in the README, then
+see](../README.md#security-model) in the README, then
 [Security](security.md) and [Limitations](limitations.md). Read the limitations
 before you rely on encryption.
 
@@ -38,13 +38,19 @@ an issue.
 | [Storage](storage.md)                     | Uploads, downloads, versions, trash retention, integrity and reconciliation        |
 | [Storage provider](storage-provider.md)   | The `StorageProvider` interface, and how to implement another one                  |
 | [Release checklist](release-checklist.md) | How a release is made and verified                                                 |
+| [Desktop checklist](desktop-checklist.md) | Per-OS manual checks for the Electron app                                          |
+| [Desktop uploads](desktop-uploads.md)     | The main-process upload queue, retries and restart behaviour                       |
+| [PWA](pwa.md)                             | Manifest, service worker, offline shell and install checks                         |
+| [Mobile apps](../apps/mobile/README.md)   | Capacitor iOS/Android shells, server setup, builds                                 |
 
 ## How it works
 
-| Document                            | What it covers                                                                                 |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [Architecture](architecture.md)     | The layering, the request lifecycle, the upload and download pipelines, transaction boundaries |
-| [Execution plan](execution-plan.md) | What is planned, what is verified, and what is explicitly not done                             |
+| Document                                    | What it covers                                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [Architecture](architecture.md)             | The layering, the request lifecycle, the upload and download pipelines, transaction boundaries |
+| [Execution plan](execution-plan.md)         | What is planned, what is verified, and what is explicitly not done                             |
+| [Next features plan](next-features-plan.md) | The second phase plan: folder shares, PWA, uploads, local mode, rotation, spaces               |
+| [Team spaces design](team-spaces-design.md) | Sharing model, key hierarchy, roles and open decisions                                         |
 
 ## Security
 
@@ -79,7 +85,7 @@ not rewritten when the code moves on.
 | [Test evidence](audits/test-evidence.md)                             | Recorded test, bundle and coverage measurements                                 |
 | [Known-answer vectors](audits/kat-vectors.md)                        | Test vectors for the encryption implementation                                  |
 | [OCE2 review note](audits/oce2-review-note.md)                       | What still has to be reviewed before OCE2 is enabled                            |
-| [Evidence directory](evidence/)                                      | Streaming and performance measurements                                          |
+| [Evidence directory](evidence/)                                      | rclone/WebDAV, browser SDK, streaming and performance records                   |
 
 ## Two things worth knowing before you start
 
@@ -87,5 +93,5 @@ not rewritten when the code moves on.
   [limitations](limitations.md) document says exactly what that means. Do not
   rely on it for anything you would not lose.
 - **The server and Telegram can both read your files by default.** The
-  [table in the README](../README.md#what-the-server-can-see) spells out what
+  [table in the README](../README.md#security-model) spells out what
   is visible in each mode.

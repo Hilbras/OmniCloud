@@ -679,7 +679,7 @@ Measured throughput and caveats are in
 > **Warning:** client-side end-to-end encryption is **opt-in, experimental, and
 > has not been independently reviewed**. The protocol has not been through an
 > independent cryptographic review. Files stored without it remain readable by
-> Telegram. See [README → End-to-end encryption](../README.md#end-to-end-encryption-experimental-opt-in)
+> Telegram. See [README → End-to-end encryption](../README.md#security-model)
 > for what is and is not protected, and
 > [docs/audits/encryption-review.md](audits/encryption-review.md) for the
 > review status.
