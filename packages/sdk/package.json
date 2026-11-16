@@ -53,12 +53,12 @@
     "prepack": "pnpm build && pnpm build:browser && pnpm build:cli && pnpm bundle:server"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.0.0",
+    "@fastify/cookie": "^11.1.5",
     "@fastify/multipart": "^9.0.0",
-    "@fastify/static": "^10.1.5",
+    "@fastify/static": "^10.1.10",
     "@prisma/client": "^6.2.0",
     "big-integer": "^1.6.52",
-    "fastify": "^5.0.0",
+    "fastify": "^5.12.8",
     "prisma": "^6.2.0",
     "telegram": "^2.26.22"
   },
@@ -70,11 +70,11 @@
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@types/node": "^22.10.0",
     "dts-bundle-generator": "^9.5.1",
-    "esbuild": "0.25.12",
-    "rollup": "^4.64.0",
+    "esbuild": "0.28.2",
+    "rollup": "^4.68.2",
     "rollup-plugin-dts": "^6.5.1",
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
